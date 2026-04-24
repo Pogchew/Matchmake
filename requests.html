@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ScrimGG – Requests</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="tailwind-config.js"></script>
+<style>body { min-height: max(884px, 100dvh); }</style>
+</head>
+<body class="bg-background text-on-background min-h-screen pb-24 md:pb-0 font-['Inter'] antialiased">
+
+<!-- TopAppBar -->
+<header class="bg-white/80 backdrop-blur-md w-full top-0 sticky z-50 border-b border-slate-200/60 flex items-center justify-between px-5 h-16">
+  <div class="flex items-center gap-4">
+    <div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden">
+      <img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkDtYwWy83N4qKcOarJ8qA_cgzZOm7jwL2N5QH8lOD8o2ehthACQzzTD2J2WM6ORIi8CN7OUnVWCWWREm5c_dRKSWWB1ras1iDETJHWHqoLROm6v8aA4ECD3rXieVUTlrnJvdtkIukN19AjS34m0nsVVUJCh-H3bOfAFIyHCEgawAF2VxAjDhYPe9Cr6KFBZBJY_Olsc9PxUO-nDjaCtEbH7_RqQ7LA9QjJLEuscKBk259fADxbv_O2ggeOAeTWNXbvL03RLJ-bKk"/>
+    </div>
+    <h1 class="text-xl font-bold tracking-tight text-on-surface">ScrimGG</h1>
+  </div>
+  <div class="hidden md:flex items-center gap-1">
+    <a href="index.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Scrims</a>
+    <a href="org.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Org</a>
+    <a href="requests.html" class="text-primary font-label-bold font-bold bg-primary-fixed px-3 py-2 rounded-lg">Requests</a>
+    <a href="calendar.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Calendar</a>
+  </div>
+  <button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors active:scale-95">
+    <span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+  </button>
+</header>
+
+<!-- Main Content -->
+<main class="max-w-[1200px] mx-auto px-margin-mobile md:px-gutter pt-lg">
+
+  <!-- Page Header -->
+  <div class="mb-lg">
+    <h2 class="font-headline-1 text-headline-1 text-on-surface mb-sm">Requests</h2>
+    <p class="font-body-sub text-body-sub text-on-surface-variant">Manage your inbound and outbound scrim requests.</p>
+  </div>
+
+  <!-- Segmented Control -->
+  <div class="bg-surface-container-low p-1 rounded-lg flex mb-xl max-w-md">
+    <button onclick="switchTab(this,'inbound')" id="tab-inbound" class="seg-tab flex-1 py-2 px-4 rounded-md bg-surface-container-lowest text-on-surface shadow-[0_1px_3px_rgba(0,0,0,0.1)] font-label-bold text-label-bold text-center">Inbound</button>
+    <button onclick="switchTab(this,'outbound')" id="tab-outbound" class="seg-tab flex-1 py-2 px-4 rounded-md text-on-surface-variant hover:text-on-surface font-label-bold text-label-bold text-center transition-colors">Outbound</button>
+    <button onclick="switchTab(this,'confirmed')" id="tab-confirmed" class="seg-tab flex-1 py-2 px-4 rounded-md text-on-surface-variant hover:text-on-surface font-label-bold text-label-bold text-center transition-colors">Confirmed</button>
+  </div>
+
+  <!-- Inbound Panel -->
+  <div id="panel-inbound" class="space-y-md">
+
+    <!-- Card 1 -->
+    <div class="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col gap-md">
+      <div class="flex items-start gap-md">
+        <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 overflow-hidden">
+          <img alt="Team Logo" class="w-full h-full object-cover rounded-lg" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDNppj2Dm6q2Qpq3yUlyAm9K_Zm5KRPkd6YzSo7nm40ACyJbrugBoeBe__GbVj-TQZ6mE63aLjGnOo7afv-EZMid8KFiuD8XCJeUKd8hvJR8CunHw2NwI1REE2yEn30BvsLvA9K8IeJfWalGIjVNwpLUFDA6q0Klw1AGuh8eRM42em0zcnEfaVDivsPOI0zWW9hoEjf8Bs-jvzvhfGo6G23-J6OF0Ff4mSymTdBI7txxEL8LS28PxSA49zuQ1xSzr-WJb_g_1ZdT6E"/>
+        </div>
+        <div>
+          <div class="flex items-center gap-sm mb-xs">
+            <h3 class="font-headline-3 text-headline-3 text-on-surface">Cloud9</h3>
+            <span class="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">Valorant</span>
+          </div>
+          <div class="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
+            <span class="material-symbols-outlined text-[16px]">schedule</span>
+            <span>8:00 PM • 3 Games</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex w-full gap-sm pt-md border-t border-surface-variant">
+        <button onclick="declineRequest(this)" class="flex-1 bg-[#E5E5EA] text-on-surface font-label-bold text-label-bold py-2 px-6 rounded-lg hover:bg-surface-dim transition-colors">Decline</button>
+        <a href="detail.html" class="flex-1 bg-[#007AFF] text-white font-label-bold text-label-bold py-2 px-6 rounded-lg hover:bg-[#007AFF]/90 transition-colors text-center">Accept</a>
+      </div>
+    </div>
+
+    <!-- Card 2 -->
+    <div class="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col gap-md">
+      <div class="flex items-start gap-md">
+        <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 overflow-hidden">
+          <img alt="Team Logo" class="w-full h-full object-cover rounded-lg" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyqtbtQuIBB6SROkAI6L8gXC-ZAcYZuATUwUTFWMs7rEXwrW_j1lq9Boy7sAkHxfZIsniFxugCf0Yjvoi9Yin0JFnFAJAKVI4NAB12VB1-ddzynb2XKmTsF6XDkpQ6WKaYM7VG71NPMAztLyua45mkixGfsWutGAo2saoLRPTEneVM16MGL2koDMOdxVvw0Z6jpnxHnFweboMjiysqjLVFtYNdLrtBJT8eG2e6UZQ-66lSrdj0AHePKPoY-tttyv6a2rCGZWOiFLM"/>
+        </div>
+        <div>
+          <div class="flex items-center gap-sm mb-xs">
+            <h3 class="font-headline-3 text-headline-3 text-on-surface">Sentinels</h3>
+            <span class="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">Valorant</span>
+          </div>
+          <div class="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
+            <span class="material-symbols-outlined text-[16px]">schedule</span>
+            <span>9:00 PM • 1 Game</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex w-full gap-sm pt-md border-t border-surface-variant">
+        <button onclick="declineRequest(this)" class="flex-1 bg-[#E5E5EA] text-on-surface font-label-bold text-label-bold py-2 px-6 rounded-lg hover:bg-surface-dim transition-colors">Decline</button>
+        <a href="detail.html" class="flex-1 bg-[#007AFF] text-white font-label-bold text-label-bold py-2 px-6 rounded-lg hover:bg-[#007AFF]/90 transition-colors text-center">Accept</a>
+      </div>
+    </div>
+
+    <!-- Card 3 – Awaiting -->
+    <div class="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col gap-md opacity-80">
+      <div class="flex items-start gap-md">
+        <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+          <div class="w-full h-full bg-surface-dim rounded-lg flex items-center justify-center text-outline font-headline-3 text-headline-3">100</div>
+        </div>
+        <div>
+          <div class="flex items-center gap-sm mb-xs">
+            <h3 class="font-headline-3 text-headline-3 text-on-surface">100 Thieves</h3>
+            <span class="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">Valorant</span>
+          </div>
+          <div class="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
+            <span class="material-symbols-outlined text-[16px]">schedule</span>
+            <span>7:00 PM • 5 Games</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex w-full gap-sm pt-md border-t border-surface-variant">
+        <span class="bg-[#E5E5EA] text-on-surface-variant font-label-bold text-label-bold py-2 px-4 rounded-lg inline-flex items-center gap-xs">
+          <span class="material-symbols-outlined text-[16px]">schedule</span>
+          Awaiting Response
+        </span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Outbound Panel -->
+  <div id="panel-outbound" class="space-y-md hidden">
+    <div class="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col gap-md">
+      <div class="flex items-start gap-md">
+        <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 font-headline-3 text-on-surface-variant font-bold">NV</div>
+        <div>
+          <div class="flex items-center gap-sm mb-xs">
+            <h3 class="font-headline-3 text-headline-3 text-on-surface">Nova Esports</h3>
+            <span class="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">Valorant</span>
+          </div>
+          <div class="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
+            <span class="material-symbols-outlined text-[16px]">schedule</span>
+            <span>8:00 PM • 3 Games</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex w-full gap-sm pt-md border-t border-surface-variant">
+        <span class="bg-primary-fixed text-on-primary-fixed font-label-bold text-label-bold py-2 px-4 rounded-lg inline-flex items-center gap-xs">
+          <span class="material-symbols-outlined text-[16px]">schedule</span>
+          Pending Response
+        </span>
+        <button class="ml-auto bg-[#E5E5EA] text-on-surface-variant font-label-bold text-label-bold py-2 px-4 rounded-lg hover:bg-surface-dim transition-colors">Cancel</button>
+      </div>
+    </div>
+    <div class="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex flex-col gap-md">
+      <div class="flex items-start gap-md">
+        <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 font-headline-3 text-on-surface-variant font-bold">TS</div>
+        <div>
+          <div class="flex items-center gap-sm mb-xs">
+            <h3 class="font-headline-3 text-headline-3 text-on-surface">Team Synergy</h3>
+            <span class="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">LoL</span>
+          </div>
+          <div class="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
+            <span class="material-symbols-outlined text-[16px]">schedule</span>
+            <span>9:00 PM • 1 Game</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex w-full gap-sm pt-md border-t border-surface-variant">
+        <span class="bg-primary-fixed text-on-primary-fixed font-label-bold text-label-bold py-2 px-4 rounded-lg inline-flex items-center gap-xs">
+          <span class="material-symbols-outlined text-[16px]">schedule</span>
+          Pending Response
+        </span>
+        <button class="ml-auto bg-[#E5E5EA] text-on-surface-variant font-label-bold text-label-bold py-2 px-4 rounded-lg hover:bg-surface-dim transition-colors">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmed Panel -->
+  <div id="panel-confirmed" class="space-y-md hidden">
+    <a href="detail.html" class="block bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)]">
+      <div class="flex items-start gap-md mb-md">
+        <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 font-headline-3 text-on-surface-variant font-bold">C9</div>
+        <div class="flex-1">
+          <div class="flex items-center gap-sm mb-xs">
+            <h3 class="font-headline-3 text-headline-3 text-on-surface">Cloud9 Academy</h3>
+            <span class="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">Valorant</span>
+          </div>
+          <div class="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
+            <span class="material-symbols-outlined text-[16px]">schedule</span>
+            <span>Tonight 8:00 PM • 3 Games</span>
+          </div>
+        </div>
+        <span class="inline-flex items-center gap-1 bg-[#E3F9E5] text-[#1B5E20] font-label-small text-label-small px-3 py-1 rounded-full">
+          <span class="material-symbols-outlined text-[14px]">check_circle</span> Confirmed
+        </span>
+      </div>
+      <div class="flex gap-sm pt-md border-t border-surface-variant">
+        <span class="text-primary font-label-bold text-label-bold flex items-center gap-1">
+          <span class="material-symbols-outlined text-[16px]">chat_bubble</span> Open Chat
+        </span>
+      </div>
+    </a>
+  </div>
+
+</main>
+
+<!-- BottomNavBar -->
+<nav class="md:hidden bg-white/90 backdrop-blur-lg fixed bottom-0 w-full rounded-t-2xl border-t border-slate-200 shadow-[0_-4px_20px_0_rgba(0,0,0,0.04)] z-50 flex justify-around items-center px-4 pt-3 pb-6">
+  <a href="index.html" class="flex flex-col items-center justify-center text-outline hover:text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">sports_esports</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Scrims</span>
+  </a>
+  <a href="org.html" class="flex flex-col items-center justify-center text-outline hover:text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">corporate_fare</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Org</span>
+  </a>
+  <a href="requests.html" class="flex flex-col items-center justify-center text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">pending_actions</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Requests</span>
+  </a>
+  <a href="calendar.html" class="flex flex-col items-center justify-center text-outline hover:text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">calendar_month</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Calendar</span>
+  </a>
+</nav>
+
+<script>
+function switchTab(btn, panel) {
+  document.querySelectorAll('.seg-tab').forEach(t => {
+    t.classList.remove('bg-surface-container-lowest','text-on-surface','shadow-[0_1px_3px_rgba(0,0,0,0.1)]');
+    t.classList.add('text-on-surface-variant');
+  });
+  btn.classList.add('bg-surface-container-lowest','text-on-surface','shadow-[0_1px_3px_rgba(0,0,0,0.1)]');
+  btn.classList.remove('text-on-surface-variant');
+  ['inbound','outbound','confirmed'].forEach(p => {
+    document.getElementById('panel-' + p).classList.add('hidden');
+  });
+  document.getElementById('panel-' + panel).classList.remove('hidden');
+}
+function declineRequest(btn) {
+  btn.closest('.bg-surface-container-lowest').style.transition = 'opacity 0.3s';
+  btn.closest('.bg-surface-container-lowest').style.opacity = '0';
+  setTimeout(() => btn.closest('.bg-surface-container-lowest').remove(), 300);
+}
+</script>
+</body>
+</html>

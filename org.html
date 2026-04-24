@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ScrimGG – Organization</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="tailwind-config.js"></script>
+<style>
+  body { min-height: max(884px, 100dvh); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+</style>
+</head>
+<body class="bg-background text-on-background min-h-screen pb-24 md:pb-0 font-body-main antialiased">
+
+<!-- TopAppBar -->
+<header class="bg-white/80 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-slate-200/60 flex items-center justify-between px-5 h-16">
+  <div class="flex items-center gap-sm">
+    <img alt="User avatar" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBndUZDF7lALWEVO7fiJH2DflCZ4GTSZ9YaVsIjeg0W6siVkSglpLkJkf4S4TInucjf4yM1LUB9SJD9YZN3r9nxFnCXshO9LaPmfufR_CSWuW4f_nkSBRWy5_bJSuMb9UPKmBgo9QgzecW0fifF9twDG-fIiQDTzUM9E3ckAwcuBUzJbsQzOE5dPZFTFF2cH5pl55R3vJ18azHPlVqM5yisSWH9rfE_TmOi4ItaTkUvtPS2_niS0aQpUbjqpkzReyBvYJ69t20TxCk"/>
+    <span class="text-xl font-bold tracking-tight text-on-surface md:block hidden">ScrimGG</span>
+  </div>
+  <div class="text-xl font-bold tracking-tight text-on-surface md:hidden absolute left-1/2 -translate-x-1/2">ScrimGG</div>
+  <div class="hidden md:flex items-center gap-1">
+    <a href="index.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Scrims</a>
+    <a href="org.html" class="text-primary font-label-bold font-bold bg-primary-fixed px-3 py-2 rounded-lg">Org</a>
+    <a href="requests.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Requests</a>
+    <a href="calendar.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Calendar</a>
+  </div>
+  <button class="hover:bg-surface-container transition-colors active:scale-95 p-2 rounded-full">
+    <span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+  </button>
+</header>
+
+<!-- Main Content -->
+<main class="max-w-[1200px] mx-auto px-margin-mobile md:px-lg pt-lg pb-xl flex flex-col gap-xl">
+
+  <!-- Editorial Header -->
+  <section class="flex flex-col md:flex-row md:items-end justify-between gap-md">
+    <div>
+      <h2 class="font-label-bold text-label-bold text-outline uppercase tracking-wider mb-xs">My Organization</h2>
+      <h1 class="font-editorial-large text-editorial-large text-on-surface">Contenders St. Louis</h1>
+    </div>
+    <div class="flex gap-sm">
+      <button class="bg-surface-variant text-primary font-label-bold text-label-bold px-md py-sm rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-xs">
+        <span class="material-symbols-outlined text-[18px]">add</span>
+        Add Team
+      </button>
+      <a href="index.html" class="bg-primary text-on-primary font-label-bold text-label-bold px-md py-sm rounded-lg hover:bg-on-primary-fixed-variant transition-colors flex items-center gap-xs shadow-[0_4px_12px_rgba(0,112,235,0.2)]">
+        <span class="material-symbols-outlined text-[18px]" style="font-variation-settings:'FILL' 1">calendar_month</span>
+        Schedule Scrim
+      </a>
+    </div>
+  </section>
+
+  <!-- Summary Metrics -->
+  <section class="grid grid-cols-2 md:grid-cols-3 gap-md">
+    <div class="bg-surface-container-lowest rounded-xl p-md border border-outline-variant/30 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.05)] flex flex-col justify-between">
+      <div class="flex items-center gap-xs text-outline mb-sm">
+        <span class="material-symbols-outlined text-[16px]">groups</span>
+        <span class="font-label-small text-label-small uppercase tracking-wide">Total Teams</span>
+      </div>
+      <div class="font-headline-1 text-headline-1 text-on-surface">4</div>
+    </div>
+    <div class="bg-surface-container-lowest rounded-xl p-md border border-outline-variant/30 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.05)] flex flex-col justify-between">
+      <div class="flex items-center gap-xs text-primary mb-sm">
+        <span class="material-symbols-outlined text-[16px]">sports_esports</span>
+        <span class="font-label-small text-label-small uppercase tracking-wide">Active Scrims</span>
+      </div>
+      <div class="font-headline-1 text-headline-1 text-on-surface">2</div>
+    </div>
+    <div class="col-span-2 md:col-span-1 bg-primary-fixed rounded-xl p-md border border-primary-fixed-dim/50 shadow-[0_8px_24px_-12px_rgba(0,112,235,0.15)] flex flex-col justify-between relative overflow-hidden">
+      <div class="absolute -right-4 -top-4 opacity-10">
+        <span class="material-symbols-outlined text-[100px]" style="font-variation-settings:'FILL' 1">pending_actions</span>
+      </div>
+      <div class="flex items-center gap-xs text-on-primary-fixed mb-sm relative z-10">
+        <span class="material-symbols-outlined text-[16px]">mail</span>
+        <span class="font-label-small text-label-small uppercase tracking-wide">Pending Invites</span>
+      </div>
+      <div class="font-headline-1 text-headline-1 text-on-primary-fixed relative z-10">5</div>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-xl">
+
+    <!-- Upcoming Scrims -->
+    <section class="lg:col-span-1 flex flex-col gap-md">
+      <h3 class="font-headline-3 text-headline-3 text-on-surface flex items-center gap-sm">
+        <span class="material-symbols-outlined text-primary">event_upcoming</span>
+        Upcoming Scrims
+      </h3>
+      <div class="flex flex-col gap-sm">
+        <a href="detail.html" class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-center gap-md hover:shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08)] transition-shadow">
+          <div class="flex flex-col items-center justify-center bg-surface-container w-12 h-12 rounded-lg text-on-surface-variant font-label-bold text-label-bold">
+            <span class="text-[10px] uppercase text-outline">Today</span>
+            <span>19:00</span>
+          </div>
+          <div class="flex-1">
+            <div class="font-label-small text-label-small text-primary mb-[2px]">Valorant Academy</div>
+            <div class="font-label-bold text-label-bold text-on-surface">vs. Sentinel Youth</div>
+          </div>
+          <div class="w-8 h-8 bg-surface-variant rounded-full overflow-hidden flex items-center justify-center border border-outline-variant/20">
+            <img alt="opponent logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_od0adwzkYT7CFrzhW1tj72kfp9_SOY9J2bRo2Bo3S5dp7Nv8pkTFs0XJsfL54ddP7TsDRzsaLYdkzCK6UMex3FUJ8fSBDZZWElRW5pOTtD4f6KWunMV0ZKHgcTQK-CrUREg0BhyKn3lWVjFvQkyXy1Tfb5SjYBTbsyBIFYr04GXJGfROxtjwJncGZ1KyU2scKlZnuN6ilaRJ94D2ZUdgzZxgJM4cezCaEVELEQq7FKrSbvmcuMK5NRRmtoBEd3Er6QaDGwfXYDc"/>
+          </div>
+        </a>
+        <a href="detail.html" class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 flex items-center gap-md hover:shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08)] transition-shadow">
+          <div class="flex flex-col items-center justify-center bg-surface-container w-12 h-12 rounded-lg text-on-surface-variant font-label-bold text-label-bold">
+            <span class="text-[10px] uppercase text-outline">Tmrw</span>
+            <span>20:30</span>
+          </div>
+          <div class="flex-1">
+            <div class="font-label-small text-label-small text-primary mb-[2px]">RL Main Roster</div>
+            <div class="font-label-bold text-label-bold text-on-surface">vs. Boost Hogs</div>
+          </div>
+          <div class="w-8 h-8 bg-surface-variant rounded-full overflow-hidden flex items-center justify-center border border-outline-variant/20">
+            <img alt="opponent logo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1NFhAGe4midIbCnqz2paaTq6qSp4CgvahesSDFS6SrrE-v3BgA3evNU0w_CZqA2VEDdqKmNhheuFyXBADBupCaGuLprBuvyyn7d_6Sbxr_oO1yQsMk803KM7mvPQPSfvcrtOE0FqgB2UE6IpkltNzR8EL4a8ZLTiS3KFeQC0j5GGcsmP1PtK8j4nBPmpAMbK4VjivwGNDWMgC5EgcRPnUmQLirwfuu_EvTkWpfvZL_ywWJhUfRPb3NtPqo29Wfm98erI46fErKK4"/>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- My Teams -->
+    <section class="lg:col-span-2 flex flex-col gap-md">
+      <h3 class="font-headline-3 text-headline-3 text-on-surface flex items-center gap-sm">
+        <span class="material-symbols-outlined text-primary">swords</span>
+        My Teams
+      </h3>
+
+      <!-- Valorant -->
+      <div class="flex flex-col gap-sm mb-md">
+        <h4 class="font-label-bold text-label-bold text-outline uppercase tracking-wider pl-xs">Valorant</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-md">
+          <a href="team.html" class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.05)] relative overflow-hidden group block">
+            <div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+            <div class="flex justify-between items-start mb-md">
+              <div>
+                <h5 class="font-headline-2 text-headline-2 text-on-surface leading-tight mb-xs">Contenders Main</h5>
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-small text-[10px] uppercase tracking-wide">Immortal+</span>
+              </div>
+              <button onclick="event.preventDefault()" class="text-outline hover:text-primary transition-colors">
+                <span class="material-symbols-outlined">more_horiz</span>
+              </button>
+            </div>
+            <div class="bg-surface-container p-sm rounded-lg flex items-center justify-between">
+              <div class="flex items-center gap-xs text-on-surface-variant font-label-small text-label-small">
+                <span class="w-2 h-2 rounded-full bg-tertiary-container animate-pulse"></span>
+                In-Game
+              </div>
+              <div class="text-outline font-label-small text-[11px]">Started 45m ago</div>
+            </div>
+          </a>
+          <a href="team.html" class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.05)] relative overflow-hidden block">
+            <div class="absolute top-0 left-0 w-1 h-full bg-outline-variant"></div>
+            <div class="flex justify-between items-start mb-md">
+              <div>
+                <h5 class="font-headline-2 text-headline-2 text-on-surface leading-tight mb-xs">Contenders Academy</h5>
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-small text-[10px] uppercase tracking-wide">Diamond-Asc</span>
+              </div>
+              <button onclick="event.preventDefault()" class="text-outline hover:text-primary transition-colors">
+                <span class="material-symbols-outlined">more_horiz</span>
+              </button>
+            </div>
+            <div class="bg-primary-fixed-dim/30 border border-primary-fixed-dim p-sm rounded-lg flex items-center justify-between cursor-pointer hover:bg-primary-fixed-dim/50 transition-colors">
+              <div class="flex items-center gap-xs text-on-primary-fixed font-label-small text-label-small">
+                <span class="material-symbols-outlined text-[16px]">search</span>
+                Looking for Scrim
+              </div>
+            </div>
+          </a>
+        </div>
+      </div>
+
+      <!-- Rocket League -->
+      <div class="flex flex-col gap-sm">
+        <h4 class="font-label-bold text-label-bold text-outline uppercase tracking-wider pl-xs">Rocket League</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-md">
+          <a href="team.html" class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.05)] relative overflow-hidden block">
+            <div class="absolute top-0 left-0 w-1 h-full bg-outline-variant"></div>
+            <div class="flex justify-between items-start mb-md">
+              <div>
+                <h5 class="font-headline-2 text-headline-2 text-on-surface leading-tight mb-xs">RL Main Roster</h5>
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-small text-[10px] uppercase tracking-wide">GC2+</span>
+              </div>
+              <button onclick="event.preventDefault()" class="text-outline hover:text-primary transition-colors">
+                <span class="material-symbols-outlined">more_horiz</span>
+              </button>
+            </div>
+            <div class="bg-surface-container p-sm rounded-lg flex items-center justify-between">
+              <div class="flex items-center gap-xs text-on-surface-variant font-label-small text-label-small">
+                <span class="material-symbols-outlined text-[16px]">schedule</span>
+                Idle
+              </div>
+            </div>
+          </a>
+          <a href="team.html" class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.05)] relative overflow-hidden block">
+            <div class="absolute top-0 left-0 w-1 h-full bg-secondary"></div>
+            <div class="flex justify-between items-start mb-md">
+              <div>
+                <h5 class="font-headline-2 text-headline-2 text-on-surface leading-tight mb-xs">RL Academy</h5>
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-small text-[10px] uppercase tracking-wide">Champ+</span>
+              </div>
+              <button onclick="event.preventDefault()" class="text-outline hover:text-primary transition-colors">
+                <span class="material-symbols-outlined">more_horiz</span>
+              </button>
+            </div>
+            <div class="bg-surface-container p-sm rounded-lg flex items-center justify-between">
+              <div class="flex items-center gap-xs text-on-surface-variant font-label-small text-label-small">
+                <span class="material-symbols-outlined text-[16px]">schedule</span>
+                Idle
+              </div>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- BottomNavBar -->
+<nav class="md:hidden bg-white/90 backdrop-blur-lg fixed bottom-0 w-full rounded-t-2xl border-t border-slate-200 shadow-[0_-4px_20px_0_rgba(0,0,0,0.04)] z-50 flex justify-around items-center px-4 pt-3 pb-6">
+  <a href="index.html" class="flex flex-col items-center justify-center text-outline hover:text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">sports_esports</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Scrims</span>
+  </a>
+  <a href="org.html" class="flex flex-col items-center justify-center text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">corporate_fare</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Org</span>
+  </a>
+  <a href="requests.html" class="flex flex-col items-center justify-center text-outline hover:text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">pending_actions</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Requests</span>
+  </a>
+  <a href="calendar.html" class="flex flex-col items-center justify-center text-outline hover:text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">calendar_month</span>
+    <span class="text-[10px] font-semibold tracking-wide uppercase">Calendar</span>
+  </a>
+</nav>
+
+</body>
+</html>

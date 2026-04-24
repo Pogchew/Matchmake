@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ScrimGG – Team Board</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="tailwind-config.js"></script>
+<style>body { min-height: max(884px, 100dvh); }</style>
+</head>
+<body class="bg-background text-on-background font-body-main antialiased">
+
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 flex justify-between items-center px-5 py-3 h-16">
+  <div class="flex items-center gap-3">
+    <img alt="Avatar" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBaRZFHWrEQzlRMArgGPq7ZuxlpgTMTCeHKjyr4YfivXZ3npJGR9c9nu77k_LfHA32owuT7RJ8893LGS5GVR1dgVhW9OLf8mini5mnqLu80Ok_pp57wn4o-f-Bexm4fBP9CdNV4HzNSEuMu2mVi-OaxwOmXwckVKU9tYiGCp0fM__V0_Pmcpdwe3DgYCmqffKz39-pxCyDidRqvuTzbqs6x7sU1N7shKVzg1Wi69AndAg82HUUa-gF6BJw3qcipJeqL7XP_kdnaZb4"/>
+    <span class="font-headline-3 text-on-surface font-bold tracking-tight">ScrimGG</span>
+  </div>
+  <div class="hidden md:flex items-center gap-1">
+    <a href="index.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Scrims</a>
+    <a href="org.html" class="text-primary font-label-bold font-bold bg-primary-fixed px-3 py-2 rounded-lg">Org</a>
+    <a href="requests.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Requests</a>
+    <a href="calendar.html" class="text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg">Calendar</a>
+  </div>
+  <button class="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95">
+    <span class="material-symbols-outlined">settings</span>
+  </button>
+</header>
+
+<!-- Main Content -->
+<main class="pt-[88px] pb-[100px] md:pb-xl px-margin-mobile md:px-xl max-w-[1200px] mx-auto min-h-screen">
+
+  <!-- Team Header Card -->
+  <section class="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-lg mb-lg flex flex-col md:flex-row items-start md:items-center gap-md">
+    <div class="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 border-4 border-surface-container-lowest shadow-sm">
+      <span class="material-symbols-outlined text-[48px] text-primary" style="font-variation-settings:'FILL' 1">rocket_launch</span>
+    </div>
+    <div class="flex-1">
+      <div class="flex items-center gap-sm mb-xs">
+        <h1 class="font-headline-1 text-on-surface">Rocket Rams</h1>
+        <span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings:'FILL' 1">verified</span>
+      </div>
+      <p class="font-body-sub text-on-surface-variant mb-md">North American Division • Main Roster</p>
+      <div class="flex flex-wrap gap-sm">
+        <span class="bg-primary-fixed text-on-primary-fixed font-label-small px-3 py-1 rounded-full">Valorant</span>
+        <span class="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Pro Tier</span>
+        <span class="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">EST</span>
+      </div>
+    </div>
+    <div class="flex flex-col gap-sm w-full md:w-auto">
+      <button class="bg-primary text-on-primary font-label-bold px-md py-sm rounded-lg hover:opacity-90 transition-opacity">Edit Team Info</button>
+      <button class="bg-surface-container text-primary font-label-bold px-md py-sm rounded-lg hover:bg-surface-variant transition-colors">Manage Roster</button>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+
+    <!-- Left: Roster & Stats -->
+    <div class="lg:col-span-1 flex flex-col gap-lg">
+
+      <!-- Roster -->
+      <div class="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
+        <div class="flex justify-between items-center mb-md">
+          <h2 class="font-headline-3 text-on-surface">Active Roster</h2>
+          <span class="font-body-sub text-on-surface-variant">5/5</span>
+        </div>
+        <div class="flex flex-col gap-sm">
+          <div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer">
+            <img alt="Player" class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0ro6y5_-AQ4_ykBQXC9nM_kuWEIZRi-hecS8jLRjQNdqPBzOOIgZG_LSytK_Ir12sQ14hN9qwoVIG4nRucu-lHzDlPNyWDm92DCyk9XkqPl2KGO0ayDob5eYCtep4E1WPWFk15K3HLSrDrpTNHQDqNCzMk32cXdzG3xq_84MQfAD8WAulyNB7TCJDnS0vBFCcYtMTgI8vBYg6abJJvFx0kaPAbgLcAGphMlQdF1qd1VFDoM5P5mKDehD3wMXhOCSHideA4GSjOpk"/>
+            <div class="flex-1">
+              <p class="font-label-bold text-on-surface">ApexPredator</p>
+              <p class="font-label-small text-on-surface-variant">Captain • IGL</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer">
+            <img alt="Player" class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyri2vhgSpmv4xJ_obkz_ToDzXFYFVOT8jNRg1n1e6wes6ro9rCfvkUcp4lu5FBGL1Sm8ePJhUROSIOmNbfpnV7cKMYbwGbkVL4S-H9Wxuo2XdxJxF5c0CZHuypdZoWM2Z8mm_6tRNJub2va5pGYcefmn6OGt9GAUijQJlSBnx108aPg-ECD7RgfDLbTte1h9A0-VR4iqFnbEKx9LCU0UZRmOV31t9x-DXGVI53O8_Vs87lWQXl_NHuUWFzAxRp1fn7rngAUB2frw"/>
+            <div class="flex-1">
+              <p class="font-label-bold text-on-surface">Valkyrie</p>
+              <p class="font-label-small text-on-surface-variant">Entry Fragger</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer">
+            <div class="w-10 h-10 rounded-full bg-secondary-container text-on-primary flex items-center justify-center font-label-bold">NX</div>
+            <div class="flex-1">
+              <p class="font-label-bold text-on-surface">Noxious</p>
+              <p class="font-label-small text-on-surface-variant">Support</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer">
+            <div class="w-10 h-10 rounded-full bg-tertiary-container text-on-primary flex items-center justify-center font-label-bold">ZF</div>
+            <div class="flex-1">
+              <p class="font-label-bold text-on-surface">ZeroFlux</p>
+              <p class="font-label-small text-on-surface-variant">Flex</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer">
+            <img alt="Player" class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6ftVZ1UcrTGJFp76zHQyZVvCaQq6fbsB9LA2BKMrSJeZi92UiTwCQ4VkwSv618UQt6XrPdraSnRNyHCx9WyZAEHdTQVppOnxfJzaedwFw1HThVP9AoSwpXnqovt7peygYgcNnO03J1KeeHJrR9RvV7xKa4HAWm1e8on7Px0FHWz7WlZW8XySE6Fuv7a-nNWfxFWYRfzNbI3gsMJYx7pXnx13MlcAeKhh0ideIYM9M8DjGx5wAG5rlXkqMEqQ4rlM8UR8eq8Tmp8A"/>
+            <div class="flex-1">
+              <p class="font-label-bold text-on-surface">Echo</p>
+              <p class="font-label-small text-on-surface-variant">Sniper</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
+        <h2 class="font-headline-3 text-on-surface mb-md">Season Stats</h2>
+        <div class="grid grid-cols-2 gap-sm">
+          <div class="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
+            <span class="font-editorial-large text-primary">24</span>
+            <span class="font-label-small text-on-surface-variant">Scrims Played</span>
+          </div>
+          <div class="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
+            <span class="font-editorial-large text-secondary">68%</span>
+            <span class="font-label-small text-on-surface-variant">Win Rate</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Upcoming Scrims -->
+    <div class="lg:col-span-2">
+      <div class="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md h-full">
+        <div class="flex justify-between items-center mb-md">
+          <h2 class="font-headline-3 text-on-surface">Upcoming Scrims</h2>
+          <a href="calendar.html" class="text-primary font-label-bold flex items-center gap-xs hover:bg-surface-container p-xs rounded-lg transition-colors">
+            View Calendar
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </a>
+        </div>
+        <div class="flex flex-col gap-md">
+
+          <!-- Scrim 1 -->
+          <a href="detail.html" class="block border border-surface-variant rounded-lg p-md hover:shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] transition-shadow">
+            <div class="flex justify-between items-start mb-sm">
+              <div class="flex items-center gap-sm">
+                <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-surface-variant text-[24px]">sports_esports</span>
+                </div>
+                <div>
+                  <h3 class="font-headline-3 text-on-surface text-[16px]">vs. Cloud9 Academy</h3>
+                  <p class="font-body-sub text-on-surface-variant">Best of 3 • Pro Tier</p>
+                </div>
+              </div>
+              <span class="bg-tertiary-fixed text-on-tertiary-fixed font-label-small px-2 py-1 rounded text-[10px]">Today</span>
+            </div>
+            <div class="flex items-center gap-md text-on-surface-variant font-label-small mt-sm">
+              <div class="flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[16px]">schedule</span> 8:00 PM EST
+              </div>
+              <div class="flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[16px]">dns</span> NA East Server
+              </div>
+            </div>
+          </a>
+
+          <!-- Scrim 2 -->
+          <a href="detail.html" class="block border border-surface-variant rounded-lg p-md hover:shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] transition-shadow">
+            <div class="flex justify-between items-start mb-sm">
+              <div class="flex items-center gap-sm">
+                <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-surface-variant text-[24px]">sports_esports</span>
+                </div>
+                <div>
+                  <h3 class="font-headline-3 text-on-surface text-[16px]">vs. Team Liquid Blue</h3>
+                  <p class="font-body-sub text-on-surface-variant">Best of 1 • Practice</p>
+                </div>
+              </div>
+              <span class="bg-surface-container text-on-surface-variant font-label-small px-2 py-1 rounded text-[10px]">Tomorrow</span>
+            </div>
+            <div class="flex items-center gap-md text-on-surface-variant font-label-small mt-sm">
+              <div class="flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[16px]">schedule</span> 6:30 PM EST
+              </div>
+              <div class="flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[16px]">dns</span> NA Central Server
+              </div>
+            </div>
+          </a>
+
+          <!-- Scrim 3 – Pending -->
+          <div class="border border-surface-variant rounded-lg p-md opacity-60">
+            <div class="flex justify-between items-start mb-sm">
+              <div class="flex items-center gap-sm">
+                <div class="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-surface-variant text-[24px]">sports_esports</span>
+                </div>
+                <div>
+                  <h3 class="font-headline-3 text-on-surface text-[16px]">vs. Sentinels B</h3>
+                  <p class="font-body-sub text-on-surface-variant">Best of 5 • Tournament Prep</p>
+                </div>
+              </div>
+              <span class="bg-surface-container text-on-surface-variant font-label-small px-2 py-1 rounded text-[10px]">Pending</span>
+            </div>
+            <div class="flex items-center gap-md text-on-surface-variant font-label-small mt-sm">
+              <div class="flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[16px]">schedule</span> TBD
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- Mobile Bottom Nav -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 h-20 bg-white/90 backdrop-blur-xl border-t border-slate-200/60 shadow-[0_-1px_3px_0_rgba(0,0,0,0.02)] flex justify-around items-center px-6">
+  <a href="index.html" class="flex flex-col items-center justify-center text-outline gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">sports_esports</span>
+    <span class="font-['Inter'] text-[10px] font-semibold tracking-wide uppercase">Scrims</span>
+  </a>
+  <a href="org.html" class="flex flex-col items-center justify-center text-primary gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">corporate_fare</span>
+    <span class="font-['Inter'] text-[10px] font-semibold tracking-wide uppercase">Org</span>
+  </a>
+  <a href="requests.html" class="flex flex-col items-center justify-center text-outline gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">pending_actions</span>
+    <span class="font-['Inter'] text-[10px] font-semibold tracking-wide uppercase">Requests</span>
+  </a>
+  <a href="calendar.html" class="flex flex-col items-center justify-center text-outline gap-1 active:scale-90 transition-all">
+    <span class="material-symbols-outlined">calendar_month</span>
+    <span class="font-['Inter'] text-[10px] font-semibold tracking-wide uppercase">Calendar</span>
+  </a>
+</nav>
+
+</body>
+</html>
