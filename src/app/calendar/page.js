@@ -19,7 +19,6 @@ const scheduledScrims = [
   {
     id: 1,
     time: "14:00",
-    tz: "EST",
     team: "Sentinels Academy",
     meta: "Valorant • BO3 • Server: NA East",
     status: "confirmed",
@@ -29,7 +28,6 @@ const scheduledScrims = [
   {
     id: 2,
     time: "17:30",
-    tz: "EST",
     team: "Cloud9 Black",
     meta: "Valorant • BO1 • Server: NA Central",
     status: "pending",
@@ -39,7 +37,6 @@ const scheduledScrims = [
   {
     id: 3,
     time: "20:00",
-    tz: "EST",
     team: "Nova Esports",
     meta: "Valorant • BO3 • Server: NA East",
     status: "confirmed",
@@ -47,6 +44,12 @@ const scheduledScrims = [
     accentColor: "bg-secondary",
   },
 ];
+
+function getLocalTimeZoneLabel() {
+  return new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
+    .formatToParts(new Date())
+    .find((part) => part.type === "timeZoneName")?.value || "Local";
+}
 
 function StatusChip({ status }) {
   if (status === "confirmed") {
@@ -68,6 +71,7 @@ function StatusChip({ status }) {
 export default function CalendarPage() {
   const [current, setCurrent] = useState(new Date(2024, 9, 1)); // Oct 2024
   const [selected, setSelected] = useState(18);
+  const localTimeZoneLabel = getLocalTimeZoneLabel();
 
   const year = current.getFullYear();
   const month = current.getMonth();
@@ -184,7 +188,7 @@ export default function CalendarPage() {
                 <div className={`w-1 ${scrim.accentColor} absolute left-0 top-md bottom-md rounded-r-full`} />
                 <div className="flex flex-col justify-center min-w-[60px] pl-sm">
                   <span className="font-label-bold text-label-bold text-on-surface">{scrim.time}</span>
-                  <span className="font-label-small text-label-small text-on-surface-variant">{scrim.tz}</span>
+                  <span className="font-label-small text-label-small text-on-surface-variant">{localTimeZoneLabel}</span>
                 </div>
                 <div className="w-[1px] bg-surface-variant" />
                 <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-md py-xs">

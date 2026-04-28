@@ -34,14 +34,7 @@ function formatDateTime(value) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatTime(value) {
-  if (!value) return "TBD";
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
+    timeZoneName: "short",
   }).format(new Date(value));
 }
 
@@ -264,7 +257,6 @@ export default function ScrimDetailPage() {
   const region = postingTeam?.region ?? "Region TBD";
   const rating = Number(postingTeam?.scrimgg_rating ?? 0).toFixed(1);
   const dateTime = formatDateTime(scrim?.scheduled_at);
-  const timeOnly = formatTime(scrim?.scheduled_at);
   const selectedRequestingTeam = requestingTeams.find((team) => team.id === selectedRequestingTeamId);
 
   const isExpired = scrim?.expires_at
@@ -464,13 +456,13 @@ export default function ScrimDetailPage() {
             <h2 className="font-headline-3 text-headline-3 mb-md">Match Details</h2>
             <div className="space-y-md">
               <DetailRow icon="sports_esports" label="Game"          value={game} />
-              <DetailRow icon="schedule"       label="Time"          value={`${dateTime} EST`} />
+              <DetailRow icon="schedule"       label="Time"          value={dateTime} />
               <DetailRow icon="military_tech"  label="Posting Rank"  value={rank} />
               <DetailRow icon="swap_vert"      label="Opponent Rank" value={rankRange} />
               <DetailRow icon="public"         label="Region"        value={region} />
               <DetailRow
                 icon="star"
-                label="ScrimGG Rating"
+                label="Matchmake Rating"
                 value={`${rating} / 5.0`}
                 last
               />

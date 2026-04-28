@@ -83,7 +83,7 @@ export default function DetailPage() {
 
           {/* Date & Time */}
           <div className="mt-lg text-center">
-            <p className="font-headline-2 text-headline-2 text-on-surface">Tonight, 8:00 PM EST</p>
+            <p className="font-headline-2 text-headline-2 text-on-surface">Tonight, 8:00 PM local</p>
             <div className="flex flex-wrap justify-center gap-sm mt-md">
               <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-small text-label-small">
                 <MaterialSymbol className="text-[14px] mr-1">sports_esports</MaterialSymbol>

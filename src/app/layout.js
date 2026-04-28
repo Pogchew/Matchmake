@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "ScrimGG - Scrim Board",
+  title: "Matchmake - Scrim Board",
   description: "Find and post esports scrim listings.",
 };
 

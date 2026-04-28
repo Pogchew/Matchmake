@@ -33,7 +33,7 @@ export default function TopBar({ right }) {
       <div className="flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img alt="User avatar" className="w-8 h-8 rounded-full object-cover" src={AVATAR} />
-        <span className="text-xl font-bold tracking-tight text-on-surface">ScrimGG</span>
+        <span className="text-xl font-bold tracking-tight text-on-surface">Matchmake</span>
       </div>
 
       {/* Centre: desktop nav */}

@@ -15,8 +15,8 @@ const roster = [
 ];
 
 const upcomingScrims = [
-  { id: 1, vs: "vs. Cloud9 Academy",    meta: "Best of 3 • Pro Tier",          when: "Today",    time: "8:00 PM EST",  server: "NA East Server",  status: "confirmed" },
-  { id: 2, vs: "vs. Team Liquid Blue",  meta: "Best of 1 • Practice",          when: "Tomorrow", time: "6:30 PM EST",  server: "NA Central Server", status: "confirmed" },
+  { id: 1, vs: "vs. Cloud9 Academy",    meta: "Best of 3 • Pro Tier",          when: "Today",    time: "8:00 PM local",  server: "NA East Server",  status: "confirmed" },
+  { id: 2, vs: "vs. Team Liquid Blue",  meta: "Best of 1 • Practice",          when: "Tomorrow", time: "6:30 PM local",  server: "NA Central Server", status: "confirmed" },
   { id: 3, vs: "vs. Sentinels B",       meta: "Best of 5 • Tournament Prep",   when: "Pending",  time: "TBD",          server: null,              status: "pending" },
 ];
 
@@ -32,7 +32,7 @@ export default function TeamPage() {
           >
             <MaterialSymbol>arrow_back</MaterialSymbol>
           </Link>
-          <span className="font-headline-3 text-on-surface font-bold tracking-tight">ScrimGG</span>
+          <span className="font-headline-3 text-on-surface font-bold tracking-tight">Matchmake</span>
         </div>
 
         {/* Desktop nav – Org is active since we came from there */}
@@ -78,7 +78,7 @@ export default function TeamPage() {
             <div className="flex flex-wrap gap-sm">
               <span className="bg-primary-fixed text-on-primary-fixed font-label-small px-3 py-1 rounded-full">Valorant</span>
               <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Pro Tier</span>
-              <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">EST</span>
+              <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Local Time</span>
             </div>
           </div>
           <div className="flex flex-col gap-sm w-full md:w-auto">

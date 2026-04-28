@@ -1,6 +1,6 @@
 # Matchmake Deployment Checklist
 
-Use this checklist to deploy Matchmake / ScrimGG to Vercel from GitHub.
+Use this checklist to deploy Matchmake to Vercel from GitHub.
 
 ## 1. Confirm Local Environment
 

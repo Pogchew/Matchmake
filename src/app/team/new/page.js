@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
@@ -240,6 +241,13 @@ export default function NewTeamPage() {
           {errorMessage && (
             <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
               {errorMessage}
+              {errorMessage.includes("organization") && (
+                <div className="mt-sm">
+                  <Link className="font-label-bold text-on-error-container underline" href="/org/new">
+                    Create organization
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

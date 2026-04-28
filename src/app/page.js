@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
@@ -14,8 +14,8 @@ function createInitialPostForm() {
   return {
     teamId: "",
     gameTitle: "Valorant",
-    date: tomorrow.toISOString().slice(0, 10),
-    startTime: "7:00 PM EST",
+    date: getDateInputValue(tomorrow),
+    startTime: "19:00",
     games: "3 Games",
     rankRange: getDefaultRankForGame("Valorant"),
     server: "NA-East",
@@ -23,11 +23,10 @@ function createInitialPostForm() {
   };
 }
 
-const filters = [
-  { label: "Oct 26", icon: "calendar_month" },
-  { label: "Valorant", icon: "sports_esports", active: true, trailing: "keyboard_arrow_down" },
-  { label: "Rank: Diamond+", trailing: "keyboard_arrow_down" },
-  { label: "Time: Tonight", trailing: "keyboard_arrow_down" },
+const TIME_FILTER_OPTIONS = [
+  { label: "Any time", value: "all" },
+  { label: "Morning", value: "morning" },
+  { label: "Evening", value: "evening" },
 ];
 
 function getInitials(name = "") {
@@ -54,7 +53,98 @@ function formatScrimTime(value) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   }).format(new Date(value));
+}
+
+function getDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getUserTimeZoneLabel() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time zone";
+}
+
+function formatBoardDate(value) {
+  if (!value) return "Any date";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function getDayRange(dateValue) {
+  const start = new Date(`${dateValue}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
+}
+
+function matchesTimeBucket(value, timeFilter) {
+  if (timeFilter === "all") return true;
+  if (!value) return false;
+
+  const hour = new Date(value).getHours();
+
+  if (timeFilter === "morning") return hour >= 6 && hour < 12;
+  if (timeFilter === "evening") return hour >= 12 || hour < 2;
+
+  return true;
+}
+
+function getScrimDateKey(value) {
+  if (!value) return "unscheduled";
+  return getDateInputValue(new Date(value));
+}
+
+function formatScrimSectionDate(value) {
+  if (value === "unscheduled") return "Date TBD";
+
+  const date = new Date(`${value}T00:00:00`);
+  const today = getDateInputValue();
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowValue = getDateInputValue(tomorrow);
+
+  if (value === today) return "Today";
+  if (value === tomorrowValue) return "Tomorrow";
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function groupScrimsByDate(scrimRequests) {
+  return scrimRequests.reduce((groups, scrimRequest) => {
+    const key = getScrimDateKey(scrimRequest.scheduled_at);
+    const existingGroup = groups.find((group) => group.key === key);
+
+    if (existingGroup) {
+      existingGroup.scrims.push(scrimRequest);
+      return groups;
+    }
+
+    return [
+      ...groups,
+      {
+        key,
+        label: formatScrimSectionDate(key),
+        scrims: [scrimRequest],
+      },
+    ];
+  }, []);
 }
 
 function normalizeScrimRequest(scrimRequest) {
@@ -174,6 +264,59 @@ function TextInput({ icon, ...props }) {
   );
 }
 
+function BoardFilterSelect({ icon, label, children, ...props }) {
+  return (
+    <label className="relative shrink-0">
+      <span className="sr-only">{label}</span>
+      {icon && (
+        <MaterialSymbol className="absolute left-sm top-1/2 -translate-y-1/2 text-[20px] text-primary pointer-events-none">
+          {icon}
+        </MaterialSymbol>
+      )}
+      <select
+        className={`h-10 min-w-[140px] bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-bold text-label-bold rounded-full border border-transparent appearance-none focus:ring-2 focus:ring-primary ${
+          icon ? "pl-xl" : "pl-md"
+        } pr-xl`}
+        {...props}
+      >
+        {children}
+      </select>
+      <MaterialSymbol className="absolute right-sm top-1/2 -translate-y-1/2 text-[16px] text-on-surface-variant pointer-events-none">
+        keyboard_arrow_down
+      </MaterialSymbol>
+    </label>
+  );
+}
+
+function BoardDateFilter({ value, onChange, onClear }) {
+  return (
+    <div className="relative shrink-0">
+      <span className="sr-only">Scrim date</span>
+      <div className="h-10 min-w-[132px] bg-primary text-on-primary font-label-bold text-label-bold rounded-full pl-md pr-lg flex items-center gap-xs shadow-[0_2px_12px_rgba(0,112,235,0.25)]">
+        <MaterialSymbol className="text-[20px]">calendar_month</MaterialSymbol>
+        <span>{formatBoardDate(value)}</span>
+      </div>
+      <input
+        className="absolute inset-0 h-10 w-full cursor-pointer opacity-0"
+        name="date"
+        onChange={onChange}
+        type="date"
+        value={value}
+      />
+      {value && (
+        <button
+          aria-label="Clear date filter"
+          className="absolute right-xs top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-on-primary hover:bg-white/15"
+          onClick={onClear}
+          type="button"
+        >
+          <MaterialSymbol className="text-[16px]">close</MaterialSymbol>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function getOpponentRankBounds(rankRange) {
   const parts = rankRange.split(" - ").map((part) => part.trim());
   return {
@@ -289,9 +432,12 @@ function PostScrimModal({
                   icon="schedule"
                   name="startTime"
                   onChange={onChange}
-                  placeholder="e.g., 7:00 PM EST"
+                  type="time"
                   value={form.startTime}
                 />
+                <p className="font-label-small text-label-small text-outline">
+                  Uses your local time zone: {getUserTimeZoneLabel()}
+                </p>
               </Field>
               <Field label="Number of Games">
                 <SelectField icon="expand_more" name="games" onChange={onChange} value={form.games}>
@@ -360,22 +506,54 @@ function PostScrimModal({
 
 export default function ScrimBoardPage() {
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
-  const [activeChip, setActiveChip] = useState("Valorant");
   const [showToast, setShowToast] = useState(false);
   const [scrimRequests, setScrimRequests] = useState([]);
   const [isLoadingScrims, setIsLoadingScrims] = useState(true);
   const [scrimError, setScrimError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [boardFilters, setBoardFilters] = useState({
+    date: "",
+    gameTitle: "all",
+    rank: "all",
+    time: "all",
+  });
   const [postForm, setPostForm] = useState(() => createInitialPostForm());
   const [isPosting, setIsPosting] = useState(false);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
   const [postError, setPostError] = useState("");
   const [postingTeams, setPostingTeams] = useState([]);
 
-  async function fetchScrimRequests() {
+  const rankFilterOptions = useMemo(() => {
+    if (boardFilters.gameTitle !== "all") {
+      return getRanksForGame(boardFilters.gameTitle);
+    }
+
+    return Array.from(new Set(GAME_OPTIONS.flatMap((game) => getRanksForGame(game))));
+  }, [boardFilters.gameTitle]);
+
+  const visibleScrimRequests = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return scrimRequests.filter((scrimRequest) => {
+      if (!matchesTimeBucket(scrimRequest.scheduled_at, boardFilters.time)) {
+        return false;
+      }
+
+      if (!query) return true;
+
+      const scrim = normalizeScrimRequest(scrimRequest);
+      return [scrim.team, scrim.org, scrim.region, scrim.game, scrim.rank]
+        .some((value) => value.toLowerCase().includes(query));
+    });
+  }, [boardFilters.time, scrimRequests, searchQuery]);
+
+  const scrimSections = useMemo(() => groupScrimsByDate(visibleScrimRequests), [visibleScrimRequests]);
+
+  const fetchScrimRequests = useCallback(async () => {
     setIsLoadingScrims(true);
     setScrimError("");
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("scrim_requests")
       .select(
         `
@@ -406,6 +584,22 @@ export default function ScrimBoardPage() {
       .gt("expires_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true });
 
+    if (boardFilters.gameTitle !== "all") {
+      query = query.eq("game_title", boardFilters.gameTitle);
+    }
+
+    if (boardFilters.rank !== "all") {
+      query = query.ilike("team_rank", `${boardFilters.rank}%`);
+    }
+
+    const dateRange = boardFilters.date ? getDayRange(boardFilters.date) : null;
+
+    if (dateRange) {
+      query = query.gte("scheduled_at", dateRange.start).lt("scheduled_at", dateRange.end);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
       setScrimError(error.message);
       setScrimRequests([]);
@@ -414,7 +608,7 @@ export default function ScrimBoardPage() {
     }
 
     setIsLoadingScrims(false);
-  }
+  }, [boardFilters]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("post") === "true") {
@@ -424,7 +618,7 @@ export default function ScrimBoardPage() {
 
   useEffect(() => {
     fetchScrimRequests();
-  }, []);
+  }, [fetchScrimRequests]);
 
   useEffect(() => {
     document.body.style.overflow = isPostModalOpen ? "hidden" : "";
@@ -533,6 +727,24 @@ export default function ScrimBoardPage() {
             gameTitle: selectedTeam.game_title,
             rankRange: selectedTeam.rank_tier || getDefaultRankForGame(selectedTeam.game_title),
             server: selectedTeam.region || currentForm.server,
+          }
+        : {}),
+    }));
+  }
+
+  function handleBoardFilterChange(event) {
+    const { name, value } = event.target;
+    setBoardFilters((currentFilters) => ({
+      ...currentFilters,
+      [name]: value,
+      ...(name === "gameTitle"
+        ? {
+            rank: "all",
+          }
+        : {}),
+      ...(name === "date" && value
+        ? {
+            time: "all",
           }
         : {}),
     }));
@@ -657,40 +869,68 @@ export default function ScrimBoardPage() {
             </MaterialSymbol>
             <input
               className="w-full bg-surface-container-high border-none rounded-lg py-sm pl-xl pr-sm font-body-sub text-body-sub text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-colors h-[44px]"
+              onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search teams, orgs, or regions..."
               type="text"
+              value={searchQuery}
             />
           </div>
 
           <div className="flex items-center gap-xs overflow-x-auto pb-xs scrollbar-hide -mx-margin-mobile px-margin-mobile md:mx-0 md:px-0">
-            {filters.map((filter) => {
-              const isActive = activeChip === filter.label;
+            <BoardDateFilter
+              onClear={() => {
+                setBoardFilters((currentFilters) => ({
+                  ...currentFilters,
+                  date: "",
+                }));
+              }}
+              onChange={handleBoardFilterChange}
+              value={boardFilters.date}
+            />
 
-              return (
-                <button
-                  className={
-                    isActive
-                      ? "chip whitespace-nowrap bg-primary text-on-primary font-label-bold text-label-bold px-md py-sm rounded-full flex items-center gap-2 shadow-[0_2px_12px_rgba(0,112,235,0.25)] active:scale-95 transition-all"
-                      : "chip whitespace-nowrap bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-bold text-label-bold px-md py-sm rounded-full transition-colors flex items-center gap-1 border border-transparent active:scale-95"
-                  }
-                  key={filter.label}
-                  onClick={() => setActiveChip(isActive ? "" : filter.label)}
-                  type="button"
-                >
-                  {filter.icon && (
-                    <MaterialSymbol className={isActive ? "text-[20px]" : "text-[20px] text-primary"}>
-                      {filter.icon}
-                    </MaterialSymbol>
-                  )}
-                  <span>{filter.label}</span>
-                  {filter.trailing && (
-                    <MaterialSymbol className={isActive ? "text-[18px] opacity-80" : "text-[16px]"}>
-                      {filter.trailing}
-                    </MaterialSymbol>
-                  )}
-                </button>
-              );
-            })}
+            <BoardFilterSelect
+              icon="sports_esports"
+              label="Game"
+              name="gameTitle"
+              onChange={handleBoardFilterChange}
+              value={boardFilters.gameTitle}
+            >
+              <option value="all">All games</option>
+              {GAME_OPTIONS.map((game) => (
+                <option key={game} value={game}>
+                  {game}
+                </option>
+              ))}
+            </BoardFilterSelect>
+
+            <BoardFilterSelect
+              icon="military_tech"
+              label="Rank"
+              name="rank"
+              onChange={handleBoardFilterChange}
+              value={boardFilters.rank}
+            >
+              <option value="all">All ranks</option>
+              {rankFilterOptions.map((rank) => (
+                <option key={rank} value={rank}>
+                  {rank}
+                </option>
+              ))}
+            </BoardFilterSelect>
+
+            <BoardFilterSelect
+              icon="schedule"
+              label="Time"
+              name="time"
+              onChange={handleBoardFilterChange}
+              value={boardFilters.time}
+            >
+              {TIME_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </BoardFilterSelect>
           </div>
         </div>
 
@@ -702,14 +942,27 @@ export default function ScrimBoardPage() {
           <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-md font-body-sub text-body-sub text-on-surface-variant">
             Unable to load scrims: {scrimError}
           </div>
-        ) : scrimRequests.length === 0 ? (
+        ) : visibleScrimRequests.length === 0 ? (
           <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-md font-body-sub text-body-sub text-on-surface-variant">
             No active scrims found.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
-            {scrimRequests.map((scrimRequest) => (
-              <ScrimCard key={scrimRequest.id} scrim={normalizeScrimRequest(scrimRequest)} />
+          <div className="flex flex-col gap-xl">
+            {scrimSections.map((section) => (
+              <section className="flex flex-col gap-md" key={section.key}>
+                <div className="flex items-center gap-sm">
+                  <h2 className="font-headline-3 text-headline-3 text-on-surface">{section.label}</h2>
+                  <span className="h-px flex-1 bg-outline-variant/60" />
+                  <span className="font-label-small text-label-small text-outline">
+                    {section.scrims.length} {section.scrims.length === 1 ? "scrim" : "scrims"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+                  {section.scrims.map((scrimRequest) => (
+                    <ScrimCard key={scrimRequest.id} scrim={normalizeScrimRequest(scrimRequest)} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}

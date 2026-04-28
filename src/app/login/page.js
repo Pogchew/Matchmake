@@ -42,7 +42,7 @@ export default function LoginPage() {
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-fixed text-primary">
             <MaterialSymbol fill>sports_esports</MaterialSymbol>
           </div>
-          <span className="text-xl font-bold tracking-tight text-on-surface">ScrimGG</span>
+          <span className="text-xl font-bold tracking-tight text-on-surface">Matchmake</span>
         </div>
 
         <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
@@ -95,7 +95,7 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-lg text-center font-body-sub text-body-sub text-on-surface-variant">
-            New to ScrimGG?{" "}
+            New to Matchmake?{" "}
             <Link className="font-label-bold text-primary hover:text-on-primary-fixed-variant" href="/signup">
               Create an account
             </Link>
