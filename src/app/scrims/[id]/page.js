@@ -1,12 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MaterialSymbol from "@/components/MaterialSymbol";
 
 // ─── helpers (mirrored from page.js) ────────────────────────────────────────
+
+const SCRIM_DURATION_HOURS = 3;
+
+function getScrimEndAt(value) {
+  if (!value) return null;
+
+  const endAt = new Date(value);
+  if (Number.isNaN(endAt.getTime())) return null;
+
+  endAt.setHours(endAt.getHours() + SCRIM_DURATION_HOURS);
+  return endAt;
+}
 
 function getInitials(name = "") {
   return name
@@ -114,27 +126,298 @@ function LoadingSkeleton() {
 
 export default function ScrimDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const [scrim, setScrim] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requested, setRequested] = useState(false);
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState("");
   const [requestingTeams, setRequestingTeams] = useState([]);
+  const [userTeamIds, setUserTeamIds] = useState([]);
   const [selectedRequestingTeamId, setSelectedRequestingTeamId] = useState("");
   const [isLoadingRequestingTeams, setIsLoadingRequestingTeams] = useState(true);
   const [requestError, setRequestError] = useState("");
 
-  useEffect(() => {
-    if (!id) return;
+  const fetchScrim = useCallback(async ({ showLoading = false } = {}) => {
+    if (!id) return null;
 
-    async function fetchScrim() {
+    if (showLoading) {
       setLoading(true);
-      setError("");
+    }
+    setError("");
 
-      const { data, error: err } = await supabase
+    const { data, error: err } = await supabase
+      .from("scrim_requests")
+      .select(
+        `
+        id,
+        posting_team_id,
+        matched_team_id,
+        game_title,
+        scheduled_at,
+        team_rank,
+        opponent_rank_min,
+        opponent_rank_max,
+        status,
+        expires_at,
+        posting_team:teams!scrim_requests_posting_team_id_fkey (
+          id,
+          name,
+          region,
+          rank_tier,
+          scrimgg_rating,
+          organization:organizations!teams_org_id_fkey (
+            id,
+            name,
+            verified_flag,
+            type
+          )
+        ),
+        matched_team:teams!scrim_requests_matched_team_id_fkey (
+          id,
+          name,
+          game_title,
+          rank_tier,
+          region,
+          organization:organizations!teams_org_id_fkey (
+            id,
+            name,
+            verified_flag,
+            type
+          )
+        )
+      `
+      )
+      .eq("id", id)
+      .single();
+
+    if (err) {
+      setError(err.code === "PGRST116" ? "Scrim not found." : err.message);
+      setLoading(false);
+      return null;
+    }
+
+    setScrim(data);
+    setLoading(false);
+    return data;
+  }, [id]);
+
+  useEffect(() => {
+    fetchScrim({ showLoading: true });
+  }, [fetchScrim]);
+
+  useEffect(() => {
+    async function fetchRequestingTeams() {
+      setIsLoadingRequestingTeams(true);
+      setRequestError("");
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        setRequestingTeams([]);
+        setUserTeamIds([]);
+        setRequestError("Log in before requesting a scrim.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("id, org_id")
+        .eq("id", userData.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Failed to load profile for scrim request", profileError);
+        setRequestingTeams([]);
+        setUserTeamIds([]);
+        setRequestError("We could not load your profile. Please try again.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      if (!profile?.org_id) {
+        setRequestingTeams([]);
+        setUserTeamIds([]);
+        setRequestError("Create an organization before requesting a scrim.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      const { data: teams, error: teamsError } = await supabase
+        .from("teams")
+        .select("id, name, game_title, rank_tier, region")
+        .eq("org_id", profile.org_id)
+        .eq("game_title", scrim?.game_title)
+        .order("created_at", { ascending: true });
+
+      if (teamsError) {
+        console.error("Failed to load teams for scrim request", teamsError);
+        setRequestingTeams([]);
+        setUserTeamIds([]);
+        setRequestError("We could not load your teams. Please try again.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      setRequestingTeams(teams || []);
+      setUserTeamIds((teams || []).map((team) => team.id));
+      setSelectedRequestingTeamId((currentTeamId) => {
+        if (scrim?.matched_team_id && teams?.some((team) => team.id === scrim.matched_team_id)) {
+          return scrim.matched_team_id;
+        }
+        if (currentTeamId && teams?.some((team) => team.id === currentTeamId)) return currentTeamId;
+        return teams?.[0]?.id || "";
+      });
+      setIsLoadingRequestingTeams(false);
+    }
+
+    if (!loading) {
+      fetchRequestingTeams();
+    }
+  }, [loading, scrim?.game_title, scrim?.matched_team_id]);
+
+  // ── derived display values ──────────────────────────────────────────────────
+  const postingTeam = scrim?.posting_team;
+  const matchedTeam = scrim?.matched_team;
+  const org = postingTeam?.organization;
+
+  const teamName = postingTeam?.name ?? "Unknown Team";
+  const teamInitials = getInitials(teamName);
+  const orgName = org?.name ?? "Independent";
+  const verified = Boolean(org?.verified_flag);
+
+  const game = scrim?.game_title ?? "—";
+  const rank = scrim?.team_rank ?? postingTeam?.rank_tier ?? "Rank TBD";
+  const rankColor = getRankColor(rank);
+  const opponentMin = scrim?.opponent_rank_min;
+  const opponentMax = scrim?.opponent_rank_max;
+  const rankRange =
+    opponentMin && opponentMax
+      ? `${opponentMin} – ${opponentMax}`
+      : opponentMin ?? opponentMax ?? "Open";
+  const region = postingTeam?.region ?? "Region TBD";
+  const rating = Number(postingTeam?.scrimgg_rating ?? 0).toFixed(1);
+  const dateTime = formatDateTime(scrim?.scheduled_at);
+  const selectedRequestingTeam = requestingTeams.find((team) => team.id === selectedRequestingTeamId);
+  const isOwnListing = Boolean(userTeamIds.includes(scrim?.posting_team_id));
+  const userHasRequested = Boolean(
+    scrim?.status === "pending" && userTeamIds.includes(scrim?.matched_team_id)
+  );
+  const displayChallengerTeam = scrim?.matched_team_id ? matchedTeam || selectedRequestingTeam : selectedRequestingTeam;
+  const isInboundPending = Boolean(scrim?.status === "pending" && isOwnListing && matchedTeam);
+
+  const isExpired = scrim?.scheduled_at
+    ? getScrimEndAt(scrim.scheduled_at) < new Date()
+    : false;
+  const isOpen = scrim?.status === "open" && !isExpired;
+  const statusLabel = isOpen
+    ? "Open · Looking for Scrim"
+    : isInboundPending
+      ? "Needs Response"
+      : userHasRequested
+        ? "Request Sent"
+        : isExpired
+          ? "Expired"
+          : scrim?.status;
+
+  async function handleRequestScrim() {
+    if (!selectedRequestingTeamId) {
+      setRequestError("Choose which team is requesting this scrim.");
+      return;
+    }
+
+    if (!scrim || scrim.status !== "open") {
+      setRequestError("This scrim is no longer open.");
+      return;
+    }
+
+    if (isExpired) {
+      setRequestError("This scrim has expired.");
+      return;
+    }
+
+    if (selectedRequestingTeamId === scrim.posting_team_id) {
+      setRequestError("You can't request your own scrim.");
+      return;
+    }
+
+    setRequestLoading(true);
+    setRequestError("");
+    setRequestSuccess("");
+
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("id, org_id")
+        .eq("id", userData.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Failed to load profile for scrim request", profileError);
+        setRequestError("We could not load your profile. Please try again.");
+        return;
+      }
+
+      if (!profile?.org_id) {
+        setRequestError("Create an organization before requesting a scrim.");
+        return;
+      }
+
+      const { data: teams, error: teamsError } = await supabase
+        .from("teams")
+        .select("id, game_title")
+        .eq("org_id", profile.org_id)
+        .eq("game_title", scrim.game_title)
+        .order("created_at", { ascending: true });
+
+      if (teamsError) {
+        console.error("Failed to load teams for scrim request", teamsError);
+        setRequestError("We could not load your teams. Please try again.");
+        return;
+      }
+
+      if (!teams?.length) {
+        setRequestError(`Create a ${scrim.game_title} team before requesting this scrim.`);
+        return;
+      }
+
+      const selectedTeam = teams.find((team) => team.id === selectedRequestingTeamId);
+      const challengerTeam = selectedTeam || teams[0];
+
+      if (challengerTeam.game_title !== scrim.game_title) {
+        setRequestError(`${challengerTeam.game_title} teams can only request ${challengerTeam.game_title} scrims.`);
+        return;
+      }
+
+      if (challengerTeam.id === scrim.posting_team_id) {
+        setRequestError("You can't request your own scrim.");
+        return;
+      }
+
+      const { data: updatedScrim, error: updateError } = await supabase
         .from("scrim_requests")
+        .update({
+          matched_team_id: challengerTeam.id,
+          status: "pending",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("status", "open")
+        .is("matched_team_id", null)
         .select(
           `
           id,
+          posting_team_id,
+          matched_team_id,
           game_title,
           scheduled_at,
           team_rank,
@@ -157,121 +440,110 @@ export default function ScrimDetailPage() {
           )
         `
         )
-        .eq("id", id)
-        .single();
+        .maybeSingle();
 
-      if (err) {
-        setError(err.code === "PGRST116" ? "Scrim not found." : err.message);
-      } else {
-        setScrim(data);
+      if (updateError) {
+        console.error("Failed to request scrim", updateError);
+        setRequestError(updateError.message || "Another team may have already requested this scrim.");
+        return;
       }
 
-      setLoading(false);
+      if (!updatedScrim) {
+        setRequestError("Another team may have already requested this scrim.");
+        await fetchScrim();
+        return;
+      }
+
+      setScrim(updatedScrim);
+      setSelectedRequestingTeamId(challengerTeam.id);
+      setRequested(true);
+      setRequestSuccess("Request sent. Waiting for the posting team to accept.");
+    } catch (requestError) {
+      console.error("Failed to request scrim", requestError);
+      setRequestError(requestError.message || "Something went wrong while requesting this scrim.");
+    } finally {
+      setRequestLoading(false);
     }
+  }
 
-    fetchScrim();
-  }, [id]);
-
-  useEffect(() => {
-    async function fetchRequestingTeams() {
-      setIsLoadingRequestingTeams(true);
-      setRequestError("");
-
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !userData.user) {
-        setRequestingTeams([]);
-        setRequestError("Log in before requesting a scrim.");
-        setIsLoadingRequestingTeams(false);
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("id, org_id")
-        .eq("id", userData.user.id)
-        .single();
-
-      if (profileError) {
-        console.error("Failed to load profile for scrim request", profileError);
-        setRequestingTeams([]);
-        setRequestError("We could not load your profile. Please try again.");
-        setIsLoadingRequestingTeams(false);
-        return;
-      }
-
-      if (!profile?.org_id) {
-        setRequestingTeams([]);
-        setRequestError("Create an organization before requesting a scrim.");
-        setIsLoadingRequestingTeams(false);
-        return;
-      }
-
-      const { data: teams, error: teamsError } = await supabase
-        .from("teams")
-        .select("id, name, game_title, rank_tier, region")
-        .eq("org_id", profile.org_id)
-        .order("created_at", { ascending: true });
-
-      if (teamsError) {
-        console.error("Failed to load teams for scrim request", teamsError);
-        setRequestingTeams([]);
-        setRequestError("We could not load your teams. Please try again.");
-        setIsLoadingRequestingTeams(false);
-        return;
-      }
-
-      setRequestingTeams(teams || []);
-      setSelectedRequestingTeamId((currentTeamId) => {
-        if (currentTeamId && teams?.some((team) => team.id === currentTeamId)) return currentTeamId;
-
-        const preferredTeam = teams?.find((team) => team.game_title === scrim?.game_title) || teams?.[0];
-        return preferredTeam?.id || "";
-      });
-      setIsLoadingRequestingTeams(false);
-    }
-
-    if (!loading) {
-      fetchRequestingTeams();
-    }
-  }, [loading, scrim?.game_title]);
-
-  // ── derived display values ──────────────────────────────────────────────────
-  const postingTeam = scrim?.posting_team;
-  const org = postingTeam?.organization;
-
-  const teamName = postingTeam?.name ?? "Unknown Team";
-  const teamInitials = getInitials(teamName);
-  const orgName = org?.name ?? "Independent";
-  const verified = Boolean(org?.verified_flag);
-
-  const game = scrim?.game_title ?? "—";
-  const rank = scrim?.team_rank ?? postingTeam?.rank_tier ?? "Rank TBD";
-  const rankColor = getRankColor(rank);
-  const opponentMin = scrim?.opponent_rank_min;
-  const opponentMax = scrim?.opponent_rank_max;
-  const rankRange =
-    opponentMin && opponentMax
-      ? `${opponentMin} – ${opponentMax}`
-      : opponentMin ?? opponentMax ?? "Open";
-  const region = postingTeam?.region ?? "Region TBD";
-  const rating = Number(postingTeam?.scrimgg_rating ?? 0).toFixed(1);
-  const dateTime = formatDateTime(scrim?.scheduled_at);
-  const selectedRequestingTeam = requestingTeams.find((team) => team.id === selectedRequestingTeamId);
-
-  const isExpired = scrim?.expires_at
-    ? new Date(scrim.expires_at) < new Date()
-    : false;
-  const isOpen = scrim?.status === "open" && !isExpired;
-
-  function handleRequestScrim() {
-    if (!selectedRequestingTeamId) {
-      setRequestError("Choose which team is requesting this scrim.");
+  async function handleRetractRequest() {
+    if (!scrim?.matched_team_id || !userHasRequested) {
+      setRequestError("We could not find your pending request to retract.");
       return;
     }
 
+    setRequestLoading(true);
     setRequestError("");
-    setRequested(true);
+    setRequestSuccess("");
+
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: updatedScrim, error: updateError } = await supabase
+        .from("scrim_requests")
+        .update({
+          matched_team_id: null,
+          status: "open",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("status", "pending")
+        .eq("matched_team_id", scrim.matched_team_id)
+        .select(
+          `
+          id,
+          posting_team_id,
+          matched_team_id,
+          game_title,
+          scheduled_at,
+          team_rank,
+          opponent_rank_min,
+          opponent_rank_max,
+          status,
+          expires_at,
+          posting_team:teams!scrim_requests_posting_team_id_fkey (
+            id,
+            name,
+            region,
+            rank_tier,
+            scrimgg_rating,
+            organization:organizations!teams_org_id_fkey (
+              id,
+              name,
+              verified_flag,
+              type
+            )
+          )
+        `
+        )
+        .maybeSingle();
+
+      if (updateError) {
+        console.error("Failed to retract scrim request", updateError);
+        setRequestError(updateError.message || "We could not retract this request.");
+        return;
+      }
+
+      if (!updatedScrim) {
+        setRequestError("This request may have already changed.");
+        await fetchScrim();
+        return;
+      }
+
+      setScrim(updatedScrim);
+      setRequested(false);
+      setRequestSuccess("Request retracted.");
+    } catch (retractError) {
+      console.error("Failed to retract scrim request", retractError);
+      setRequestError(retractError.message || "Something went wrong while retracting this request.");
+    } finally {
+      setRequestLoading(false);
+    }
   }
 
   // ── render ──────────────────────────────────────────────────────────────────
@@ -332,8 +604,8 @@ export default function ScrimDetailPage() {
 
               {/* Challenger slot */}
               <div className="flex flex-col items-center gap-sm flex-1 min-w-0">
-                {selectedRequestingTeam ? (
-                  <TeamAvatar initials={getInitials(selectedRequestingTeam.name)} />
+                {displayChallengerTeam ? (
+                  <TeamAvatar initials={getInitials(displayChallengerTeam.name)} />
                 ) : (
                   <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-surface-container-high border-2 border-dashed border-outline-variant flex items-center justify-center shrink-0">
                     <MaterialSymbol className="text-[32px] text-outline">group_add</MaterialSymbol>
@@ -341,11 +613,11 @@ export default function ScrimDetailPage() {
                 )}
                 <div className="text-center">
                   <p className="font-headline-3 text-headline-3 text-on-surface-variant leading-tight">
-                    {selectedRequestingTeam?.name || "Your Team"}
+                    {displayChallengerTeam?.name || "Your Team"}
                   </p>
                   <p className="font-label-small text-label-small text-outline mt-1">
-                    {selectedRequestingTeam
-                      ? `${selectedRequestingTeam.game_title} · ${selectedRequestingTeam.rank_tier || "Rank TBD"}`
+                    {displayChallengerTeam
+                      ? `${displayChallengerTeam.game_title} · ${displayChallengerTeam.rank_tier || "Rank TBD"}`
                       : "Challenger"}
                   </p>
                 </div>
@@ -357,12 +629,22 @@ export default function ScrimDetailPage() {
               {isOpen ? (
                 <span className="inline-flex items-center gap-1 bg-primary-fixed text-on-primary-fixed font-label-bold text-label-bold px-4 py-1.5 rounded-full">
                   <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  Open · Looking for Scrim
+                  {statusLabel}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 bg-surface-container text-on-surface-variant font-label-bold text-label-bold px-4 py-1.5 rounded-full">
-                  <MaterialSymbol className="text-[14px]">lock</MaterialSymbol>
-                  {isExpired ? "Expired" : scrim?.status}
+                <span
+                  className={`inline-flex items-center gap-1 font-label-bold text-label-bold px-4 py-1.5 rounded-full ${
+                    isInboundPending
+                      ? "bg-primary-fixed text-on-primary-fixed"
+                      : userHasRequested
+                        ? "bg-[#E3F9E5] text-[#1B5E20]"
+                        : "bg-surface-container text-on-surface-variant"
+                  }`}
+                >
+                  <MaterialSymbol className="text-[14px]">
+                    {isInboundPending ? "pending_actions" : userHasRequested ? "check_circle" : "lock"}
+                  </MaterialSymbol>
+                  {statusLabel}
                 </span>
               )}
             </div>
@@ -389,55 +671,122 @@ export default function ScrimDetailPage() {
 
           {/* ── CTA ───────────────────────────────────────────────── */}
           <section className="space-y-md">
-            <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
-              <label className="flex flex-col gap-sm">
-                <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
-                  Requesting Team
-                </span>
-                <div className="relative">
-                  <select
-                    className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md pr-xl appearance-none focus:ring-2 focus:ring-primary disabled:opacity-60"
-                    disabled={isLoadingRequestingTeams || requestingTeams.length === 0 || requested}
-                    onChange={(event) => {
-                      setSelectedRequestingTeamId(event.target.value);
-                      setRequestError("");
-                    }}
-                    value={selectedRequestingTeamId}
-                  >
-                    {isLoadingRequestingTeams ? (
-                      <option value="">Loading teams...</option>
-                    ) : requestingTeams.length === 0 ? (
-                      <option value="">Create a team before requesting</option>
-                    ) : (
-                      requestingTeams.map((team) => (
-                        <option key={team.id} value={team.id}>
-                          {team.name} - {team.game_title}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <MaterialSymbol className="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
-                    expand_more
-                  </MaterialSymbol>
+            {isOwnListing && isOpen ? (
+              <>
+                <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
+                  <p className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                    Your Listing
+                  </p>
+                  <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
+                    This scrim is posted by {teamName}. Edit and reschedule tools are next, but this listing is clearly marked as yours.
+                  </p>
                 </div>
-              </label>
-              {requestError && (
-                <div className="mt-sm rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
-                  {requestError}
+                <button
+                  className="w-full bg-[#1B5E20] text-white rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
+                  type="button"
+                >
+                  <MaterialSymbol fill>edit_calendar</MaterialSymbol>
+                  Edit / Reschedule
+                </button>
+              </>
+            ) : isInboundPending ? (
+              <>
+                <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
+                  <p className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                    Request From
+                  </p>
+                  <div className="mt-sm flex items-center gap-sm rounded-xl bg-surface-container-low p-md">
+                    <div className="h-10 w-10 rounded-lg bg-surface-container-high flex items-center justify-center font-headline-3 text-headline-3 text-on-surface">
+                      {getInitials(matchedTeam?.name)}
+                    </div>
+                    <div>
+                      <p className="font-label-bold text-label-bold text-on-surface">{matchedTeam?.name}</p>
+                      <p className="font-label-small text-label-small text-on-surface-variant">
+                        {matchedTeam?.organization?.name || "Independent"} · {matchedTeam?.game_title}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-
-            {requested ? (
-              <div className="w-full bg-[#E3F9E5] text-[#1B5E20] rounded-xl py-4 flex items-center justify-center gap-sm">
-                <MaterialSymbol fill>check_circle</MaterialSymbol>
-                <span className="font-headline-3 text-headline-3">
-                  Request Sent{selectedRequestingTeam ? ` from ${selectedRequestingTeam.name}` : ""}!
-                </span>
-              </div>
+                <Link
+                  className="w-full bg-primary text-on-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
+                  href={`/requests?scrim=${scrim.id}`}
+                >
+                  <MaterialSymbol fill>pending_actions</MaterialSymbol>
+                  Respond in Requests
+                </Link>
+              </>
             ) : (
+              <>
+                <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
+                  <label className="flex flex-col gap-sm">
+                    <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                      Requesting Team
+                    </span>
+                    <div className="relative">
+                      <select
+                        className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md pr-xl appearance-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+                        disabled={
+                          isLoadingRequestingTeams ||
+                          requestingTeams.length === 0 ||
+                          requested ||
+                          userHasRequested ||
+                          requestLoading
+                        }
+                        onChange={(event) => {
+                          setSelectedRequestingTeamId(event.target.value);
+                          setRequestError("");
+                        }}
+                        value={selectedRequestingTeamId}
+                      >
+                        {isLoadingRequestingTeams ? (
+                          <option value="">Loading teams...</option>
+                        ) : requestingTeams.length === 0 ? (
+                          <option value="">Create a {game} team before requesting</option>
+                        ) : (
+                          requestingTeams.map((team) => (
+                            <option key={team.id} value={team.id}>
+                              {team.name} - {team.game_title}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <MaterialSymbol className="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
+                        expand_more
+                      </MaterialSymbol>
+                    </div>
+                  </label>
+                  {requestError && (
+                    <div className="mt-sm rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+                      {requestError}
+                    </div>
+                  )}
+                  {requestSuccess && (
+                    <div className="mt-sm rounded-xl bg-[#E3F9E5] px-md py-sm font-body-sub text-body-sub text-[#1B5E20]">
+                      {requestSuccess}
+                    </div>
+                  )}
+                </div>
+
+                {requested || userHasRequested ? (
+              <div className="grid gap-sm md:grid-cols-[1fr_auto]">
+                <div className="w-full bg-[#E3F9E5] text-[#1B5E20] rounded-xl py-4 flex items-center justify-center gap-sm">
+                  <MaterialSymbol fill>check_circle</MaterialSymbol>
+                  <span className="font-headline-3 text-headline-3">
+                    Request Sent{selectedRequestingTeam ? ` from ${selectedRequestingTeam.name}` : ""}
+                  </span>
+                </div>
+                <button
+                  className="rounded-xl border border-outline-variant bg-surface-container-lowest px-lg py-4 font-headline-3 text-headline-3 text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={requestLoading}
+                  onClick={handleRetractRequest}
+                  type="button"
+                >
+                  {requestLoading ? "Retracting..." : "Retract"}
+                </button>
+              </div>
+                ) : (
               <button
-                disabled={!isOpen || isLoadingRequestingTeams || requestingTeams.length === 0}
+                disabled={!isOpen || isLoadingRequestingTeams || requestingTeams.length === 0 || requestLoading}
                 onClick={handleRequestScrim}
                 className={`w-full rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3 ${
                   isOpen && requestingTeams.length > 0
@@ -446,8 +795,10 @@ export default function ScrimDetailPage() {
                 }`}
               >
                 <MaterialSymbol fill={isOpen}>swords</MaterialSymbol>
-                {isOpen ? "Request This Scrim" : "No Longer Available"}
+                {requestLoading ? "Sending Request..." : isOpen ? "Request This Scrim" : "No Longer Available"}
               </button>
+                )}
+              </>
             )}
           </section>
 

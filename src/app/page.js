@@ -29,6 +29,23 @@ const TIME_FILTER_OPTIONS = [
   { label: "Evening", value: "evening" },
 ];
 
+const SCRIM_DURATION_HOURS = 3;
+
+function getScrimEndAt(value) {
+  if (!value) return null;
+
+  const endAt = new Date(value);
+  if (Number.isNaN(endAt.getTime())) return null;
+
+  endAt.setHours(endAt.getHours() + SCRIM_DURATION_HOURS);
+  return endAt;
+}
+
+function isScrimPast(value) {
+  const endAt = getScrimEndAt(value);
+  return endAt ? endAt < new Date() : false;
+}
+
 function getInitials(name = "") {
   return name
     .split(" ")
@@ -164,12 +181,18 @@ function normalizeScrimRequest(scrimRequest) {
     time: formatScrimTime(scrimRequest.scheduled_at),
     games: "3 Games",
     verified: Boolean(organization?.verified_flag),
+    hasRequested: Boolean(scrimRequest.hasRequested),
+    isOwnListing: Boolean(scrimRequest.isOwnListing),
+    status: scrimRequest.status,
   };
 }
 
 function ScrimCard({ scrim }) {
+  const actionHref = scrim.hasRequested ? `/requests?scrim=${scrim.id}` : `/scrims/${scrim.id}`;
+  const actionLabel = scrim.hasRequested ? "Request Sent" : scrim.isOwnListing ? "Edit" : "Scrim";
+
   return (
-    <article className="bg-surface-container-lowest rounded-[16px] p-md border border-outline-variant/30 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow">
+    <article className={`bg-surface-container-lowest rounded-[16px] p-md border border-outline-variant/30 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow ${scrim.hasRequested ? "opacity-80" : ""}`}>
       <div className="flex items-start justify-between mb-md">
         <div className="flex items-center gap-sm">
           <div className="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center font-headline-2 text-headline-2 text-on-surface font-bold">
@@ -206,6 +229,22 @@ function ScrimCard({ scrim }) {
           </MaterialSymbol>
           {scrim.rating}
         </span>
+        {scrim.hasRequested && (
+          <span className="bg-surface-container-highest text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full flex items-center gap-1">
+            <MaterialSymbol className="text-[12px]" fill>
+              check_circle
+            </MaterialSymbol>
+            Request sent
+          </span>
+        )}
+        {scrim.isOwnListing && (
+          <span className="bg-[#E3F9E5] text-[#1B5E20] font-label-small text-label-small px-2 py-1 rounded-full flex items-center gap-1">
+            <MaterialSymbol className="text-[12px]" fill>
+              edit_calendar
+            </MaterialSymbol>
+            Your listing
+          </span>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-sm border-t border-surface-variant">
@@ -214,10 +253,16 @@ function ScrimCard({ scrim }) {
           {scrim.time} &bull; {scrim.games}
         </div>
         <a
-          href={`/scrims/${scrim.id}`}
-          className="bg-primary text-on-primary font-label-bold text-label-bold px-lg py-sm rounded-full active:scale-95 transition-transform"
+          href={actionHref}
+          className={`font-label-bold text-label-bold px-lg py-sm rounded-full active:scale-95 transition-transform ${
+            scrim.hasRequested
+              ? "bg-surface-container-highest text-on-surface-variant"
+              : scrim.isOwnListing
+                ? "bg-[#1B5E20] text-white"
+              : "bg-primary text-on-primary"
+          }`}
         >
-          Scrim
+          {actionLabel}
         </a>
       </div>
     </article>
@@ -528,7 +573,7 @@ export default function ScrimBoardPage() {
       return getRanksForGame(boardFilters.gameTitle);
     }
 
-    return Array.from(new Set(GAME_OPTIONS.flatMap((game) => getRanksForGame(game))));
+    return [];
   }, [boardFilters.gameTitle]);
 
   const visibleScrimRequests = useMemo(() => {
@@ -553,12 +598,10 @@ export default function ScrimBoardPage() {
     setIsLoadingScrims(true);
     setScrimError("");
 
-    let query = supabase
-      .from("scrim_requests")
-      .select(
-        `
+    const requestSelect = `
         id,
         posting_team_id,
+        matched_team_id,
         game_title,
         scheduled_at,
         team_rank,
@@ -578,33 +621,125 @@ export default function ScrimBoardPage() {
             verified_flag
           )
         )
-      `
-      )
+      `;
+
+    const activeSince = new Date(Date.now() - SCRIM_DURATION_HOURS * 60 * 60 * 1000).toISOString();
+    const userTeamIds = [];
+
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (userData?.user) {
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("org_id")
+        .eq("id", userData.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Failed to load current user for board requests", profileError);
+      }
+
+      if (profile?.org_id) {
+        const { data: teams, error: teamsError } = await supabase
+          .from("teams")
+          .select("id")
+          .eq("org_id", profile.org_id);
+
+        if (teamsError) {
+          console.error("Failed to load current user teams for board requests", teamsError);
+        } else {
+          userTeamIds.push(...(teams || []).map((team) => team.id));
+        }
+      }
+    }
+
+    const applyFilters = (baseQuery) => {
+      let filteredQuery = baseQuery;
+
+      if (!boardFilters.date) {
+        filteredQuery = filteredQuery.gte("scheduled_at", activeSince);
+      }
+
+      if (boardFilters.gameTitle !== "all") {
+        filteredQuery = filteredQuery.eq("game_title", boardFilters.gameTitle);
+      }
+
+      if (boardFilters.rank !== "all") {
+        filteredQuery = filteredQuery.ilike("team_rank", `${boardFilters.rank}%`);
+      }
+
+      const dateRange = boardFilters.date ? getDayRange(boardFilters.date) : null;
+
+      if (dateRange) {
+        filteredQuery = filteredQuery.gte("scheduled_at", dateRange.start).lt("scheduled_at", dateRange.end);
+      }
+
+      return filteredQuery.order("scheduled_at", { ascending: true });
+    };
+
+    const openQuery = applyFilters(
+      supabase
+      .from("scrim_requests")
+      .select(requestSelect)
       .eq("status", "open")
-      .gt("expires_at", new Date().toISOString())
-      .order("scheduled_at", { ascending: true });
+      .is("matched_team_id", null)
+    );
 
-    if (boardFilters.gameTitle !== "all") {
-      query = query.eq("game_title", boardFilters.gameTitle);
-    }
+    const requestedQuery = userTeamIds.length
+      ? applyFilters(
+          supabase
+            .from("scrim_requests")
+            .select(requestSelect)
+            .eq("status", "pending")
+            .in("matched_team_id", userTeamIds)
+        )
+      : null;
 
-    if (boardFilters.rank !== "all") {
-      query = query.ilike("team_rank", `${boardFilters.rank}%`);
-    }
+    const [openResult, requestedResult] = await Promise.all([
+      openQuery,
+      requestedQuery || Promise.resolve({ data: [], error: null }),
+    ]);
 
-    const dateRange = boardFilters.date ? getDayRange(boardFilters.date) : null;
-
-    if (dateRange) {
-      query = query.gte("scheduled_at", dateRange.start).lt("scheduled_at", dateRange.end);
-    }
-
-    const { data, error } = await query;
+    const error = openResult.error || requestedResult.error;
 
     if (error) {
       setScrimError(error.message);
       setScrimRequests([]);
     } else {
-      setScrimRequests(data || []);
+      const mergedById = new Map();
+
+      for (const scrimRequest of openResult.data || []) {
+        if (
+          scrimRequest.status === "open" &&
+          !scrimRequest.matched_team_id &&
+          !isScrimPast(scrimRequest.scheduled_at)
+        ) {
+          mergedById.set(scrimRequest.id, {
+            ...scrimRequest,
+            hasRequested: false,
+            isOwnListing: userTeamIds.includes(scrimRequest.posting_team_id),
+          });
+        }
+      }
+
+      for (const scrimRequest of requestedResult.data || []) {
+        if (
+          scrimRequest.status === "pending" &&
+          userTeamIds.includes(scrimRequest.matched_team_id) &&
+          !isScrimPast(scrimRequest.scheduled_at)
+        ) {
+          mergedById.set(scrimRequest.id, {
+            ...scrimRequest,
+            hasRequested: true,
+          });
+        }
+      }
+
+      setScrimRequests(
+        Array.from(mergedById.values()).sort(
+          (firstScrim, secondScrim) => new Date(firstScrim.scheduled_at) - new Date(secondScrim.scheduled_at)
+        )
+      );
     }
 
     setIsLoadingScrims(false);
@@ -809,7 +944,7 @@ export default function ScrimBoardPage() {
       }
 
       const { opponentRankMin, opponentRankMax } = getOpponentRankBounds(postForm.rankRange);
-      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+      const expiresAt = getScrimEndAt(scheduledAt).toISOString();
 
       const { error: insertError } = await supabase.from("scrim_requests").insert({
         posting_team_id: postingTeam.id,
@@ -904,13 +1039,16 @@ export default function ScrimBoardPage() {
             </BoardFilterSelect>
 
             <BoardFilterSelect
+              disabled={boardFilters.gameTitle === "all"}
               icon="military_tech"
               label="Rank"
               name="rank"
               onChange={handleBoardFilterChange}
               value={boardFilters.rank}
             >
-              <option value="all">All ranks</option>
+              <option value="all">
+                {boardFilters.gameTitle === "all" ? "Pick a game first" : "All ranks"}
+              </option>
               {rankFilterOptions.map((rank) => (
                 <option key={rank} value={rank}>
                   {rank}
