@@ -5,17 +5,19 @@ import { supabase } from "@/lib/supabase";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { GAME_OPTIONS, getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
 
 function createInitialPostForm() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   return {
+    teamId: "",
     gameTitle: "Valorant",
     date: tomorrow.toISOString().slice(0, 10),
     startTime: "7:00 PM EST",
     games: "3 Games",
-    rankRange: "Diamond - Immortal",
+    rankRange: getDefaultRankForGame("Valorant"),
     server: "NA-East",
     notes: "Looking for BO3 on Ascent/Haven.",
   };
@@ -203,10 +205,12 @@ function PostScrimModal({
   form,
   isOpen,
   isPosting,
+  isLoadingTeams,
   onChange,
   onClose,
   onSubmit,
   postError,
+  teams,
 }) {
   if (!isOpen) return null;
 
@@ -239,12 +243,33 @@ function PostScrimModal({
           </div>
 
           <form className="overflow-y-auto px-margin-mobile py-lg flex flex-col gap-lg flex-grow" onSubmit={onSubmit}>
+            <Field label="Posting Team">
+              <SelectField
+                disabled={isLoadingTeams || teams.length === 0}
+                icon="expand_more"
+                name="teamId"
+                onChange={onChange}
+                value={form.teamId}
+              >
+                {isLoadingTeams ? (
+                  <option value="">Loading teams...</option>
+                ) : teams.length === 0 ? (
+                  <option value="">Create a team before posting</option>
+                ) : (
+                  teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} - {team.game_title}
+                    </option>
+                  ))
+                )}
+              </SelectField>
+            </Field>
+
             <Field label="Select Game">
               <SelectField icon="expand_more" name="gameTitle" onChange={onChange} value={form.gameTitle}>
-                <option>Valorant</option>
-                <option>Counter-Strike 2</option>
-                <option>League of Legends</option>
-                <option>Rocket League</option>
+                {GAME_OPTIONS.map((game) => (
+                  <option key={game}>{game}</option>
+                ))}
               </SelectField>
             </Field>
 
@@ -280,11 +305,11 @@ function PostScrimModal({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <Field label="Rank Range">
+              <Field label="Average Team Rank">
                 <SelectField icon="military_tech" name="rankRange" onChange={onChange} value={form.rankRange}>
-                  <option>Diamond - Immortal</option>
-                  <option>Platinum - Diamond</option>
-                  <option>Immortal - Radiant</option>
+                  {getRanksForGame(form.gameTitle).map((rank) => (
+                    <option key={rank}>{rank}</option>
+                  ))}
                 </SelectField>
               </Field>
               <Field label="Server">
@@ -342,7 +367,9 @@ export default function ScrimBoardPage() {
   const [scrimError, setScrimError] = useState("");
   const [postForm, setPostForm] = useState(() => createInitialPostForm());
   const [isPosting, setIsPosting] = useState(false);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
   const [postError, setPostError] = useState("");
+  const [postingTeams, setPostingTeams] = useState([]);
 
   async function fetchScrimRequests() {
     setIsLoadingScrims(true);
@@ -407,15 +434,111 @@ export default function ScrimBoardPage() {
     };
   }, [isPostModalOpen]);
 
+  useEffect(() => {
+    if (!isPostModalOpen) return;
+
+    async function fetchPostingTeams() {
+      setIsLoadingTeams(true);
+      setPostError("");
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        setPostingTeams([]);
+        setPostError("Log in before posting a scrim.");
+        setIsLoadingTeams(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("id, org_id")
+        .eq("id", userData.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Failed to load user profile for scrim post", profileError);
+        setPostingTeams([]);
+        setPostError("We could not load your profile. Please try again.");
+        setIsLoadingTeams(false);
+        return;
+      }
+
+      if (!profile?.org_id) {
+        setPostingTeams([]);
+        setPostError("Create an organization before posting a scrim.");
+        setIsLoadingTeams(false);
+        return;
+      }
+
+      const { data: teams, error: teamsError } = await supabase
+        .from("teams")
+        .select("id, name, game_title, rank_tier, region")
+        .eq("org_id", profile.org_id)
+        .order("created_at", { ascending: true });
+
+      if (teamsError) {
+        console.error("Failed to load teams for scrim post", teamsError);
+        setPostingTeams([]);
+        setPostError("We could not load your teams. Please try again.");
+        setIsLoadingTeams(false);
+        return;
+      }
+
+      setPostingTeams(teams || []);
+
+      if (teams?.length) {
+        setPostForm((currentForm) => ({
+          ...currentForm,
+          ...(() => {
+            const preferredTeam = teams.find((team) => team.game_title === currentForm.gameTitle) || teams[0];
+
+            return {
+              teamId: currentForm.teamId || preferredTeam.id,
+              gameTitle: currentForm.teamId ? currentForm.gameTitle : preferredTeam.game_title,
+              rankRange: currentForm.teamId
+                ? currentForm.rankRange
+                : preferredTeam.rank_tier || getDefaultRankForGame(preferredTeam.game_title),
+              server: currentForm.teamId ? currentForm.server : preferredTeam.region || currentForm.server,
+            };
+          })(),
+        }));
+      } else {
+        setPostForm((currentForm) => ({
+          ...currentForm,
+          teamId: "",
+        }));
+      }
+
+      setIsLoadingTeams(false);
+    }
+
+    fetchPostingTeams();
+  }, [isPostModalOpen]);
+
   function handlePostFormChange(event) {
     const { name, value } = event.target;
+    const selectedTeam = name === "teamId" ? postingTeams.find((team) => team.id === value) : null;
+
     setPostForm((currentForm) => ({
       ...currentForm,
       [name]: value,
+      ...(name === "gameTitle"
+        ? {
+            rankRange: getDefaultRankForGame(value),
+          }
+        : {}),
+      ...(selectedTeam
+        ? {
+            gameTitle: selectedTeam.game_title,
+            rankRange: selectedTeam.rank_tier || getDefaultRankForGame(selectedTeam.game_title),
+            server: selectedTeam.region || currentForm.server,
+          }
+        : {}),
     }));
   }
 
-  async function resolvePostingTeam(userId, gameTitle) {
+  async function resolvePostingTeam(userId, gameTitle, selectedTeamId) {
     const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("id, org_id")
@@ -433,7 +556,7 @@ export default function ScrimBoardPage() {
 
     const { data: teams, error: teamsError } = await supabase
       .from("teams")
-      .select("id, game_title, rank_tier")
+      .select("id, game_title, rank_tier, region")
       .eq("org_id", profile.org_id)
       .order("created_at", { ascending: true });
 
@@ -445,6 +568,9 @@ export default function ScrimBoardPage() {
     if (!teams?.length) {
       throw new Error("Create a team before posting a scrim.");
     }
+
+    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+    if (selectedTeam) return selectedTeam;
 
     return teams.find((team) => team.game_title === gameTitle) || teams[0];
   }
@@ -462,7 +588,7 @@ export default function ScrimBoardPage() {
         return;
       }
 
-      const postingTeam = await resolvePostingTeam(userData.user.id, postForm.gameTitle);
+      const postingTeam = await resolvePostingTeam(userData.user.id, postForm.gameTitle, postForm.teamId);
       const scheduledAt = parseScheduledAt(postForm.date, postForm.startTime);
 
       if (!scheduledAt) {
@@ -477,7 +603,7 @@ export default function ScrimBoardPage() {
         posting_team_id: postingTeam.id,
         game_title: postForm.gameTitle,
         scheduled_at: scheduledAt,
-        team_rank: postingTeam.rank_tier || postForm.rankRange,
+        team_rank: postForm.rankRange || postingTeam.rank_tier,
         opponent_rank_min: opponentRankMin,
         opponent_rank_max: opponentRankMax,
         status: "open",
@@ -493,6 +619,7 @@ export default function ScrimBoardPage() {
 
       setIsPostModalOpen(false);
       setPostForm(createInitialPostForm());
+      setPostingTeams([]);
       setShowToast(true);
       window.setTimeout(() => setShowToast(false), 2500);
       await fetchScrimRequests();
@@ -592,10 +719,12 @@ export default function ScrimBoardPage() {
         form={postForm}
         isOpen={isPostModalOpen}
         isPosting={isPosting}
+        isLoadingTeams={isLoadingTeams}
         onChange={handlePostFormChange}
         onClose={() => setIsPostModalOpen(false)}
         onSubmit={submitPost}
         postError={postError}
+        teams={postingTeams}
       />
 
       <BottomNav />

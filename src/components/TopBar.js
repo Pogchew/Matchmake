@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import MaterialSymbol from "./MaterialSymbol";
 import { clearAuthSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
@@ -20,29 +19,6 @@ const AVATAR =
 export default function TopBar({ right }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [hasSession, setHasSession] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadSession() {
-      const { data } = await supabase.auth.getSession();
-      if (isMounted) {
-        setHasSession(Boolean(data.session));
-      }
-    }
-
-    loadSession();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setHasSession(Boolean(session));
-    });
-
-    return () => {
-      isMounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -90,15 +66,13 @@ export default function TopBar({ right }) {
             <MaterialSymbol className="text-on-surface-variant">notifications</MaterialSymbol>
           </button>
         )}
-        {hasSession && (
-          <button
-            className="rounded-full bg-surface-container-high px-md py-sm font-label-bold text-label-bold text-on-surface-variant transition-colors hover:bg-surface-variant"
-            onClick={handleLogout}
-            type="button"
-          >
-            Log out
-          </button>
-        )}
+        <button
+          className="rounded-full bg-surface-container-high px-md py-sm font-label-bold text-label-bold text-on-surface-variant transition-colors hover:bg-surface-variant"
+          onClick={handleLogout}
+          type="button"
+        >
+          Log out
+        </button>
       </div>
     </header>
   );

@@ -91,7 +91,7 @@ export default function SignupPage() {
       }
     }
 
-    router.push("/org");
+    router.push("/team/new");
     router.refresh();
   }
 

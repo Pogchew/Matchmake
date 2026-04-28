@@ -66,10 +66,13 @@ export default function OrgPage() {
             </h1>
           </div>
           <div className="flex gap-sm">
-            <button className="bg-surface-variant text-primary font-label-bold text-label-bold px-md py-sm rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-xs">
+            <Link
+              href="/team/new"
+              className="bg-surface-variant text-primary font-label-bold text-label-bold px-md py-sm rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-xs"
+            >
               <MaterialSymbol className="text-[18px]">add</MaterialSymbol>
               Add Team
-            </button>
+            </Link>
             <Link
               href="/?post=true"
               className="bg-primary text-on-primary font-label-bold text-label-bold px-md py-sm rounded-lg hover:bg-on-primary-fixed-variant transition-colors flex items-center gap-xs shadow-[0_4px_12px_rgba(0,112,235,0.2)]"

@@ -125,6 +125,10 @@ export default function ScrimDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requested, setRequested] = useState(false);
+  const [requestingTeams, setRequestingTeams] = useState([]);
+  const [selectedRequestingTeamId, setSelectedRequestingTeamId] = useState("");
+  const [isLoadingRequestingTeams, setIsLoadingRequestingTeams] = useState(true);
+  const [requestError, setRequestError] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -175,6 +179,70 @@ export default function ScrimDetailPage() {
     fetchScrim();
   }, [id]);
 
+  useEffect(() => {
+    async function fetchRequestingTeams() {
+      setIsLoadingRequestingTeams(true);
+      setRequestError("");
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        setRequestingTeams([]);
+        setRequestError("Log in before requesting a scrim.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("id, org_id")
+        .eq("id", userData.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Failed to load profile for scrim request", profileError);
+        setRequestingTeams([]);
+        setRequestError("We could not load your profile. Please try again.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      if (!profile?.org_id) {
+        setRequestingTeams([]);
+        setRequestError("Create an organization before requesting a scrim.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      const { data: teams, error: teamsError } = await supabase
+        .from("teams")
+        .select("id, name, game_title, rank_tier, region")
+        .eq("org_id", profile.org_id)
+        .order("created_at", { ascending: true });
+
+      if (teamsError) {
+        console.error("Failed to load teams for scrim request", teamsError);
+        setRequestingTeams([]);
+        setRequestError("We could not load your teams. Please try again.");
+        setIsLoadingRequestingTeams(false);
+        return;
+      }
+
+      setRequestingTeams(teams || []);
+      setSelectedRequestingTeamId((currentTeamId) => {
+        if (currentTeamId && teams?.some((team) => team.id === currentTeamId)) return currentTeamId;
+
+        const preferredTeam = teams?.find((team) => team.game_title === scrim?.game_title) || teams?.[0];
+        return preferredTeam?.id || "";
+      });
+      setIsLoadingRequestingTeams(false);
+    }
+
+    if (!loading) {
+      fetchRequestingTeams();
+    }
+  }, [loading, scrim?.game_title]);
+
   // ── derived display values ──────────────────────────────────────────────────
   const postingTeam = scrim?.posting_team;
   const org = postingTeam?.organization;
@@ -197,11 +265,22 @@ export default function ScrimDetailPage() {
   const rating = Number(postingTeam?.scrimgg_rating ?? 0).toFixed(1);
   const dateTime = formatDateTime(scrim?.scheduled_at);
   const timeOnly = formatTime(scrim?.scheduled_at);
+  const selectedRequestingTeam = requestingTeams.find((team) => team.id === selectedRequestingTeamId);
 
   const isExpired = scrim?.expires_at
     ? new Date(scrim.expires_at) < new Date()
     : false;
   const isOpen = scrim?.status === "open" && !isExpired;
+
+  function handleRequestScrim() {
+    if (!selectedRequestingTeamId) {
+      setRequestError("Choose which team is requesting this scrim.");
+      return;
+    }
+
+    setRequestError("");
+    setRequested(true);
+  }
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
@@ -261,14 +340,22 @@ export default function ScrimDetailPage() {
 
               {/* Challenger slot */}
               <div className="flex flex-col items-center gap-sm flex-1 min-w-0">
-                <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-surface-container-high border-2 border-dashed border-outline-variant flex items-center justify-center shrink-0">
-                  <MaterialSymbol className="text-[32px] text-outline">group_add</MaterialSymbol>
-                </div>
+                {selectedRequestingTeam ? (
+                  <TeamAvatar initials={getInitials(selectedRequestingTeam.name)} />
+                ) : (
+                  <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-surface-container-high border-2 border-dashed border-outline-variant flex items-center justify-center shrink-0">
+                    <MaterialSymbol className="text-[32px] text-outline">group_add</MaterialSymbol>
+                  </div>
+                )}
                 <div className="text-center">
                   <p className="font-headline-3 text-headline-3 text-on-surface-variant leading-tight">
-                    Your Team
+                    {selectedRequestingTeam?.name || "Your Team"}
                   </p>
-                  <p className="font-label-small text-label-small text-outline mt-1">Challenger</p>
+                  <p className="font-label-small text-label-small text-outline mt-1">
+                    {selectedRequestingTeam
+                      ? `${selectedRequestingTeam.game_title} · ${selectedRequestingTeam.rank_tier || "Rank TBD"}`
+                      : "Challenger"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -309,18 +396,59 @@ export default function ScrimDetailPage() {
           </section>
 
           {/* ── CTA ───────────────────────────────────────────────── */}
-          <section>
+          <section className="space-y-md">
+            <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
+              <label className="flex flex-col gap-sm">
+                <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                  Requesting Team
+                </span>
+                <div className="relative">
+                  <select
+                    className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md pr-xl appearance-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+                    disabled={isLoadingRequestingTeams || requestingTeams.length === 0 || requested}
+                    onChange={(event) => {
+                      setSelectedRequestingTeamId(event.target.value);
+                      setRequestError("");
+                    }}
+                    value={selectedRequestingTeamId}
+                  >
+                    {isLoadingRequestingTeams ? (
+                      <option value="">Loading teams...</option>
+                    ) : requestingTeams.length === 0 ? (
+                      <option value="">Create a team before requesting</option>
+                    ) : (
+                      requestingTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name} - {team.game_title}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <MaterialSymbol className="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
+                    expand_more
+                  </MaterialSymbol>
+                </div>
+              </label>
+              {requestError && (
+                <div className="mt-sm rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+                  {requestError}
+                </div>
+              )}
+            </div>
+
             {requested ? (
               <div className="w-full bg-[#E3F9E5] text-[#1B5E20] rounded-xl py-4 flex items-center justify-center gap-sm">
                 <MaterialSymbol fill>check_circle</MaterialSymbol>
-                <span className="font-headline-3 text-headline-3">Request Sent!</span>
+                <span className="font-headline-3 text-headline-3">
+                  Request Sent{selectedRequestingTeam ? ` from ${selectedRequestingTeam.name}` : ""}!
+                </span>
               </div>
             ) : (
               <button
-                disabled={!isOpen}
-                onClick={() => setRequested(true)}
+                disabled={!isOpen || isLoadingRequestingTeams || requestingTeams.length === 0}
+                onClick={handleRequestScrim}
                 className={`w-full rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3 ${
-                  isOpen
+                  isOpen && requestingTeams.length > 0
                     ? "bg-primary text-on-primary hover:opacity-90"
                     : "bg-surface-container text-on-surface-variant cursor-not-allowed"
                 }`}
