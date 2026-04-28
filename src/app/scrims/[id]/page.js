@@ -78,6 +78,10 @@ function formatGamesCount(value) {
   return `${count} ${count === 1 ? "Game" : "Games"}`;
 }
 
+function isMissingGamesCountError(error) {
+  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("games_count");
+}
+
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function TeamAvatar({ initials, size = "lg" }) {
@@ -186,10 +190,7 @@ export default function ScrimDetailPage() {
     }
     setError("");
 
-    const { data, error: err } = await supabase
-      .from("scrim_requests")
-      .select(
-        `
+    const selectWithGames = `
         id,
         posting_team_id,
         matched_team_id,
@@ -227,10 +228,23 @@ export default function ScrimDetailPage() {
             type
           )
         )
-      `
-      )
+      `;
+    const selectWithoutGames = selectWithGames.replace("games_count,", "");
+
+    let { data, error: err } = await supabase
+      .from("scrim_requests")
+      .select(selectWithGames)
       .eq("id", id)
       .single();
+
+    if (isMissingGamesCountError(err)) {
+      console.warn("games_count is missing in Supabase. Run supabase_scrim_games_count.sql to enable saved game counts.");
+      ({ data, error: err } = await supabase
+        .from("scrim_requests")
+        .select(selectWithoutGames)
+        .eq("id", id)
+        .single());
+    }
 
     if (err) {
       setError(err.code === "PGRST116" ? "Scrim not found." : err.message);
@@ -638,21 +652,16 @@ export default function ScrimDetailPage() {
     setEditSuccess("");
 
     try {
-      const { data: updatedScrim, error: updateError } = await supabase
-        .from("scrim_requests")
-        .update({
-          scheduled_at: scheduledAt,
-          games_count: Number(editForm.gamesCount || 3),
-          opponent_rank_min: editForm.opponentRankMin,
-          opponent_rank_max: editForm.opponentRankMax,
-          expires_at: getScrimEndAt(scheduledAt).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .eq("posting_team_id", scrim.posting_team_id)
-        .eq("status", "open")
-        .select(
-          `
+      const updatePayload = {
+        scheduled_at: scheduledAt,
+        games_count: Number(editForm.gamesCount || 3),
+        opponent_rank_min: editForm.opponentRankMin,
+        opponent_rank_max: editForm.opponentRankMax,
+        expires_at: getScrimEndAt(scheduledAt).toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const updateSelectWithGames = `
           id,
           posting_team_id,
           matched_team_id,
@@ -690,9 +699,25 @@ export default function ScrimDetailPage() {
               type
             )
           )
-        `
-        )
+        `;
+      const updateSelectWithoutGames = updateSelectWithGames.replace("games_count,", "");
+
+      const updateScrim = (payload, selectQuery = updateSelectWithGames) => supabase
+        .from("scrim_requests")
+        .update(payload)
+        .eq("id", id)
+        .eq("posting_team_id", scrim.posting_team_id)
+        .eq("status", "open")
+        .select(selectQuery)
         .maybeSingle();
+
+      let { data: updatedScrim, error: updateError } = await updateScrim(updatePayload);
+
+      if (isMissingGamesCountError(updateError)) {
+        console.warn("games_count is missing in Supabase. Saving scrim without game count update.");
+        const { games_count, ...fallbackPayload } = updatePayload;
+        ({ data: updatedScrim, error: updateError } = await updateScrim(fallbackPayload, updateSelectWithoutGames));
+      }
 
       if (updateError) {
         console.error("Failed to update scrim", updateError);

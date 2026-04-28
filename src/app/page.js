@@ -53,6 +53,10 @@ function formatGamesCount(value) {
   return `${count} ${count === 1 ? "Game" : "Games"}`;
 }
 
+function isMissingGamesCountError(error) {
+  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("games_count");
+}
+
 function isScrimPast(value) {
   const endAt = getScrimEndAt(value);
   return endAt ? endAt < new Date() : false;
@@ -670,7 +674,7 @@ export default function ScrimBoardPage() {
     setIsLoadingScrims(true);
     setScrimError("");
 
-    const requestSelect = `
+    const requestSelectWithGames = `
         id,
         posting_team_id,
         matched_team_id,
@@ -695,6 +699,7 @@ export default function ScrimBoardPage() {
           )
         )
       `;
+    const requestSelectWithoutGames = requestSelectWithGames.replace("games_count,", "");
 
     const activeSince = new Date(Date.now() - SCRIM_DURATION_HOURS * 60 * 60 * 1000).toISOString();
     const userTeamIds = [];
@@ -750,28 +755,37 @@ export default function ScrimBoardPage() {
       return filteredQuery.order("scheduled_at", { ascending: true });
     };
 
-    const openQuery = applyFilters(
-      supabase
-      .from("scrim_requests")
-      .select(requestSelect)
-      .eq("status", "open")
-      .is("matched_team_id", null)
-    );
+    const runBoardQueries = async (requestSelect) => {
+      const openQuery = applyFilters(
+        supabase
+        .from("scrim_requests")
+        .select(requestSelect)
+        .eq("status", "open")
+        .is("matched_team_id", null)
+      );
 
-    const requestedQuery = userTeamIds.length
-      ? applyFilters(
-          supabase
-            .from("scrim_requests")
-            .select(requestSelect)
-            .eq("status", "pending")
-            .in("matched_team_id", userTeamIds)
-        )
-      : null;
+      const requestedQuery = userTeamIds.length
+        ? applyFilters(
+            supabase
+              .from("scrim_requests")
+              .select(requestSelect)
+              .eq("status", "pending")
+              .in("matched_team_id", userTeamIds)
+          )
+        : null;
 
-    const [openResult, requestedResult] = await Promise.all([
-      openQuery,
-      requestedQuery || Promise.resolve({ data: [], error: null }),
-    ]);
+      return Promise.all([
+        openQuery,
+        requestedQuery || Promise.resolve({ data: [], error: null }),
+      ]);
+    };
+
+    let [openResult, requestedResult] = await runBoardQueries(requestSelectWithGames);
+
+    if (isMissingGamesCountError(openResult.error) || isMissingGamesCountError(requestedResult.error)) {
+      console.warn("games_count is missing in Supabase. Run supabase_scrim_games_count.sql to enable saved game counts.");
+      [openResult, requestedResult] = await runBoardQueries(requestSelectWithoutGames);
+    }
 
     const error = openResult.error || requestedResult.error;
 
@@ -1030,7 +1044,7 @@ export default function ScrimBoardPage() {
       const opponentRankMax = postForm.opponentRankMax || postForm.opponentRankMin || postForm.rankRange;
       const expiresAt = getScrimEndAt(scheduledAt).toISOString();
 
-      const { error: insertError } = await supabase.from("scrim_requests").insert({
+      const payload = {
         posting_team_id: postingTeam.id,
         game_title: gameTitle,
         scheduled_at: scheduledAt,
@@ -1041,7 +1055,15 @@ export default function ScrimBoardPage() {
         status: "open",
         matched_team_id: null,
         expires_at: expiresAt,
-      });
+      };
+
+      let { error: insertError } = await supabase.from("scrim_requests").insert(payload);
+
+      if (isMissingGamesCountError(insertError)) {
+        console.warn("games_count is missing in Supabase. Posting scrim without saved game count.");
+        const { games_count, ...fallbackPayload } = payload;
+        ({ error: insertError } = await supabase.from("scrim_requests").insert(fallbackPayload));
+      }
 
       if (insertError) {
         console.error("Failed to post scrim request", insertError);
