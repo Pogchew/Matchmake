@@ -71,6 +71,7 @@ create table if not exists public.scrim_requests (
   posting_team_id uuid not null references public.teams(id) on delete cascade,
   game_title text not null,
   scheduled_at timestamptz not null,
+  games_count integer not null default 3 check (games_count >= 1 and games_count <= 10),
   team_rank text,
   opponent_rank_min text,
   opponent_rank_max text,

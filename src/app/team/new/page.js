@@ -6,7 +6,7 @@ import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
-import { GAME_OPTIONS, MODE_OPTIONS, getDefaultModeForGame, getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
+import { GAME_OPTIONS, getDefaultModeForGame, getDefaultRankForGame, getModesForGame, getRanksForGame } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 const initialForm = {
@@ -15,6 +15,7 @@ const initialForm = {
   mode: "5v5",
   rankTier: getDefaultRankForGame("Valorant"),
   region: "NA-East",
+  rosterNames: "",
 };
 
 function mergeIds(existingIds = [], nextId) {
@@ -91,13 +92,13 @@ export default function NewTeamPage() {
           name: form.name,
           game_title: form.gameTitle,
           mode: form.mode,
-          roster: [userData.user.id],
+          roster: [],
           captain_id: userData.user.id,
           coach_poc_id: userData.user.id,
           rank_tier: form.rankTier,
           rank_verification_type: "coach_declared",
           rank_updated_at: new Date().toISOString(),
-          scrimgg_rating: 0,
+          scrimgg_rating: 5.0,
           region: form.region,
         })
         .select("id")
@@ -205,12 +206,25 @@ export default function NewTeamPage() {
 
             <Field label="Mode">
               <select className={inputClassName()} name="mode" onChange={handleChange} value={form.mode}>
-                {MODE_OPTIONS.map((mode) => (
+                {getModesForGame(form.gameTitle).map((mode) => (
                   <option key={mode}>{mode}</option>
                 ))}
               </select>
             </Field>
           </div>
+
+          <Field label="Roster names (optional)">
+            <textarea
+              className="min-h-[96px] rounded-xl border-none bg-surface-container-low px-md py-sm font-body-main text-body-main text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary resize-none"
+              name="rosterNames"
+              onChange={handleChange}
+              placeholder="Player One, Player Two, Player Three"
+              value={form.rosterNames}
+            />
+            <p className="font-label-small text-label-small text-outline">
+              Player accounts are not built yet, so names are for setup reference only.
+            </p>
+          </Field>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             <Field label="Rank tier">

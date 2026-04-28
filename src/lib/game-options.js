@@ -4,7 +4,9 @@ export const GAME_OPTIONS = [
   "League of Legends",
   "Rocket League",
   "Overwatch",
+  "Overwatch 2",
   "Marvel Rivals",
+  "Pokémon Champions",
 ];
 
 export const MODE_OPTIONS = ["6v6", "5v5", "3v3", "2v2", "1v1"];
@@ -43,6 +45,17 @@ export const GAME_RANKS = {
     "Champion",
     "Top 500",
   ],
+  "Overwatch 2": [
+    "Bronze",
+    "Silver",
+    "Gold",
+    "Platinum",
+    "Diamond",
+    "Master",
+    "Grandmaster",
+    "Champion",
+    "Top 500",
+  ],
   "Marvel Rivals": [
     "Bronze",
     "Silver",
@@ -54,6 +67,7 @@ export const GAME_RANKS = {
     "Eternity",
     "One Above All",
   ],
+  "Pokémon Champions": ["Beginner", "Poké Ball", "Great Ball", "Ultra Ball", "Master Ball"],
 };
 
 export const DEFAULT_RANK_BY_GAME = {
@@ -62,7 +76,9 @@ export const DEFAULT_RANK_BY_GAME = {
   "League of Legends": "Emerald",
   "Rocket League": "Champion",
   Overwatch: "Diamond",
+  "Overwatch 2": "Diamond",
   "Marvel Rivals": "Diamond",
+  "Pokémon Champions": "Great Ball",
 };
 
 export function getRanksForGame(gameTitle) {
@@ -74,5 +90,15 @@ export function getDefaultRankForGame(gameTitle) {
 }
 
 export function getDefaultModeForGame(gameTitle) {
-  return gameTitle === "Overwatch" || gameTitle === "Marvel Rivals" ? "6v6" : "5v5";
+  if (gameTitle === "Rocket League") return "3v3";
+  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return "6v6";
+  if (gameTitle === "Pokémon Champions") return "1v1";
+  return "5v5";
+}
+
+export function getModesForGame(gameTitle) {
+  if (gameTitle === "Rocket League") return ["3v3", "2v2", "1v1"];
+  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return ["6v6"];
+  if (gameTitle === "Pokémon Champions") return ["1v1"];
+  return ["5v5"];
 }

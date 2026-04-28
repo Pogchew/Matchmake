@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
@@ -30,6 +30,15 @@ function formatScrimTime(value) {
   }).format(new Date(value));
 }
 
+function formatRankRange(request) {
+  if (request.opponent_rank_min && request.opponent_rank_max) {
+    if (request.opponent_rank_min === request.opponent_rank_max) return request.opponent_rank_min;
+    return `${request.opponent_rank_min} - ${request.opponent_rank_max}`;
+  }
+
+  return request.opponent_rank_min || request.opponent_rank_max || request.team_rank || "Rank TBD";
+}
+
 function EmptyState({ title, body, action }) {
   return (
     <div className="rounded-[16px] border border-dashed border-outline-variant bg-surface-container-lowest p-lg text-center">
@@ -41,13 +50,30 @@ function EmptyState({ title, body, action }) {
   );
 }
 
-function RequestCard({ isRetracting = false, onRetract, request, perspective }) {
+function RequestCard({
+  actionLoading = "",
+  onAccept,
+  onCancel,
+  onDecline,
+  request,
+  perspective,
+  teamIds = [],
+}) {
   const isInbound = perspective === "inbound";
   const isOutbound = perspective === "outbound";
   const isConfirmed = request.status === "confirmed";
-  const displayTeam = isInbound ? request.matched_team : request.posting_team;
+  const isPostingSide = teamIds.includes(request.posting_team_id);
+  const displayTeam = isConfirmed
+    ? (isPostingSide ? request.matched_team : request.posting_team)
+    : isInbound
+      ? request.matched_team
+      : request.posting_team;
   const displayOrg = displayTeam?.organization;
   const displayName = displayTeam?.name || "Unknown Team";
+  const region = request.posting_team?.region || request.matched_team?.region || "Region TBD";
+  const isAccepting = actionLoading === `accept:${request.id}`;
+  const isDeclining = actionLoading === `decline:${request.id}`;
+  const isCancelling = actionLoading === `cancel:${request.id}`;
 
   return (
     <article className="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow">
@@ -69,6 +95,9 @@ function RequestCard({ isRetracting = false, onRetract, request, perspective }) 
             <MaterialSymbol className="text-[16px]">schedule</MaterialSymbol>
             <span>{formatScrimTime(request.scheduled_at)}</span>
           </div>
+          <p className="mt-xs font-label-small text-label-small text-outline">
+            VS {formatRankRange(request)} · {region}
+          </p>
         </div>
       </div>
 
@@ -89,23 +118,54 @@ function RequestCard({ isRetracting = false, onRetract, request, perspective }) 
               ? "Needs Response"
               : "Pending Response"}
         </span>
+        {isInbound && !isConfirmed && (
+          <div className="flex flex-wrap gap-sm">
+            <button
+              className="rounded-lg bg-[#1B5E20] px-4 py-2 font-label-bold text-label-bold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={Boolean(actionLoading)}
+              onClick={() => onAccept?.(request)}
+              type="button"
+            >
+              {isAccepting ? "Accepting..." : "Accept"}
+            </button>
+            <button
+              className="rounded-lg border border-outline-variant px-4 py-2 font-label-bold text-label-bold text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={Boolean(actionLoading)}
+              onClick={() => onDecline?.(request)}
+              type="button"
+            >
+              {isDeclining ? "Declining..." : "Decline"}
+            </button>
+          </div>
+        )}
         {isOutbound && !isConfirmed && (
           <button
             className="rounded-lg border border-outline-variant px-4 py-2 font-label-bold text-label-bold text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isRetracting}
-            onClick={() => onRetract?.(request)}
+            disabled={Boolean(actionLoading)}
+            onClick={() => onCancel?.(request)}
             type="button"
           >
-            {isRetracting ? "Retracting..." : "Retract"}
+            {isCancelling ? "Cancelling..." : "Cancel Request"}
           </button>
         )}
-        <Link
-          className="ml-auto text-primary font-label-bold text-label-bold flex items-center gap-1"
-          href={`/scrims/${request.id}`}
-        >
-          View Scrim
-          <MaterialSymbol className="text-[16px]">arrow_forward</MaterialSymbol>
-        </Link>
+        <div className="ml-auto flex flex-wrap items-center gap-sm">
+          {isConfirmed && (
+            <Link
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
+              href={`/scrims/${request.id}/chat`}
+            >
+              <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
+              Open Chat
+            </Link>
+          )}
+          <Link
+            className="text-primary font-label-bold text-label-bold flex items-center gap-1"
+            href={`/scrims/${request.id}`}
+          >
+            View Scrim
+            <MaterialSymbol className="text-[16px]">arrow_forward</MaterialSymbol>
+          </Link>
+        </div>
       </div>
     </article>
   );
@@ -121,74 +181,79 @@ export default function RequestsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [actionError, setActionError] = useState("");
-  const [retractingId, setRetractingId] = useState("");
+  const [actionSuccess, setActionSuccess] = useState("");
+  const [actionLoading, setActionLoading] = useState("");
 
-  useEffect(() => {
-    async function fetchRequests() {
-      setIsLoading(true);
-      setErrorMessage("");
+  const fetchRequests = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage("");
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
 
-      if (userError || !userData.user) {
-        router.push("/login");
-        return;
-      }
+    if (userError || !userData.user) {
+      router.push("/login");
+      return;
+    }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("id, org_id")
-        .eq("id", userData.user.id)
-        .single();
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("id, org_id")
+      .eq("id", userData.user.id)
+      .single();
 
-      if (profileError) {
-        console.error("Failed to load profile for requests", profileError);
-        setErrorMessage("We could not load your profile. Please try again.");
-        setIsLoading(false);
-        return;
-      }
+    if (profileError) {
+      console.error("Failed to load profile for requests", profileError);
+      setErrorMessage("We could not load your profile. Please try again.");
+      setIsLoading(false);
+      return;
+    }
 
-      if (!profile?.org_id) {
-        setErrorMessage("Create an organization before managing requests.");
-        setIsLoading(false);
-        return;
-      }
+    if (!profile?.org_id) {
+      setErrorMessage("Create an organization before managing requests.");
+      setIsLoading(false);
+      return;
+    }
 
-      const { data: teamData, error: teamsError } = await supabase
-        .from("teams")
-        .select("id, name, game_title")
-        .eq("org_id", profile.org_id)
-        .order("created_at", { ascending: true });
+    const { data: teamData, error: teamsError } = await supabase
+      .from("teams")
+      .select("id, name, game_title")
+      .eq("org_id", profile.org_id)
+      .order("created_at", { ascending: true });
 
-      if (teamsError) {
-        console.error("Failed to load teams for requests", teamsError);
-        setErrorMessage("We could not load your teams. Please try again.");
-        setIsLoading(false);
-        return;
-      }
+    if (teamsError) {
+      console.error("Failed to load teams for requests", teamsError);
+      setErrorMessage("We could not load your teams. Please try again.");
+      setIsLoading(false);
+      return;
+    }
 
-      const teamIds = (teamData || []).map((team) => team.id);
-      setTeams(teamData || []);
+    const teamIds = (teamData || []).map((team) => team.id);
+    setTeams(teamData || []);
 
-      if (teamIds.length === 0) {
-        setInboundRequests([]);
-        setOutboundRequests([]);
-        setConfirmedScrims([]);
-        setIsLoading(false);
-        return;
-      }
+    if (teamIds.length === 0) {
+      setInboundRequests([]);
+      setOutboundRequests([]);
+      setConfirmedScrims([]);
+      setIsLoading(false);
+      return;
+    }
 
-      const requestSelect = `
+    const requestSelect = `
         id,
         posting_team_id,
         matched_team_id,
         game_title,
         scheduled_at,
+        team_rank,
+        opponent_rank_min,
+        opponent_rank_max,
         status,
         posting_team:teams!scrim_requests_posting_team_id_fkey (
           id,
           name,
           game_title,
+          rank_tier,
+          region,
           organization:organizations!teams_org_id_fkey (
             id,
             name
@@ -198,6 +263,8 @@ export default function RequestsPage() {
           id,
           name,
           game_title,
+          rank_tier,
+          region,
           organization:organizations!teams_org_id_fkey (
             id,
             name
@@ -205,56 +272,57 @@ export default function RequestsPage() {
         )
       `;
 
-      const [inboundResult, outboundResult, confirmedPostedResult, confirmedMatchedResult] = await Promise.all([
-        supabase
-          .from("scrim_requests")
-          .select(requestSelect)
-          .in("posting_team_id", teamIds)
-          .eq("status", "pending")
-          .not("matched_team_id", "is", null)
-          .order("scheduled_at", { ascending: true }),
-        supabase
-          .from("scrim_requests")
-          .select(requestSelect)
-          .in("matched_team_id", teamIds)
-          .eq("status", "pending")
-          .order("scheduled_at", { ascending: true }),
-        supabase
-          .from("scrim_requests")
-          .select(requestSelect)
-          .in("posting_team_id", teamIds)
-          .eq("status", "confirmed")
-          .order("scheduled_at", { ascending: true }),
-        supabase
-          .from("scrim_requests")
-          .select(requestSelect)
-          .in("matched_team_id", teamIds)
-          .eq("status", "confirmed")
-          .order("scheduled_at", { ascending: true }),
-      ]);
+    const [inboundResult, outboundResult, confirmedPostedResult, confirmedMatchedResult] = await Promise.all([
+      supabase
+        .from("scrim_requests")
+        .select(requestSelect)
+        .in("posting_team_id", teamIds)
+        .eq("status", "pending")
+        .not("matched_team_id", "is", null)
+        .order("scheduled_at", { ascending: true }),
+      supabase
+        .from("scrim_requests")
+        .select(requestSelect)
+        .in("matched_team_id", teamIds)
+        .eq("status", "pending")
+        .order("scheduled_at", { ascending: true }),
+      supabase
+        .from("scrim_requests")
+        .select(requestSelect)
+        .in("posting_team_id", teamIds)
+        .eq("status", "confirmed")
+        .order("scheduled_at", { ascending: true }),
+      supabase
+        .from("scrim_requests")
+        .select(requestSelect)
+        .in("matched_team_id", teamIds)
+        .eq("status", "confirmed")
+        .order("scheduled_at", { ascending: true }),
+    ]);
 
-      const queryError = inboundResult.error || outboundResult.error || confirmedPostedResult.error || confirmedMatchedResult.error;
+    const queryError = inboundResult.error || outboundResult.error || confirmedPostedResult.error || confirmedMatchedResult.error;
 
-      if (queryError) {
-        console.error("Failed to load requests", queryError);
-        setErrorMessage("We could not load your requests. Please try again.");
-        setIsLoading(false);
-        return;
-      }
-
-      const confirmedById = new Map([
-        ...(confirmedPostedResult.data || []),
-        ...(confirmedMatchedResult.data || []),
-      ].map((request) => [request.id, request]));
-
-      setInboundRequests(inboundResult.data || []);
-      setOutboundRequests(outboundResult.data || []);
-      setConfirmedScrims(Array.from(confirmedById.values()));
+    if (queryError) {
+      console.error("Failed to load requests", queryError);
+      setErrorMessage("We could not load your requests. Please try again.");
       setIsLoading(false);
+      return;
     }
 
-    fetchRequests();
+    const confirmedById = new Map([
+      ...(confirmedPostedResult.data || []),
+      ...(confirmedMatchedResult.data || []),
+    ].map((request) => [request.id, request]));
+
+    setInboundRequests(inboundResult.data || []);
+    setOutboundRequests(outboundResult.data || []);
+    setConfirmedScrims(Array.from(confirmedById.values()));
+    setIsLoading(false);
   }, [router]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   const counts = useMemo(() => ({
     inbound: inboundRequests.length,
@@ -269,9 +337,11 @@ export default function RequestsPage() {
         ? outboundRequests
         : confirmedScrims;
 
-  async function handleRetractRequest(request) {
-    setRetractingId(request.id);
+  async function updateRequestStatus(request, action) {
+    const actionKey = `${action}:${request.id}`;
+    setActionLoading(actionKey);
     setActionError("");
+    setActionSuccess("");
 
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -282,44 +352,70 @@ export default function RequestsPage() {
       }
 
       const teamIds = teams.map((team) => team.id);
+      const isInboundAction = action === "accept" || action === "decline";
+      const ownsPostingTeam = teamIds.includes(request.posting_team_id);
+      const ownsMatchedTeam = teamIds.includes(request.matched_team_id);
 
-      if (!teamIds.includes(request.matched_team_id)) {
-        setActionError("You can only retract requests made by your own teams.");
+      if (isInboundAction && !ownsPostingTeam) {
+        setActionError("You can only respond to requests for your own posted scrims.");
         return;
       }
 
-      const { data: updatedScrim, error: updateError } = await supabase
+      if (action === "cancel" && !ownsMatchedTeam) {
+        setActionError("You can only cancel requests made by your own teams.");
+        return;
+      }
+
+      const updatePayload = action === "accept"
+        ? {
+            status: "confirmed",
+            updated_at: new Date().toISOString(),
+          }
+        : {
+            matched_team_id: null,
+            status: "open",
+            updated_at: new Date().toISOString(),
+          };
+
+      let updateQuery = supabase
         .from("scrim_requests")
-        .update({
-          matched_team_id: null,
-          status: "open",
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("id", request.id)
-        .eq("status", "pending")
-        .eq("matched_team_id", request.matched_team_id)
-        .select("id")
-        .maybeSingle();
+        .eq("status", "pending");
+
+      if (isInboundAction) {
+        updateQuery = updateQuery.eq("posting_team_id", request.posting_team_id);
+      } else {
+        updateQuery = updateQuery.eq("matched_team_id", request.matched_team_id);
+      }
+
+      const { data: updatedScrim, error: updateError } = await updateQuery.select("id, status").maybeSingle();
 
       if (updateError) {
-        console.error("Failed to retract scrim request", updateError);
-        setActionError(updateError.message || "We could not retract that request.");
+        console.error(`Failed to ${action} scrim request`, updateError);
+        setActionError(updateError.message || `We could not ${action} that request.`);
         return;
       }
 
       if (!updatedScrim) {
         setActionError("That request may have already changed.");
+        await fetchRequests();
         return;
       }
 
-      setOutboundRequests((currentRequests) =>
-        currentRequests.filter((outboundRequest) => outboundRequest.id !== request.id)
+      setActionSuccess(
+        action === "accept"
+          ? "Request accepted."
+          : action === "decline"
+            ? "Request declined and listing reopened."
+            : "Request cancelled."
       );
-    } catch (retractError) {
-      console.error("Failed to retract scrim request", retractError);
-      setActionError(retractError.message || "Something went wrong while retracting that request.");
+      await fetchRequests();
+    } catch (requestError) {
+      console.error(`Failed to ${action} scrim request`, requestError);
+      setActionError(requestError.message || `Something went wrong while trying to ${action} that request.`);
     } finally {
-      setRetractingId("");
+      setActionLoading("");
     }
   }
 
@@ -355,6 +451,17 @@ export default function RequestsPage() {
             </button>
           ))}
         </div>
+
+        {actionError && (
+          <div className="mb-md rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+            {actionError}
+          </div>
+        )}
+        {actionSuccess && (
+          <div className="mb-md rounded-xl bg-[#E3F9E5] px-md py-sm font-body-sub text-body-sub text-[#1B5E20]">
+            {actionSuccess}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-md font-body-sub text-body-sub text-on-surface-variant">
@@ -408,18 +515,16 @@ export default function RequestsPage() {
           />
         ) : (
           <div className="space-y-md">
-            {actionError && (
-              <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
-                {actionError}
-              </div>
-            )}
             {activeRequests.map((request) => (
               <RequestCard
-                isRetracting={retractingId === request.id}
+                actionLoading={actionLoading}
                 key={request.id}
-                onRetract={handleRetractRequest}
-                perspective={activeTab === "outbound" ? "outbound" : "inbound"}
+                onAccept={(selectedRequest) => updateRequestStatus(selectedRequest, "accept")}
+                onCancel={(selectedRequest) => updateRequestStatus(selectedRequest, "cancel")}
+                onDecline={(selectedRequest) => updateRequestStatus(selectedRequest, "decline")}
+                perspective={activeTab}
                 request={request}
+                teamIds={teams.map((team) => team.id)}
               />
             ))}
           </div>

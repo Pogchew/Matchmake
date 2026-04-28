@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { getRanksForGame } from "@/lib/game-options";
 
 // ─── helpers (mirrored from page.js) ────────────────────────────────────────
 
@@ -48,6 +49,33 @@ function formatDateTime(value) {
     minute: "2-digit",
     timeZoneName: "short",
   }).format(new Date(value));
+}
+
+function getDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getTimeInputValue(value) {
+  if (!value) return "19:00";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "19:00";
+
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function parseScheduledAt(dateValue, timeValue) {
+  const scheduledAt = new Date(`${dateValue}T${timeValue || "00:00"}:00`);
+  return Number.isNaN(scheduledAt.getTime()) ? null : scheduledAt.toISOString();
+}
+
+function formatGamesCount(value) {
+  const count = Number(value || 3);
+  return `${count} ${count === 1 ? "Game" : "Games"}`;
 }
 
 // ─── sub-components ──────────────────────────────────────────────────────────
@@ -138,6 +166,17 @@ export default function ScrimDetailPage() {
   const [selectedRequestingTeamId, setSelectedRequestingTeamId] = useState("");
   const [isLoadingRequestingTeams, setIsLoadingRequestingTeams] = useState(true);
   const [requestError, setRequestError] = useState("");
+  const [editForm, setEditForm] = useState({
+    date: "",
+    startTime: "",
+    gamesCount: "3",
+    opponentRankMin: "",
+    opponentRankMax: "",
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isCancellingListing, setIsCancellingListing] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
 
   const fetchScrim = useCallback(async ({ showLoading = false } = {}) => {
     if (!id) return null;
@@ -156,6 +195,7 @@ export default function ScrimDetailPage() {
         matched_team_id,
         game_title,
         scheduled_at,
+        games_count,
         team_rank,
         opponent_rank_min,
         opponent_rank_max,
@@ -206,6 +246,18 @@ export default function ScrimDetailPage() {
   useEffect(() => {
     fetchScrim({ showLoading: true });
   }, [fetchScrim]);
+
+  useEffect(() => {
+    if (!scrim) return;
+
+    setEditForm({
+      date: getDateInputValue(new Date(scrim.scheduled_at)),
+      startTime: getTimeInputValue(scrim.scheduled_at),
+      gamesCount: String(scrim.games_count || 3),
+      opponentRankMin: scrim.opponent_rank_min || scrim.team_rank || "",
+      opponentRankMax: scrim.opponent_rank_max || scrim.opponent_rank_min || scrim.team_rank || "",
+    });
+  }, [scrim]);
 
   useEffect(() => {
     async function fetchRequestingTeams() {
@@ -300,10 +352,15 @@ export default function ScrimDetailPage() {
   const region = postingTeam?.region ?? "Region TBD";
   const rating = Number(postingTeam?.scrimgg_rating ?? 0).toFixed(1);
   const dateTime = formatDateTime(scrim?.scheduled_at);
+  const gamesCount = formatGamesCount(scrim?.games_count);
   const selectedRequestingTeam = requestingTeams.find((team) => team.id === selectedRequestingTeamId);
   const isOwnListing = Boolean(userTeamIds.includes(scrim?.posting_team_id));
   const userHasRequested = Boolean(
     scrim?.status === "pending" && userTeamIds.includes(scrim?.matched_team_id)
+  );
+  const isConfirmedParticipant = Boolean(
+    scrim?.status === "confirmed" &&
+    (userTeamIds.includes(scrim?.posting_team_id) || userTeamIds.includes(scrim?.matched_team_id))
   );
   const displayChallengerTeam = scrim?.matched_team_id ? matchedTeam || selectedRequestingTeam : selectedRequestingTeam;
   const isInboundPending = Boolean(scrim?.status === "pending" && isOwnListing && matchedTeam);
@@ -546,6 +603,173 @@ export default function ScrimDetailPage() {
     }
   }
 
+  function handleEditChange(event) {
+    const { name, value } = event.target;
+    setEditForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+    setEditError("");
+    setEditSuccess("");
+  }
+
+  async function handleSaveEdit(event) {
+    event.preventDefault();
+
+    if (!scrim || !isOwnListing) {
+      setEditError("You can only edit scrims posted by your own team.");
+      return;
+    }
+
+    if (scrim.status !== "open") {
+      setEditError("Only open scrims can be edited here.");
+      return;
+    }
+
+    const scheduledAt = parseScheduledAt(editForm.date, editForm.startTime);
+
+    if (!scheduledAt) {
+      setEditError("Enter a valid date and start time.");
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError("");
+    setEditSuccess("");
+
+    try {
+      const { data: updatedScrim, error: updateError } = await supabase
+        .from("scrim_requests")
+        .update({
+          scheduled_at: scheduledAt,
+          games_count: Number(editForm.gamesCount || 3),
+          opponent_rank_min: editForm.opponentRankMin,
+          opponent_rank_max: editForm.opponentRankMax,
+          expires_at: getScrimEndAt(scheduledAt).toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("posting_team_id", scrim.posting_team_id)
+        .eq("status", "open")
+        .select(
+          `
+          id,
+          posting_team_id,
+          matched_team_id,
+          game_title,
+          scheduled_at,
+          games_count,
+          team_rank,
+          opponent_rank_min,
+          opponent_rank_max,
+          status,
+          expires_at,
+          posting_team:teams!scrim_requests_posting_team_id_fkey (
+            id,
+            name,
+            region,
+            rank_tier,
+            scrimgg_rating,
+            organization:organizations!teams_org_id_fkey (
+              id,
+              name,
+              verified_flag,
+              type
+            )
+          ),
+          matched_team:teams!scrim_requests_matched_team_id_fkey (
+            id,
+            name,
+            game_title,
+            rank_tier,
+            region,
+            organization:organizations!teams_org_id_fkey (
+              id,
+              name,
+              verified_flag,
+              type
+            )
+          )
+        `
+        )
+        .maybeSingle();
+
+      if (updateError) {
+        console.error("Failed to update scrim", updateError);
+        setEditError(updateError.message || "We could not update this scrim.");
+        return;
+      }
+
+      if (!updatedScrim) {
+        setEditError("This scrim may have changed and could not be edited.");
+        await fetchScrim();
+        return;
+      }
+
+      setScrim(updatedScrim);
+      setEditSuccess("Scrim updated.");
+    } catch (saveError) {
+      console.error("Failed to update scrim", saveError);
+      setEditError(saveError.message || "Something went wrong while updating this scrim.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
+  async function handleCancelListing() {
+    if (!scrim || !isOwnListing) {
+      setEditError("You can only retract scrims posted by your own team.");
+      return;
+    }
+
+    if (scrim.status !== "open") {
+      setEditError("Only open scrims can be retracted here.");
+      return;
+    }
+
+    const confirmed = window.confirm("Retract this scrim listing and remove it from the board?");
+    if (!confirmed) return;
+
+    setIsCancellingListing(true);
+    setEditError("");
+    setEditSuccess("");
+
+    try {
+      const { data: updatedScrim, error: updateError } = await supabase
+        .from("scrim_requests")
+        .update({
+          status: "cancelled",
+          expires_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("posting_team_id", scrim.posting_team_id)
+        .eq("status", "open")
+        .is("matched_team_id", null)
+        .select("id, status")
+        .maybeSingle();
+
+      if (updateError) {
+        console.error("Failed to retract scrim listing", updateError);
+        setEditError(updateError.message || "We could not retract this scrim.");
+        return;
+      }
+
+      if (!updatedScrim) {
+        setEditError("This scrim may have changed and could not be retracted.");
+        await fetchScrim();
+        return;
+      }
+
+      router.push("/");
+    } catch (cancelError) {
+      console.error("Failed to retract scrim listing", cancelError);
+      setEditError(cancelError.message || "Something went wrong while retracting this scrim.");
+    } finally {
+      setIsCancellingListing(false);
+    }
+  }
+
   // ── render ──────────────────────────────────────────────────────────────────
   return (
     <div className="bg-background text-on-background min-h-screen">
@@ -662,6 +886,10 @@ export default function ScrimDetailPage() {
                   {rank}
                 </span>
                 <span className="inline-flex items-center px-3 py-1 rounded-full bg-surface-container-highest text-on-surface-variant font-label-small text-label-small">
+                  <MaterialSymbol className="text-[14px] mr-1">format_list_numbered</MaterialSymbol>
+                  {gamesCount}
+                </span>
+                <span className="inline-flex items-center px-3 py-1 rounded-full bg-surface-container-highest text-on-surface-variant font-label-small text-label-small">
                   <MaterialSymbol className="text-[14px] mr-1">public</MaterialSymbol>
                   {region}
                 </span>
@@ -671,24 +899,138 @@ export default function ScrimDetailPage() {
 
           {/* ── CTA ───────────────────────────────────────────────── */}
           <section className="space-y-md">
-            {isOwnListing && isOpen ? (
-              <>
-                <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
+            {isConfirmedParticipant ? (
+              <Link
+                className="w-full bg-primary text-on-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
+                href={`/scrims/${scrim.id}/chat`}
+              >
+                <MaterialSymbol fill>chat_bubble</MaterialSymbol>
+                Open Chat
+              </Link>
+            ) : isOwnListing && isOpen ? (
+              <form
+                className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest space-y-md"
+                onSubmit={handleSaveEdit}
+              >
+                <div>
                   <p className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
-                    Your Listing
+                    Edit Your Listing
                   </p>
                   <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
-                    This scrim is posted by {teamName}. Edit and reschedule tools are next, but this listing is clearly marked as yours.
+                    Update when this scrim happens and what opponent ranks you want to play against.
                   </p>
                 </div>
-                <button
-                  className="w-full bg-[#1B5E20] text-white rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
-                  type="button"
-                >
-                  <MaterialSymbol fill>edit_calendar</MaterialSymbol>
-                  Edit / Reschedule
-                </button>
-              </>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                  <label className="flex flex-col gap-sm">
+                    <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                      Date
+                    </span>
+                    <input
+                      className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary"
+                      name="date"
+                      onChange={handleEditChange}
+                      type="date"
+                      value={editForm.date}
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-sm">
+                    <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                      Start Time
+                    </span>
+                    <input
+                      className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary"
+                      name="startTime"
+                      onChange={handleEditChange}
+                      type="time"
+                      value={editForm.startTime}
+                    />
+                  </label>
+                </div>
+
+                <label className="flex flex-col gap-sm">
+                  <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                    Number of Games
+                  </span>
+                  <select
+                    className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary"
+                    name="gamesCount"
+                    onChange={handleEditChange}
+                    value={editForm.gamesCount}
+                  >
+                    <option value="1">1 Game</option>
+                    <option value="2">2 Games</option>
+                    <option value="3">3 Games</option>
+                    <option value="4">4 Games</option>
+                    <option value="5">5 Games</option>
+                  </select>
+                </label>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                  <label className="flex flex-col gap-sm">
+                    <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                      Opponent Rank Min
+                    </span>
+                    <select
+                      className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary"
+                      name="opponentRankMin"
+                      onChange={handleEditChange}
+                      value={editForm.opponentRankMin}
+                    >
+                      {getRanksForGame(game).map((rankOption) => (
+                        <option key={rankOption}>{rankOption}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-sm">
+                    <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+                      Opponent Rank Max
+                    </span>
+                    <select
+                      className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary"
+                      name="opponentRankMax"
+                      onChange={handleEditChange}
+                      value={editForm.opponentRankMax}
+                    >
+                      {getRanksForGame(game).map((rankOption) => (
+                        <option key={rankOption}>{rankOption}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {editError && (
+                  <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+                    {editError}
+                  </div>
+                )}
+                {editSuccess && (
+                  <div className="rounded-xl bg-[#E3F9E5] px-md py-sm font-body-sub text-body-sub text-[#1B5E20]">
+                    {editSuccess}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-sm">
+                  <button
+                    className="w-full bg-[#1B5E20] text-white rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isSavingEdit || isCancellingListing}
+                    type="submit"
+                  >
+                    <MaterialSymbol fill>edit_calendar</MaterialSymbol>
+                    {isSavingEdit ? "Saving..." : "Save Changes"}
+                  </button>
+                  <button
+                    className="rounded-xl border border-error bg-error-container px-lg py-4 font-headline-3 text-headline-3 text-on-error-container transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isSavingEdit || isCancellingListing}
+                    onClick={handleCancelListing}
+                    type="button"
+                  >
+                    {isCancellingListing ? "Retracting..." : "Retract"}
+                  </button>
+                </div>
+              </form>
             ) : isInboundPending ? (
               <>
                 <div className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest">
@@ -808,6 +1150,7 @@ export default function ScrimDetailPage() {
             <div className="space-y-md">
               <DetailRow icon="sports_esports" label="Game"          value={game} />
               <DetailRow icon="schedule"       label="Time"          value={dateTime} />
+              <DetailRow icon="format_list_numbered" label="Games"   value={gamesCount} />
               <DetailRow icon="military_tech"  label="Posting Rank"  value={rank} />
               <DetailRow icon="swap_vert"      label="Opponent Rank" value={rankRange} />
               <DetailRow icon="public"         label="Region"        value={region} />

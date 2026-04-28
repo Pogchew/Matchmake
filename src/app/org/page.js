@@ -245,7 +245,7 @@ export default function OrgPage() {
                   className="bg-surface-variant text-primary font-label-bold text-label-bold px-md py-sm rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-xs"
                 >
                   <MaterialSymbol className="text-[18px]">add</MaterialSymbol>
-                  Add Team
+                  Create Team
                 </Link>
                 <Link
                   href="/?post=true"
@@ -363,7 +363,7 @@ export default function OrgPage() {
                         className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary"
                       >
                         <MaterialSymbol className="text-[18px]">add</MaterialSymbol>
-                        Add Team
+                        Create Team
                       </Link>
                     }
                   />

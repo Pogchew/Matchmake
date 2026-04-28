@@ -10,6 +10,7 @@
 drop policy if exists "Authenticated users can update scrim requests" on public.scrim_requests;
 drop policy if exists "Authenticated users can request open scrims" on public.scrim_requests;
 drop policy if exists "Authenticated users can retract pending scrim requests" on public.scrim_requests;
+drop policy if exists "Authenticated users can edit their open scrim listings" on public.scrim_requests;
 
 create policy "Authenticated users can request open scrims"
   on public.scrim_requests
@@ -54,6 +55,37 @@ create policy "Authenticated users can request open scrims"
             and posting_team.org_id <> requester.org_id
             and posting_team.game_title = public.scrim_requests.game_title
         )
+    )
+  );
+
+create policy "Authenticated users can edit their open scrim listings"
+  on public.scrim_requests
+  for update
+  to authenticated
+  using (
+    status = 'open'
+    and matched_team_id is null
+    and exists (
+      select 1
+      from public.users owner
+      join public.teams posting_team
+        on posting_team.org_id = owner.org_id
+      where owner.id = auth.uid()
+        and owner.org_id is not null
+        and posting_team.id = public.scrim_requests.posting_team_id
+    )
+  )
+  with check (
+    status in ('open', 'cancelled')
+    and matched_team_id is null
+    and exists (
+      select 1
+      from public.users owner
+      join public.teams posting_team
+        on posting_team.org_id = owner.org_id
+      where owner.id = auth.uid()
+        and owner.org_id is not null
+        and posting_team.id = public.scrim_requests.posting_team_id
     )
   );
 

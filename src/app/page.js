@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
@@ -18,6 +18,8 @@ function createInitialPostForm() {
     startTime: "19:00",
     games: "3 Games",
     rankRange: getDefaultRankForGame("Valorant"),
+    opponentRankMin: getDefaultRankForGame("Valorant"),
+    opponentRankMax: getDefaultRankForGame("Valorant"),
     server: "NA-East",
     notes: "Looking for BO3 on Ascent/Haven.",
   };
@@ -41,6 +43,16 @@ function getScrimEndAt(value) {
   return endAt;
 }
 
+function parseGamesCount(value) {
+  const count = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(count) ? count : 3;
+}
+
+function formatGamesCount(value) {
+  const count = Number(value || 3);
+  return `${count} ${count === 1 ? "Game" : "Games"}`;
+}
+
 function isScrimPast(value) {
   const endAt = getScrimEndAt(value);
   return endAt ? endAt < new Date() : false;
@@ -62,6 +74,40 @@ function getRankColor(rank = "") {
   if (rank.includes("Platinum")) return "#2979ff";
   if (rank.includes("Faceit")) return "#ff6d00";
   return "#717786";
+}
+
+function abbreviateRank(rank = "") {
+  const rankMap = {
+    Iron: "Ir",
+    Bronze: "Br",
+    Silver: "Sil",
+    Gold: "Gold",
+    Platinum: "Plat",
+    Diamond: "Dia",
+    Ascendant: "Asc",
+    Immortal: "Imm",
+    Radiant: "Rad",
+    Emerald: "Em",
+    Master: "Mstr",
+    Grandmaster: "GM",
+    Challenger: "Chal",
+    Champion: "Champ",
+    "Grand Champion": "GC",
+    "Supersonic Legend": "SSL",
+    "Gold Nova": "GN",
+    "Master Guardian": "MG",
+    "Distinguished Master Guardian": "DMG",
+    "Legendary Eagle": "LE",
+    "Supreme Master": "SM",
+    "Global Elite": "GE",
+    Premier: "Prem",
+    Celestial: "Cel",
+    Eternity: "Eter",
+    "One Above All": "OAA",
+    "Top 500": "T500",
+  };
+
+  return rankMap[rank] || rank;
 }
 
 function formatScrimTime(value) {
@@ -167,6 +213,7 @@ function groupScrimsByDate(scrimRequests) {
 function normalizeScrimRequest(scrimRequest) {
   const postingTeam = scrimRequest.posting_team || scrimRequest.teams;
   const organization = postingTeam?.organization || postingTeam?.organizations;
+  const opponentRank = scrimRequest.opponent_rank_min || scrimRequest.opponent_rank_max || "Open";
 
   return {
     id: scrimRequest.id,
@@ -177,9 +224,11 @@ function normalizeScrimRequest(scrimRequest) {
     region: postingTeam?.region || "Region TBD",
     rank: scrimRequest.team_rank || postingTeam?.rank_tier || "Rank TBD",
     rankColor: getRankColor(scrimRequest.team_rank || postingTeam?.rank_tier),
+    opponentRank,
+    opponentRankColor: getRankColor(scrimRequest.opponent_rank_min || scrimRequest.opponent_rank_max || ""),
     rating: Number(postingTeam?.scrimgg_rating || 0).toFixed(1),
     time: formatScrimTime(scrimRequest.scheduled_at),
-    games: "3 Games",
+    games: formatGamesCount(scrimRequest.games_count),
     verified: Boolean(organization?.verified_flag),
     hasRequested: Boolean(scrimRequest.hasRequested),
     isOwnListing: Boolean(scrimRequest.isOwnListing),
@@ -222,6 +271,10 @@ function ScrimCard({ scrim }) {
         <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full flex items-center gap-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: scrim.rankColor }} />
           {scrim.rank}
+        </span>
+        <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full flex items-center gap-1">
+          <span className="text-[10px] font-bold leading-none">VS</span>
+          {scrim.opponentRank}
         </span>
         <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full flex items-center gap-1">
           <MaterialSymbol className="text-[12px] text-[#ffb400]" fill>
@@ -334,17 +387,33 @@ function BoardFilterSelect({ icon, label, children, ...props }) {
 }
 
 function BoardDateFilter({ value, onChange, onClear }) {
+  const dateInputRef = useRef(null);
+
+  function openDatePicker() {
+    if (dateInputRef.current?.showPicker) {
+      dateInputRef.current.showPicker();
+      return;
+    }
+
+    dateInputRef.current?.focus();
+  }
+
   return (
     <div className="relative shrink-0">
       <span className="sr-only">Scrim date</span>
-      <div className="h-10 min-w-[132px] bg-primary text-on-primary font-label-bold text-label-bold rounded-full pl-md pr-lg flex items-center gap-xs shadow-[0_2px_12px_rgba(0,112,235,0.25)]">
+      <button
+        className="h-10 min-w-[132px] bg-primary text-on-primary font-label-bold text-label-bold rounded-full pl-md pr-lg flex items-center gap-xs shadow-[0_2px_12px_rgba(0,112,235,0.25)] focus:ring-2 focus:ring-primary"
+        onClick={openDatePicker}
+        type="button"
+      >
         <MaterialSymbol className="text-[20px]">calendar_month</MaterialSymbol>
         <span>{formatBoardDate(value)}</span>
-      </div>
+      </button>
       <input
-        className="absolute inset-0 h-10 w-full cursor-pointer opacity-0"
+        className="absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 opacity-0"
         name="date"
         onChange={onChange}
+        ref={dateInputRef}
         type="date"
         value={value}
       />
@@ -360,14 +429,6 @@ function BoardDateFilter({ value, onChange, onClear }) {
       )}
     </div>
   );
-}
-
-function getOpponentRankBounds(rankRange) {
-  const parts = rankRange.split(" - ").map((part) => part.trim());
-  return {
-    opponentRankMin: parts[0] || rankRange,
-    opponentRankMax: parts[1] || parts[0] || rankRange,
-  };
 }
 
 function parseScheduledAt(dateValue, timeValue) {
@@ -454,11 +515,12 @@ function PostScrimModal({
             </Field>
 
             <Field label="Select Game">
-              <SelectField icon="expand_more" name="gameTitle" onChange={onChange} value={form.gameTitle}>
-                {GAME_OPTIONS.map((game) => (
-                  <option key={game}>{game}</option>
-                ))}
+              <SelectField disabled icon="lock" name="gameTitle" onChange={onChange} value={form.gameTitle}>
+                <option>{form.gameTitle}</option>
               </SelectField>
+              <p className="font-label-small text-label-small text-outline">
+                Game is locked to the selected team&apos;s registered game.
+              </p>
             </Field>
 
             <Field label="Date">
@@ -496,13 +558,23 @@ function PostScrimModal({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <Field label="Average Team Rank">
-                <SelectField icon="military_tech" name="rankRange" onChange={onChange} value={form.rankRange}>
+              <Field label="Opponent Rank Min">
+                <SelectField icon="military_tech" name="opponentRankMin" onChange={onChange} value={form.opponentRankMin}>
                   {getRanksForGame(form.gameTitle).map((rank) => (
                     <option key={rank}>{rank}</option>
                   ))}
                 </SelectField>
               </Field>
+              <Field label="Opponent Rank Max">
+                <SelectField icon="military_tech" name="opponentRankMax" onChange={onChange} value={form.opponentRankMax}>
+                  {getRanksForGame(form.gameTitle).map((rank) => (
+                    <option key={rank}>{rank}</option>
+                  ))}
+                </SelectField>
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
               <Field label="Server">
                 <SelectField icon="public" name="server" onChange={onChange} value={form.server}>
                   <option>NA-East</option>
@@ -604,6 +676,7 @@ export default function ScrimBoardPage() {
         matched_team_id,
         game_title,
         scheduled_at,
+        games_count,
         team_rank,
         opponent_rank_min,
         opponent_rank_max,
@@ -821,14 +894,19 @@ export default function ScrimBoardPage() {
           ...currentForm,
           ...(() => {
             const preferredTeam = teams.find((team) => team.game_title === currentForm.gameTitle) || teams[0];
+            const selectedTeam = teams.find((team) => team.id === currentForm.teamId) || preferredTeam;
 
             return {
-              teamId: currentForm.teamId || preferredTeam.id,
-              gameTitle: currentForm.teamId ? currentForm.gameTitle : preferredTeam.game_title,
-              rankRange: currentForm.teamId
-                ? currentForm.rankRange
-                : preferredTeam.rank_tier || getDefaultRankForGame(preferredTeam.game_title),
-              server: currentForm.teamId ? currentForm.server : preferredTeam.region || currentForm.server,
+              teamId: selectedTeam.id,
+              gameTitle: selectedTeam.game_title,
+              rankRange: selectedTeam.rank_tier || getDefaultRankForGame(selectedTeam.game_title),
+              opponentRankMin: getRanksForGame(selectedTeam.game_title).includes(currentForm.opponentRankMin)
+                ? currentForm.opponentRankMin
+                : getDefaultRankForGame(selectedTeam.game_title),
+              opponentRankMax: getRanksForGame(selectedTeam.game_title).includes(currentForm.opponentRankMax)
+                ? currentForm.opponentRankMax
+                : getDefaultRankForGame(selectedTeam.game_title),
+              server: selectedTeam.region || currentForm.server,
             };
           })(),
         }));
@@ -855,12 +933,16 @@ export default function ScrimBoardPage() {
       ...(name === "gameTitle"
         ? {
             rankRange: getDefaultRankForGame(value),
+            opponentRankMin: getDefaultRankForGame(value),
+            opponentRankMax: getDefaultRankForGame(value),
           }
         : {}),
       ...(selectedTeam
         ? {
             gameTitle: selectedTeam.game_title,
             rankRange: selectedTeam.rank_tier || getDefaultRankForGame(selectedTeam.game_title),
+            opponentRankMin: getDefaultRankForGame(selectedTeam.game_title),
+            opponentRankMax: getDefaultRankForGame(selectedTeam.game_title),
             server: selectedTeam.region || currentForm.server,
           }
         : {}),
@@ -936,6 +1018,7 @@ export default function ScrimBoardPage() {
       }
 
       const postingTeam = await resolvePostingTeam(userData.user.id, postForm.gameTitle, postForm.teamId);
+      const gameTitle = postingTeam.game_title;
       const scheduledAt = parseScheduledAt(postForm.date, postForm.startTime);
 
       if (!scheduledAt) {
@@ -943,14 +1026,16 @@ export default function ScrimBoardPage() {
         return;
       }
 
-      const { opponentRankMin, opponentRankMax } = getOpponentRankBounds(postForm.rankRange);
+      const opponentRankMin = postForm.opponentRankMin || postForm.rankRange;
+      const opponentRankMax = postForm.opponentRankMax || postForm.opponentRankMin || postForm.rankRange;
       const expiresAt = getScrimEndAt(scheduledAt).toISOString();
 
       const { error: insertError } = await supabase.from("scrim_requests").insert({
         posting_team_id: postingTeam.id,
-        game_title: postForm.gameTitle,
+        game_title: gameTitle,
         scheduled_at: scheduledAt,
-        team_rank: postForm.rankRange || postingTeam.rank_tier,
+        games_count: parseGamesCount(postForm.games),
+        team_rank: postingTeam.rank_tier || postForm.rankRange,
         opponent_rank_min: opponentRankMin,
         opponent_rank_max: opponentRankMax,
         status: "open",
