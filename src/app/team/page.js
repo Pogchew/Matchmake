@@ -1,29 +1,512 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { supabase } from "@/lib/supabase";
 
-const roster = [
-  { name: "ApexPredator", role: "Captain • IGL",   img: "https://lh3.googleusercontent.com/aida-public/AB6AXuC0ro6y5_-AQ4_ykBQXC9nM_kuWEIZRi-hecS8jLRjQNdqPBzOOIgZG_LSytK_Ir12sQ14hN9qwoVIG4nRucu-lHzDlPNyWDm92DCyk9XkqPl2KGO0ayDob5eYCtep4E1WPWFk15K3HLSrDrpTNHQDqNCzMk32cXdzG3xq_84MQfAD8WAulyNB7TCJDnS0vBFCcYtMTgI8vBYg6abJJvFx0kaPAbgLcAGphMlQdF1qd1VFDoM5P5mKDehD3wMXhOCSHideA4GSjOpk" },
-  { name: "Valkyrie",     role: "Entry Fragger",    img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAyri2vhgSpmv4xJ_obkz_ToDzXFYFVOT8jNRg1n1e6wes6ro9rCfvkUcp4lu5FBGL1Sm8ePJhUROSIOmNbfpnV7cKMYbwGbkVL4S-H9Wxuo2XdxJxF5c0CZHuypdZoWM2Z8mm_6tRNJub2va5pGYcefmn6OGt9GAUijQJlSBnx108aPg-ECD7RgfDLbTte1h9A0-VR4iqFnbEKx9LCU0UZRmOV31t9x-DXGVI53O8_Vs87lWQXl_NHuUWFzAxRp1fn7rngAUB2frw" },
-  { name: "Noxious",      role: "Support",          initials: "NX", bgClass: "bg-secondary-container" },
-  { name: "ZeroFlux",     role: "Flex",             initials: "ZF", bgClass: "bg-tertiary-container" },
-  { name: "Echo",         role: "Sniper",           img: "https://lh3.googleusercontent.com/aida-public/AB6AXuB6ftVZ1UcrTGJFp76zHQyZVvCaQq6fbsB9LA2BKMrSJeZi92UiTwCQ4VkwSv618UQt6XrPdraSnRNyHCx9WyZAEHdTQVppOnxfJzaedwFw1HThVP9AoSwpXnqovt7peygYgcNnO03J1KeeHJrR9RvV7xKa4HAWm1e8on7Px0FHWz7WlZW8XySE6Fuv7a-nNWfxFWYRfzNbI3gsMJYx7pXnx13MlcAeKhh0ideIYM9M8DjGx5wAG5rlXkqMEqQ4rlM8UR8eq8Tmp8A" },
-];
+const SCRIM_DURATION_HOURS = 3;
 
-const upcomingScrims = [
-  { id: 1, vs: "vs. Cloud9 Academy",    meta: "Best of 3 • Pro Tier",          when: "Today",    time: "8:00 PM local",  server: "NA East Server",  status: "confirmed" },
-  { id: 2, vs: "vs. Team Liquid Blue",  meta: "Best of 1 • Practice",          when: "Tomorrow", time: "6:30 PM local",  server: "NA Central Server", status: "confirmed" },
-  { id: 3, vs: "vs. Sentinels B",       meta: "Best of 5 • Tournament Prep",   when: "Pending",  time: "TBD",          server: null,              status: "pending" },
-];
+function getInitials(name = "") {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}
+
+function getScrimEndAt(value) {
+  if (!value) return null;
+  const endAt = new Date(value);
+  if (Number.isNaN(endAt.getTime())) return null;
+  endAt.setHours(endAt.getHours() + SCRIM_DURATION_HOURS);
+  return endAt;
+}
+
+function isPastScrim(scrim) {
+  if (scrim.status === "completed") return true;
+  if (["cancelled", "declined", "expired"].includes(scrim.status)) return true;
+  const endAt = getScrimEndAt(scrim.scheduled_at);
+  return endAt ? endAt < new Date() : false;
+}
+
+function formatDateTime(value) {
+  if (!value) return "Time TBD";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(value));
+}
+
+function formatGameCount(value) {
+  const count = Number(value || 3);
+  return `${count} ${count === 1 ? "Game" : "Games"}`;
+}
+
+function isMissingRosterNamesError(error) {
+  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("roster_names");
+}
+
+function isMissingGamesCountError(error) {
+  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("games_count");
+}
+
+function EmptyState({ icon, title, body, action }) {
+  return (
+    <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container-lowest p-lg text-center">
+      <MaterialSymbol className="mx-auto mb-sm block text-[36px] text-outline">{icon}</MaterialSymbol>
+      <h2 className="font-headline-3 text-headline-3 text-on-surface">{title}</h2>
+      <p className="mx-auto mt-xs max-w-md font-body-sub text-body-sub text-on-surface-variant">{body}</p>
+      {action && <div className="mt-md">{action}</div>}
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  const styles = {
+    open: "bg-primary-fixed text-on-primary-fixed",
+    pending: "bg-[#fff0c2] text-[#755400]",
+    confirmed: "bg-[#E3F9E5] text-[#1B5E20]",
+    completed: "bg-surface-container-high text-on-surface-variant",
+    cancelled: "bg-error-container text-on-error-container",
+  };
+
+  return (
+    <span className={`rounded-full px-3 py-1 font-label-small text-label-small capitalize ${styles[status] || "bg-surface-container-high text-on-surface-variant"}`}>
+      {status || "scheduled"}
+    </span>
+  );
+}
 
 export default function TeamPage() {
   return (
+    <Suspense fallback={<TeamPageShell><div className="rounded-xl bg-surface-container-lowest p-lg font-body-main text-body-main text-on-surface-variant">Loading team...</div></TeamPageShell>}>
+      <TeamPageContent />
+    </Suspense>
+  );
+}
+
+function TeamPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTeamId = searchParams.get("id");
+
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [teams, setTeams] = useState([]);
+  const [selectedTeamId, setSelectedTeamId] = useState(requestedTeamId || "");
+  const [organization, setOrganization] = useState(null);
+  const [scrims, setScrims] = useState([]);
+  const [rosterNames, setRosterNames] = useState([]);
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [rosterError, setRosterError] = useState("");
+  const [rosterSuccess, setRosterSuccess] = useState("");
+  const [savingRoster, setSavingRoster] = useState(false);
+  const [hasRosterNamesColumn, setHasRosterNamesColumn] = useState(true);
+
+  const selectedTeam = useMemo(
+    () => teams.find((team) => team.id === selectedTeamId) || teams[0] || null,
+    [selectedTeamId, teams]
+  );
+
+  const selectedTeamScrims = useMemo(() => {
+    if (!selectedTeam) return [];
+    return scrims.filter(
+      (scrim) => scrim.posting_team_id === selectedTeam.id || scrim.matched_team_id === selectedTeam.id
+    );
+  }, [scrims, selectedTeam]);
+
+  const upcomingScrims = useMemo(
+    () => selectedTeamScrims
+      .filter((scrim) => !isPastScrim(scrim))
+      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)),
+    [selectedTeamScrims]
+  );
+
+  const previousScrims = useMemo(
+    () => selectedTeamScrims
+      .filter((scrim) => isPastScrim(scrim))
+      .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)),
+    [selectedTeamScrims]
+  );
+
+  const loadTeamData = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage("");
+
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      router.push("/login");
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("id, org_id")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Failed to load user profile for team page", profileError);
+      setErrorMessage("We could not load your profile. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    if (!profile?.org_id) {
+      setErrorMessage("Your account is missing an organization.");
+      setLoading(false);
+      return;
+    }
+
+    const { data: orgData, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, name, type, verified_flag, region")
+      .eq("id", profile.org_id)
+      .maybeSingle();
+
+    if (orgError) {
+      console.error("Failed to load org for team page", orgError);
+      setErrorMessage("We could not load your organization. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    const selectWithRosterNames = "id, org_id, name, game_title, mode, rank_tier, region, scrimgg_rating, roster_names, created_at";
+    const selectWithoutRosterNames = "id, org_id, name, game_title, mode, rank_tier, region, scrimgg_rating, created_at";
+
+    let { data: teamData, error: teamsError } = await supabase
+      .from("teams")
+      .select(selectWithRosterNames)
+      .eq("org_id", profile.org_id)
+      .order("created_at", { ascending: true });
+
+    if (isMissingRosterNamesError(teamsError)) {
+      console.warn("roster_names is missing in Supabase. Run supabase_team_roster_names.sql to enable roster editing.");
+      setHasRosterNamesColumn(false);
+      ({ data: teamData, error: teamsError } = await supabase
+        .from("teams")
+        .select(selectWithoutRosterNames)
+        .eq("org_id", profile.org_id)
+        .order("created_at", { ascending: true }));
+    }
+
+    if (teamsError) {
+      console.error("Failed to load teams for team page", teamsError);
+      setErrorMessage("We could not load your teams. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    const loadedTeams = teamData || [];
+    setOrganization(orgData);
+    setTeams(loadedTeams);
+
+    const nextTeam = loadedTeams.find((team) => team.id === requestedTeamId) || loadedTeams[0] || null;
+    setSelectedTeamId(nextTeam?.id || "");
+    setRosterNames(nextTeam?.roster_names || []);
+
+    const teamIds = loadedTeams.map((team) => team.id);
+    if (!teamIds.length) {
+      setScrims([]);
+      setLoading(false);
+      return;
+    }
+
+    const scrimSelectWithGames = "id, posting_team_id, matched_team_id, game_title, scheduled_at, games_count, team_rank, opponent_rank_min, opponent_rank_max, status, expires_at";
+    const scrimSelectWithoutGames = scrimSelectWithGames.replace("games_count,", "");
+
+    const fetchTeamScrims = async (selectQuery) => {
+      const postedResult = await supabase
+        .from("scrim_requests")
+        .select(selectQuery)
+        .in("posting_team_id", teamIds);
+
+      const matchedResult = await supabase
+        .from("scrim_requests")
+        .select(selectQuery)
+        .in("matched_team_id", teamIds);
+
+      return [postedResult, matchedResult];
+    };
+
+    let [
+      { data: postedScrims, error: postedError },
+      { data: matchedScrims, error: matchedError },
+    ] = await fetchTeamScrims(scrimSelectWithGames);
+
+    if (isMissingGamesCountError(postedError) || isMissingGamesCountError(matchedError)) {
+      console.warn("games_count is missing in Supabase. Run supabase_scrim_games_count.sql to enable saved game counts.");
+      [
+        { data: postedScrims, error: postedError },
+        { data: matchedScrims, error: matchedError },
+      ] = await fetchTeamScrims(scrimSelectWithoutGames);
+    }
+
+    const scrimError = postedError || matchedError;
+    if (scrimError) {
+      console.error("Failed to load team scrims", scrimError);
+      setErrorMessage("We could not load this team's scrims. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    const mergedScrims = new Map();
+    for (const scrim of [...(postedScrims || []), ...(matchedScrims || [])]) {
+      mergedScrims.set(scrim.id, scrim);
+    }
+
+    setScrims(Array.from(mergedScrims.values()));
+    setLoading(false);
+  }, [requestedTeamId, router]);
+
+  useEffect(() => {
+    loadTeamData();
+  }, [loadTeamData]);
+
+  useEffect(() => {
+    if (!selectedTeam) return;
+    setRosterNames(selectedTeam.roster_names || []);
+    setRosterError("");
+    setRosterSuccess("");
+  }, [selectedTeam]);
+
+  function handleRosterNameChange(index, value) {
+    setRosterNames((current) => current.map((name, currentIndex) => currentIndex === index ? value : name));
+    setRosterError("");
+    setRosterSuccess("");
+  }
+
+  function handleAddPlayer(event) {
+    event.preventDefault();
+    const trimmedName = newPlayerName.trim();
+    if (!trimmedName) return;
+    setRosterNames((current) => [...current, trimmedName]);
+    setNewPlayerName("");
+    setRosterError("");
+    setRosterSuccess("Player added locally. Save the roster to publish it.");
+  }
+
+  function handleRemovePlayer(index) {
+    setRosterNames((current) => current.filter((_, currentIndex) => currentIndex !== index));
+    setRosterError("");
+    setRosterSuccess("");
+  }
+
+  async function handleSaveRoster() {
+    if (!selectedTeam) return;
+
+    const cleanedRoster = rosterNames.map((name) => name.trim()).filter(Boolean);
+    if (!hasRosterNamesColumn) {
+      setRosterError("Run supabase_team_roster_names.sql in Supabase before saving roster names.");
+      return;
+    }
+
+    setSavingRoster(true);
+    setRosterError("");
+    setRosterSuccess("");
+
+    const { data, error } = await supabase
+      .from("teams")
+      .update({ roster_names: cleanedRoster, updated_at: new Date().toISOString() })
+      .eq("id", selectedTeam.id)
+      .eq("org_id", selectedTeam.org_id)
+      .select("id, roster_names")
+      .maybeSingle();
+
+    if (isMissingRosterNamesError(error)) {
+      setHasRosterNamesColumn(false);
+      setRosterError("Run supabase_team_roster_names.sql in Supabase before saving roster names.");
+      setSavingRoster(false);
+      return;
+    }
+
+    if (error) {
+      console.error("Failed to save roster", error);
+      setRosterError(error.message || "We could not save this roster.");
+      setSavingRoster(false);
+      return;
+    }
+
+    setTeams((current) => current.map((team) => (
+      team.id === selectedTeam.id ? { ...team, roster_names: data?.roster_names || cleanedRoster } : team
+    )));
+    setRosterNames(data?.roster_names || cleanedRoster);
+    setRosterSuccess("Roster saved.");
+    setSavingRoster(false);
+  }
+
+  const teamInitials = getInitials(selectedTeam?.name || "Team");
+  const scrimsPlayed = previousScrims.length;
+  const confirmedScrims = selectedTeamScrims.filter((scrim) => scrim.status === "confirmed" || scrim.status === "completed").length;
+
+  return (
+    <TeamPageShell>
+        {loading ? (
+          <div className="rounded-xl bg-surface-container-lowest p-lg font-body-main text-body-main text-on-surface-variant">
+            Loading team...
+          </div>
+        ) : errorMessage ? (
+          <EmptyState
+            icon="error"
+            title="Team page unavailable"
+            body={errorMessage}
+            action={
+              <Link className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" href="/org">
+                Back to Org
+              </Link>
+            }
+          />
+        ) : teams.length === 0 ? (
+          <EmptyState
+            icon="groups"
+            title="No teams yet"
+            body="Create your first team before managing a roster or team scrims."
+            action={
+              <Link className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" href="/team/new">
+                <MaterialSymbol className="text-[18px]">add</MaterialSymbol>
+                Create Team
+              </Link>
+            }
+          />
+        ) : (
+          <>
+            <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-lg mb-lg flex flex-col md:flex-row items-start md:items-center gap-md">
+              <div className="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 border-4 border-surface-container-lowest shadow-sm">
+                <span className="font-editorial-large text-editorial-large text-primary">{teamInitials}</span>
+              </div>
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-sm mb-xs">
+                  <h1 className="font-headline-1 text-on-surface">{selectedTeam.name}</h1>
+                  {organization?.verified_flag && <MaterialSymbol className="text-primary text-[20px]" fill>verified</MaterialSymbol>}
+                </div>
+                <p className="font-body-sub text-on-surface-variant mb-md">
+                  {organization?.name || "Your organization"} • {selectedTeam.region || "Region not set"}
+                </p>
+                <div className="flex flex-wrap gap-sm">
+                  <span className="bg-primary-fixed text-on-primary-fixed font-label-small px-3 py-1 rounded-full">{selectedTeam.game_title}</span>
+                  <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">{selectedTeam.mode || "Mode TBD"}</span>
+                  <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">{selectedTeam.rank_tier || "Rank TBD"}</span>
+                  <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Rating {Number(selectedTeam.scrimgg_rating || 0).toFixed(1)}</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-sm w-full md:w-64">
+                <label className="font-label-small text-label-small text-on-surface-variant uppercase tracking-wide">
+                  Switch Team
+                </label>
+                <select
+                  className="w-full rounded-lg border-none bg-surface-container px-md py-sm font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary"
+                  onChange={(event) => {
+                    setSelectedTeamId(event.target.value);
+                    router.replace(`/team?id=${event.target.value}`);
+                  }}
+                  value={selectedTeam.id}
+                >
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>{team.name}</option>
+                  ))}
+                </select>
+              </div>
+            </section>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+              <div className="lg:col-span-1 flex flex-col gap-lg">
+                <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
+                  <div className="flex justify-between items-center mb-md">
+                    <h2 className="font-headline-3 text-on-surface">Active Roster</h2>
+                    <span className="font-body-sub text-on-surface-variant">{rosterNames.filter(Boolean).length}</span>
+                  </div>
+
+                  <div className="flex flex-col gap-sm">
+                    {rosterNames.length === 0 ? (
+                      <div className="rounded-lg bg-surface-container-low p-md font-body-sub text-body-sub text-on-surface-variant">
+                        No players added yet.
+                      </div>
+                    ) : (
+                      rosterNames.map((name, index) => (
+                        <div key={`${name}-${index}`} className="flex items-center gap-sm rounded-lg bg-surface-container-low p-sm">
+                          <div className="w-10 h-10 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center font-label-bold">
+                            {getInitials(name || "P")}
+                          </div>
+                          <input
+                            className="min-w-0 flex-1 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary"
+                            onChange={(event) => handleRosterNameChange(index, event.target.value)}
+                            placeholder="Player name"
+                            value={name}
+                          />
+                          <button
+                            className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-high"
+                            onClick={() => handleRemovePlayer(index)}
+                            type="button"
+                          >
+                            <MaterialSymbol className="text-[18px]">close</MaterialSymbol>
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <form className="mt-md flex gap-sm" onSubmit={handleAddPlayer}>
+                    <input
+                      className="min-w-0 flex-1 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+                      onChange={(event) => setNewPlayerName(event.target.value)}
+                      placeholder="Add player name"
+                      value={newPlayerName}
+                    />
+                    <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" type="submit">
+                      Add
+                    </button>
+                  </form>
+
+                  {rosterError && <div className="mt-sm rounded-lg bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">{rosterError}</div>}
+                  {rosterSuccess && <div className="mt-sm rounded-lg bg-[#E3F9E5] px-md py-sm font-body-sub text-body-sub text-[#1B5E20]">{rosterSuccess}</div>}
+
+                  <button
+                    className="mt-md w-full rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={savingRoster}
+                    onClick={handleSaveRoster}
+                    type="button"
+                  >
+                    {savingRoster ? "Saving..." : "Save Roster"}
+                  </button>
+                </section>
+
+                <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
+                  <h2 className="font-headline-3 text-on-surface mb-md">Team Stats</h2>
+                  <div className="grid grid-cols-2 gap-sm">
+                    <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
+                      <span className="font-editorial-large text-editorial-large text-primary">{scrimsPlayed}</span>
+                      <span className="font-label-small text-label-small text-on-surface-variant">Previous Scrims</span>
+                    </div>
+                    <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
+                      <span className="font-editorial-large text-editorial-large text-secondary">{confirmedScrims}</span>
+                      <span className="font-label-small text-label-small text-on-surface-variant">Confirmed</span>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="lg:col-span-2 flex flex-col gap-lg">
+                <ScrimList title="Upcoming Scrims" scrims={upcomingScrims} empty="No upcoming scrims for this team." />
+                <ScrimList title="Previous Scrims" scrims={previousScrims} empty="Previous scrims will appear here after they end." previous />
+              </div>
+            </div>
+          </>
+        )}
+    </TeamPageShell>
+  );
+}
+
+function TeamPageShell({ children }) {
+  return (
     <>
-      {/* TopAppBar – custom layout with back button */}
       <header className="bg-white/80 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
         <div className="flex items-center gap-3">
           <Link
@@ -35,11 +518,10 @@ export default function TeamPage() {
           <span className="font-headline-3 text-on-surface font-bold tracking-tight">Matchmake</span>
         </div>
 
-        {/* Desktop nav – Org is active since we came from there */}
         <nav className="hidden md:flex items-center gap-1">
           {[
-            { label: "Scrims",   href: "/" },
-            { label: "Org",      href: "/org",      active: true },
+            { label: "Scrims", href: "/" },
+            { label: "Org", href: "/org", active: true },
             { label: "Requests", href: "/requests" },
             { label: "Calendar", href: "/calendar" },
           ].map((item) => (
@@ -57,125 +539,16 @@ export default function TeamPage() {
           ))}
         </nav>
 
-        <button className="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95">
-          <MaterialSymbol>settings</MaterialSymbol>
-        </button>
+        <Link
+          className="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95"
+          href="/team/new"
+        >
+          <MaterialSymbol>add</MaterialSymbol>
+        </Link>
       </header>
 
       <main className="pt-6 pb-[100px] md:pb-xl px-margin-mobile md:px-xl max-w-[1200px] mx-auto min-h-screen">
-
-        {/* Team Header Card */}
-        <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-lg mb-lg flex flex-col md:flex-row items-start md:items-center gap-md">
-          <div className="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 border-4 border-surface-container-lowest shadow-sm">
-            <MaterialSymbol className="text-[48px] text-primary" fill>rocket_launch</MaterialSymbol>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-sm mb-xs">
-              <h1 className="font-headline-1 text-on-surface">Rocket Rams</h1>
-              <MaterialSymbol className="text-primary text-[20px]" fill>verified</MaterialSymbol>
-            </div>
-            <p className="font-body-sub text-on-surface-variant mb-md">North American Division • Main Roster</p>
-            <div className="flex flex-wrap gap-sm">
-              <span className="bg-primary-fixed text-on-primary-fixed font-label-small px-3 py-1 rounded-full">Valorant</span>
-              <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Pro Tier</span>
-              <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Local Time</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-sm w-full md:w-auto">
-            <button className="bg-primary text-on-primary font-label-bold px-md py-sm rounded-lg hover:opacity-90 transition-opacity">
-              Edit Team Info
-            </button>
-            <button className="bg-surface-container text-primary font-label-bold px-md py-sm rounded-lg hover:bg-surface-variant transition-colors">
-              Manage Roster
-            </button>
-          </div>
-        </section>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
-
-          {/* Left: Roster & Stats */}
-          <div className="lg:col-span-1 flex flex-col gap-lg">
-
-            {/* Roster */}
-            <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
-              <div className="flex justify-between items-center mb-md">
-                <h2 className="font-headline-3 text-on-surface">Active Roster</h2>
-                <span className="font-body-sub text-on-surface-variant">5/5</span>
-              </div>
-              <div className="flex flex-col gap-sm">
-                {roster.map((player) => (
-                  <div
-                    key={player.name}
-                    className="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer"
-                  >
-                    {player.img ? (
-                      <img alt="Player" className="w-10 h-10 rounded-full object-cover" src={player.img} />
-                    ) : (
-                      <div className={`w-10 h-10 rounded-full ${player.bgClass} text-on-primary flex items-center justify-center font-label-bold`}>
-                        {player.initials}
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <p className="font-label-bold text-on-surface">{player.name}</p>
-                      <p className="font-label-small text-on-surface-variant">{player.role}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
-              <h2 className="font-headline-3 text-on-surface mb-md">Season Stats</h2>
-              <div className="grid grid-cols-2 gap-sm">
-                <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
-                  <span className="font-editorial-large text-editorial-large text-primary">24</span>
-                  <span className="font-label-small text-label-small text-on-surface-variant">Scrims Played</span>
-                </div>
-                <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
-                  <span className="font-editorial-large text-editorial-large text-secondary">68%</span>
-                  <span className="font-label-small text-label-small text-on-surface-variant">Win Rate</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Upcoming Scrims */}
-          <div className="lg:col-span-2">
-            <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md h-full">
-              <div className="flex justify-between items-center mb-md">
-                <h2 className="font-headline-3 text-on-surface">Upcoming Scrims</h2>
-                <Link
-                  href="/calendar"
-                  className="text-primary font-label-bold flex items-center gap-xs hover:bg-surface-container p-xs rounded-lg transition-colors"
-                >
-                  View Calendar
-                  <MaterialSymbol className="text-[18px]">arrow_forward</MaterialSymbol>
-                </Link>
-              </div>
-              <div className="flex flex-col gap-md">
-                {upcomingScrims.map((scrim) => (
-                  scrim.status === "pending" ? (
-                    <div
-                      key={scrim.id}
-                      className="border border-surface-variant rounded-lg p-md opacity-60"
-                    >
-                      <ScrimCard scrim={scrim} />
-                    </div>
-                  ) : (
-                    <Link
-                      key={scrim.id}
-                      href="/detail"
-                      className="block border border-surface-variant rounded-lg p-md hover:shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] transition-shadow"
-                    >
-                      <ScrimCard scrim={scrim} />
-                    </Link>
-                  )
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        {children}
       </main>
 
       <BottomNav />
@@ -183,40 +556,68 @@ export default function TeamPage() {
   );
 }
 
+function ScrimList({ title, scrims, empty, previous = false }) {
+  return (
+    <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
+      <div className="flex justify-between items-center mb-md">
+        <h2 className="font-headline-3 text-on-surface">{title}</h2>
+        {!previous && (
+          <Link
+            href="/calendar"
+            className="text-primary font-label-bold flex items-center gap-xs hover:bg-surface-container p-xs rounded-lg transition-colors"
+          >
+            View Calendar
+            <MaterialSymbol className="text-[18px]">arrow_forward</MaterialSymbol>
+          </Link>
+        )}
+      </div>
+      <div className="flex flex-col gap-md">
+        {scrims.length === 0 ? (
+          <div className="rounded-lg bg-surface-container-low p-md font-body-sub text-body-sub text-on-surface-variant">
+            {empty}
+          </div>
+        ) : (
+          scrims.map((scrim) => (
+            <Link
+              key={scrim.id}
+              href={`/scrims/${scrim.id}`}
+              className="block border border-surface-variant rounded-lg p-md hover:shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] transition-shadow"
+            >
+              <ScrimCard scrim={scrim} />
+            </Link>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ScrimCard({ scrim }) {
   return (
     <>
-      <div className="flex justify-between items-start mb-sm">
-        <div className="flex items-center gap-sm">
+      <div className="flex justify-between items-start mb-sm gap-md">
+        <div className="flex items-center gap-sm min-w-0">
           <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
             <MaterialSymbol className="text-on-surface-variant text-[24px]">sports_esports</MaterialSymbol>
           </div>
-          <div>
-            <h3 className="font-headline-3 text-on-surface text-[16px]">{scrim.vs}</h3>
-            <p className="font-body-sub text-on-surface-variant">{scrim.meta}</p>
+          <div className="min-w-0">
+            <h3 className="font-headline-3 text-on-surface text-[16px] truncate">{scrim.game_title}</h3>
+            <p className="font-body-sub text-on-surface-variant">
+              {formatDateTime(scrim.scheduled_at)} • {formatGameCount(scrim.games_count)}
+            </p>
           </div>
         </div>
-        <span
-          className={`font-label-small px-2 py-1 rounded text-[10px] ${
-            scrim.when === "Today"
-              ? "bg-tertiary-fixed text-on-tertiary-fixed"
-              : "bg-surface-container text-on-surface-variant"
-          }`}
-        >
-          {scrim.when}
-        </span>
+        <StatusBadge status={scrim.status} />
       </div>
-      <div className="flex items-center gap-md text-on-surface-variant font-label-small mt-sm">
+      <div className="flex flex-wrap items-center gap-md text-on-surface-variant font-label-small mt-sm">
         <div className="flex items-center gap-xs">
-          <MaterialSymbol className="text-[16px]">schedule</MaterialSymbol>
-          {scrim.time}
+          <MaterialSymbol className="text-[16px]">military_tech</MaterialSymbol>
+          {scrim.team_rank || "Rank TBD"}
         </div>
-        {scrim.server && (
-          <div className="flex items-center gap-xs">
-            <MaterialSymbol className="text-[16px]">dns</MaterialSymbol>
-            {scrim.server}
-          </div>
-        )}
+        <div className="flex items-center gap-xs">
+          <MaterialSymbol className="text-[16px]">swap_vert</MaterialSymbol>
+          VS {scrim.opponent_rank_min || scrim.opponent_rank_max || "Open"}
+        </div>
       </div>
     </>
   );

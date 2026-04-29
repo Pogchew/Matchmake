@@ -379,7 +379,7 @@ export default function OrgPage() {
                           return (
                             <Link
                               key={team.id}
-                              href="/team"
+                              href={`/team?id=${team.id}`}
                               className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.05)] relative overflow-hidden block"
                             >
                               <div

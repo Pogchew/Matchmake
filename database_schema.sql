@@ -53,6 +53,7 @@ create table if not exists public.teams (
   game_title text not null,
   mode text,
   roster uuid[] not null default '{}',
+  roster_names text[] not null default '{}',
   captain_id uuid references public.users(id) on delete set null,
   coach_poc_id uuid references public.users(id) on delete set null,
   rank_tier text,
