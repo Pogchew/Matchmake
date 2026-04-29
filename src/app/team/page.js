@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { supabase } from "@/lib/supabase";
+import { getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
 
 const SCRIM_DURATION_HOURS = 3;
 
@@ -51,11 +52,42 @@ function formatGameCount(value) {
 }
 
 function isMissingRosterNamesError(error) {
-  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("roster_names");
+  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("roster_names") || error?.message?.includes("roster_profiles");
 }
 
 function isMissingGamesCountError(error) {
   return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("games_count");
+}
+
+function createRosterPlayer(gameTitle, name = "") {
+  return {
+    name,
+    rank: getDefaultRankForGame(gameTitle),
+    profile_url: "",
+  };
+}
+
+function getValidRosterRank(gameTitle, rank) {
+  const ranks = getRanksForGame(gameTitle);
+  return ranks.includes(rank) ? rank : getDefaultRankForGame(gameTitle);
+}
+
+function normalizeRosterProfiles(team) {
+  if (!team) return [];
+
+  if (Array.isArray(team.roster_profiles) && team.roster_profiles.length > 0) {
+    return team.roster_profiles.map((player) => ({
+      name: player?.name || "",
+      rank: getValidRosterRank(team.game_title, player?.rank),
+      profile_url: player?.profile_url || "",
+    }));
+  }
+
+  return (team.roster_names || []).map((name) => ({
+    name,
+    rank: getValidRosterRank(team.game_title),
+    profile_url: "",
+  }));
 }
 
 function EmptyState({ icon, title, body, action }) {
@@ -104,12 +136,12 @@ function TeamPageContent() {
   const [selectedTeamId, setSelectedTeamId] = useState(requestedTeamId || "");
   const [organization, setOrganization] = useState(null);
   const [scrims, setScrims] = useState([]);
-  const [rosterNames, setRosterNames] = useState([]);
-  const [newPlayerName, setNewPlayerName] = useState("");
+  const [rosterPlayers, setRosterPlayers] = useState([]);
+  const [newPlayer, setNewPlayer] = useState(() => createRosterPlayer("Valorant"));
   const [rosterError, setRosterError] = useState("");
   const [rosterSuccess, setRosterSuccess] = useState("");
   const [savingRoster, setSavingRoster] = useState(false);
-  const [hasRosterNamesColumn, setHasRosterNamesColumn] = useState(true);
+  const [hasRosterProfilesColumn, setHasRosterProfilesColumn] = useState(true);
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) || teams[0] || null,
@@ -179,7 +211,7 @@ function TeamPageContent() {
       return;
     }
 
-    const selectWithRosterNames = "id, org_id, name, game_title, mode, rank_tier, region, scrimgg_rating, roster_names, created_at";
+    const selectWithRosterNames = "id, org_id, name, game_title, mode, rank_tier, region, scrimgg_rating, roster_names, roster_profiles, created_at";
     const selectWithoutRosterNames = "id, org_id, name, game_title, mode, rank_tier, region, scrimgg_rating, created_at";
 
     let { data: teamData, error: teamsError } = await supabase
@@ -189,8 +221,8 @@ function TeamPageContent() {
       .order("created_at", { ascending: true });
 
     if (isMissingRosterNamesError(teamsError)) {
-      console.warn("roster_names is missing in Supabase. Run supabase_team_roster_names.sql to enable roster editing.");
-      setHasRosterNamesColumn(false);
+      console.warn("roster profile columns are missing in Supabase. Run supabase_team_roster_names.sql to enable roster editing.");
+      setHasRosterProfilesColumn(false);
       ({ data: teamData, error: teamsError } = await supabase
         .from("teams")
         .select(selectWithoutRosterNames)
@@ -211,7 +243,8 @@ function TeamPageContent() {
 
     const nextTeam = loadedTeams.find((team) => team.id === requestedTeamId) || loadedTeams[0] || null;
     setSelectedTeamId(nextTeam?.id || "");
-    setRosterNames(nextTeam?.roster_names || []);
+    setRosterPlayers(normalizeRosterProfiles(nextTeam));
+    setNewPlayer(createRosterPlayer(nextTeam?.game_title || "Valorant"));
 
     const teamIds = loadedTeams.map((team) => team.id);
     if (!teamIds.length) {
@@ -273,29 +306,42 @@ function TeamPageContent() {
 
   useEffect(() => {
     if (!selectedTeam) return;
-    setRosterNames(selectedTeam.roster_names || []);
+    setRosterPlayers(normalizeRosterProfiles(selectedTeam));
+    setNewPlayer(createRosterPlayer(selectedTeam.game_title));
     setRosterError("");
     setRosterSuccess("");
   }, [selectedTeam]);
 
-  function handleRosterNameChange(index, value) {
-    setRosterNames((current) => current.map((name, currentIndex) => currentIndex === index ? value : name));
+  function handleRosterPlayerChange(index, field, value) {
+    setRosterPlayers((current) => current.map((player, currentIndex) => (
+      currentIndex === index ? { ...player, [field]: value } : player
+    )));
+    setRosterError("");
+    setRosterSuccess("");
+  }
+
+  function handleNewPlayerChange(field, value) {
+    setNewPlayer((current) => ({ ...current, [field]: value }));
     setRosterError("");
     setRosterSuccess("");
   }
 
   function handleAddPlayer(event) {
     event.preventDefault();
-    const trimmedName = newPlayerName.trim();
+    const trimmedName = newPlayer.name.trim();
     if (!trimmedName) return;
-    setRosterNames((current) => [...current, trimmedName]);
-    setNewPlayerName("");
+    setRosterPlayers((current) => [...current, {
+      name: trimmedName,
+      rank: newPlayer.rank || getDefaultRankForGame(selectedTeam?.game_title),
+      profile_url: newPlayer.profile_url.trim(),
+    }]);
+    setNewPlayer(createRosterPlayer(selectedTeam?.game_title || "Valorant"));
     setRosterError("");
     setRosterSuccess("Player added locally. Save the roster to publish it.");
   }
 
   function handleRemovePlayer(index) {
-    setRosterNames((current) => current.filter((_, currentIndex) => currentIndex !== index));
+    setRosterPlayers((current) => current.filter((_, currentIndex) => currentIndex !== index));
     setRosterError("");
     setRosterSuccess("");
   }
@@ -303,9 +349,16 @@ function TeamPageContent() {
   async function handleSaveRoster() {
     if (!selectedTeam) return;
 
-    const cleanedRoster = rosterNames.map((name) => name.trim()).filter(Boolean);
-    if (!hasRosterNamesColumn) {
-      setRosterError("Run supabase_team_roster_names.sql in Supabase before saving roster names.");
+    const cleanedRoster = rosterPlayers
+      .map((player) => ({
+        name: player.name.trim(),
+        rank: getValidRosterRank(selectedTeam.game_title, player.rank),
+        profile_url: player.profile_url?.trim() || "",
+      }))
+      .filter((player) => player.name);
+
+    if (!hasRosterProfilesColumn) {
+      setRosterError("Run supabase_team_roster_names.sql in Supabase before saving roster profiles.");
       return;
     }
 
@@ -315,15 +368,19 @@ function TeamPageContent() {
 
     const { data, error } = await supabase
       .from("teams")
-      .update({ roster_names: cleanedRoster, updated_at: new Date().toISOString() })
+      .update({
+        roster_names: cleanedRoster.map((player) => player.name),
+        roster_profiles: cleanedRoster,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", selectedTeam.id)
       .eq("org_id", selectedTeam.org_id)
-      .select("id, roster_names")
+      .select("id, roster_names, roster_profiles")
       .maybeSingle();
 
     if (isMissingRosterNamesError(error)) {
-      setHasRosterNamesColumn(false);
-      setRosterError("Run supabase_team_roster_names.sql in Supabase before saving roster names.");
+      setHasRosterProfilesColumn(false);
+      setRosterError("Run supabase_team_roster_names.sql in Supabase before saving roster profiles.");
       setSavingRoster(false);
       return;
     }
@@ -336,9 +393,11 @@ function TeamPageContent() {
     }
 
     setTeams((current) => current.map((team) => (
-      team.id === selectedTeam.id ? { ...team, roster_names: data?.roster_names || cleanedRoster } : team
+      team.id === selectedTeam.id
+        ? { ...team, roster_names: data?.roster_names || cleanedRoster.map((player) => player.name), roster_profiles: data?.roster_profiles || cleanedRoster }
+        : team
     )));
-    setRosterNames(data?.roster_names || cleanedRoster);
+    setRosterPlayers(data?.roster_profiles || cleanedRoster);
     setRosterSuccess("Roster saved.");
     setSavingRoster(false);
   }
@@ -421,28 +480,58 @@ function TeamPageContent() {
                 <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
                   <div className="flex justify-between items-center mb-md">
                     <h2 className="font-headline-3 text-on-surface">Active Roster</h2>
-                    <span className="font-body-sub text-on-surface-variant">{rosterNames.filter(Boolean).length}</span>
+                    <span className="font-body-sub text-on-surface-variant">{rosterPlayers.filter((player) => player.name.trim()).length}</span>
                   </div>
 
                   <div className="flex flex-col gap-sm">
-                    {rosterNames.length === 0 ? (
+                    {rosterPlayers.length === 0 ? (
                       <div className="rounded-lg bg-surface-container-low p-md font-body-sub text-body-sub text-on-surface-variant">
                         No players added yet.
                       </div>
                     ) : (
-                      rosterNames.map((name, index) => (
-                        <div key={`${name}-${index}`} className="flex items-center gap-sm rounded-lg bg-surface-container-low p-sm">
-                          <div className="w-10 h-10 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center font-label-bold">
-                            {getInitials(name || "P")}
+                      rosterPlayers.map((player, index) => (
+                        <div key={`${player.name}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-sm rounded-lg bg-surface-container-low p-sm">
+                          <div className="w-10 h-10 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center font-label-bold mt-1">
+                            {getInitials(player.name || "P")}
                           </div>
-                          <input
-                            className="min-w-0 flex-1 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary"
-                            onChange={(event) => handleRosterNameChange(index, event.target.value)}
-                            placeholder="Player name"
-                            value={name}
-                          />
+                          <div className="grid gap-xs min-w-0">
+                            <input
+                              className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary"
+                              onChange={(event) => handleRosterPlayerChange(index, "name", event.target.value)}
+                              placeholder="Player name"
+                              value={player.name}
+                            />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-xs">
+                              <select
+                                className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
+                                onChange={(event) => handleRosterPlayerChange(index, "rank", event.target.value)}
+                                value={player.rank}
+                              >
+                                {getRanksForGame(selectedTeam?.game_title).map((rank) => (
+                                  <option key={rank} value={rank}>{rank}</option>
+                                ))}
+                              </select>
+                              <input
+                                className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
+                                onChange={(event) => handleRosterPlayerChange(index, "profile_url", event.target.value)}
+                                placeholder="Profile link optional"
+                                type="url"
+                                value={player.profile_url}
+                              />
+                            </div>
+                            {player.profile_url && (
+                              <a
+                                className="font-label-small text-label-small text-primary underline"
+                                href={player.profile_url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                View profile
+                              </a>
+                            )}
+                          </div>
                           <button
-                            className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-high"
+                            className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-high self-start"
                             onClick={() => handleRemovePlayer(index)}
                             type="button"
                           >
@@ -453,16 +542,34 @@ function TeamPageContent() {
                     )}
                   </div>
 
-                  <form className="mt-md flex gap-sm" onSubmit={handleAddPlayer}>
+                  <form className="mt-md grid gap-sm" onSubmit={handleAddPlayer}>
                     <input
-                      className="min-w-0 flex-1 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
-                      onChange={(event) => setNewPlayerName(event.target.value)}
+                      className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+                      onChange={(event) => handleNewPlayerChange("name", event.target.value)}
                       placeholder="Add player name"
-                      value={newPlayerName}
+                      value={newPlayer.name}
                     />
-                    <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" type="submit">
-                      Add
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-sm">
+                      <select
+                        className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+                        onChange={(event) => handleNewPlayerChange("rank", event.target.value)}
+                        value={newPlayer.rank}
+                      >
+                        {getRanksForGame(selectedTeam?.game_title).map((rank) => (
+                          <option key={rank} value={rank}>{rank}</option>
+                        ))}
+                      </select>
+                      <input
+                        className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+                        onChange={(event) => handleNewPlayerChange("profile_url", event.target.value)}
+                        placeholder="Profile link optional"
+                        type="url"
+                        value={newPlayer.profile_url}
+                      />
+                      <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" type="submit">
+                        Add
+                      </button>
+                    </div>
                   </form>
 
                   {rosterError && <div className="mt-sm rounded-lg bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">{rosterError}</div>}

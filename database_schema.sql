@@ -54,6 +54,7 @@ create table if not exists public.teams (
   mode text,
   roster uuid[] not null default '{}',
   roster_names text[] not null default '{}',
+  roster_profiles jsonb not null default '[]'::jsonb,
   captain_id uuid references public.users(id) on delete set null,
   coach_poc_id uuid references public.users(id) on delete set null,
   rank_tier text,

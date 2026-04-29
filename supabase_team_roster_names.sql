@@ -4,6 +4,9 @@
 alter table public.teams
   add column if not exists roster_names text[] not null default '{}';
 
+alter table public.teams
+  add column if not exists roster_profiles jsonb not null default '[]'::jsonb;
+
 drop policy if exists "Authenticated users can update teams in their org" on public.teams;
 
 create policy "Authenticated users can update teams in their org"

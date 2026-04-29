@@ -6,7 +6,9 @@ export const GAME_OPTIONS = [
   "Overwatch",
   "Overwatch 2",
   "Marvel Rivals",
-  "Pokémon Champions",
+  "Deadlock",
+  "SSBU",
+  "Honor of Kings",
 ];
 
 export const MODE_OPTIONS = ["6v6", "5v5", "3v3", "2v2", "1v1"];
@@ -67,7 +69,30 @@ export const GAME_RANKS = {
     "Eternity",
     "One Above All",
   ],
-  "Pokémon Champions": ["Beginner", "Poké Ball", "Great Ball", "Ultra Ball", "Master Ball"],
+  Deadlock: [
+    "Initiate",
+    "Seeker",
+    "Alchemist",
+    "Arcanist",
+    "Ritualist",
+    "Emissary",
+    "Archon",
+    "Oracle",
+    "Phantom",
+    "Ascendant",
+    "Eternus",
+  ],
+  SSBU: ["Beginner", "Intermediate", "Advanced", "Elite Smash", "PR Level", "Top Player"],
+  "Honor of Kings": [
+    "Bronze",
+    "Silver",
+    "Gold",
+    "Platinum",
+    "Diamond",
+    "Master",
+    "Grandmaster",
+    "Mythic",
+  ],
 };
 
 export const DEFAULT_RANK_BY_GAME = {
@@ -78,7 +103,9 @@ export const DEFAULT_RANK_BY_GAME = {
   Overwatch: "Diamond",
   "Overwatch 2": "Diamond",
   "Marvel Rivals": "Diamond",
-  "Pokémon Champions": "Great Ball",
+  Deadlock: "Emissary",
+  SSBU: "Elite Smash",
+  "Honor of Kings": "Diamond",
 };
 
 export function getRanksForGame(gameTitle) {
@@ -92,13 +119,13 @@ export function getDefaultRankForGame(gameTitle) {
 export function getDefaultModeForGame(gameTitle) {
   if (gameTitle === "Rocket League") return "3v3";
   if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return "6v6";
-  if (gameTitle === "Pokémon Champions") return "1v1";
+  if (gameTitle === "SSBU") return "1v1";
   return "5v5";
 }
 
 export function getModesForGame(gameTitle) {
   if (gameTitle === "Rocket League") return ["3v3", "2v2", "1v1"];
   if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return ["6v6"];
-  if (gameTitle === "Pokémon Champions") return ["1v1"];
+  if (gameTitle === "SSBU") return ["1v1"];
   return ["5v5"];
 }
