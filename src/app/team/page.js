@@ -691,7 +691,9 @@ function TeamPageContent() {
             </section>
 
             <TeamReviewStats
+              confirmedScrims={confirmedScrims}
               gameTitle={selectedTeam.game_title}
+              historyCount={historyCount}
               kpis={reviewKpis}
               reviews={selectedTeamReviews}
               teamId={selectedTeam.id}
@@ -807,19 +809,21 @@ function TeamPageContent() {
                   </button>
                 </section>
 
-                <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
-                  <h2 className="font-headline-3 text-on-surface mb-md">Team Stats</h2>
-                  <div className="grid grid-cols-2 gap-sm">
-                    <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
-                      <span className="font-editorial-large text-editorial-large text-primary">{historyCount}</span>
-                      <span className="font-label-small text-label-small text-on-surface-variant">Game History</span>
+                {selectedTeam.game_title !== "Valorant" && (
+                  <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
+                    <h2 className="font-headline-3 text-on-surface mb-md">Team Stats</h2>
+                    <div className="grid grid-cols-2 gap-sm">
+                      <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
+                        <span className="font-editorial-large text-editorial-large text-primary">{historyCount}</span>
+                        <span className="font-label-small text-label-small text-on-surface-variant">Game History</span>
+                      </div>
+                      <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
+                        <span className="font-editorial-large text-editorial-large text-secondary">{confirmedScrims}</span>
+                        <span className="font-label-small text-label-small text-on-surface-variant">Confirmed</span>
+                      </div>
                     </div>
-                    <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
-                      <span className="font-editorial-large text-editorial-large text-secondary">{confirmedScrims}</span>
-                      <span className="font-label-small text-label-small text-on-surface-variant">Confirmed</span>
-                    </div>
-                  </div>
-                </section>
+                  </section>
+                )}
               </div>
 
               <div className="lg:col-span-2 flex flex-col gap-lg">
@@ -908,7 +912,7 @@ function TeamPageShell({ children }) {
   );
 }
 
-function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId }) {
+function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId, historyCount, confirmedScrims }) {
   const isValorant = gameTitle === "Valorant";
 
   return (
@@ -934,7 +938,7 @@ function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId }) {
         </div>
       </div>
       {isValorant ? (
-        <ValorantStatsTabs reviews={reviews} />
+        <ValorantStatsTabs confirmedScrims={confirmedScrims} historyCount={historyCount} reviews={reviews} />
       ) : (
         <div className="grid grid-cols-2 gap-sm md:grid-cols-4">
           {kpis.map((kpi) => (
@@ -1124,7 +1128,7 @@ function buildValorantAggregateStats(reviews = []) {
   };
 }
 
-function ValorantStatsTabs({ reviews }) {
+function ValorantStatsTabs({ reviews, historyCount, confirmedScrims }) {
   const [activeTab, setActiveTab] = useState("overview");
   const stats = useMemo(() => buildValorantAggregateStats(reviews), [reviews]);
   const tabs = [
@@ -1170,7 +1174,7 @@ function ValorantStatsTabs({ reviews }) {
           />
         )
       ) : activeTab === "overview" ? (
-        <ValorantOverviewStats stats={stats} />
+        <ValorantOverviewStats confirmedScrims={confirmedScrims} historyCount={historyCount} stats={stats} />
       ) : (
         <ValorantDeepStats stats={stats} />
       )}
@@ -1197,9 +1201,9 @@ function StatKpiCard({ label, value, children }) {
   );
 }
 
-function ValorantOverviewStats({ stats }) {
+function ValorantOverviewStats({ stats, historyCount, confirmedScrims }) {
   return (
-    <div className="grid grid-cols-1 gap-md md:grid-cols-3">
+    <div className="grid grid-cols-2 gap-md lg:grid-cols-4">
       <StatKpiCard label="Win Rate" value={formatPercent(stats.winRate)} />
       <StatKpiCard label="Recent Form">
         {stats.recentForm.length ? (
@@ -1219,7 +1223,8 @@ function ValorantOverviewStats({ stats }) {
           <p className="mt-xs font-headline-2 text-headline-2 text-primary">—</p>
         )}
       </StatKpiCard>
-      <StatKpiCard label="Avg Round Differential" value={formatSignedValue(stats.averageRoundDiff)} />
+      <StatKpiCard label="Game History" value={historyCount ?? "—"} />
+      <StatKpiCard label="Confirmed Scrims" value={confirmedScrims ?? "—"} />
     </div>
   );
 }
@@ -1239,6 +1244,7 @@ function ValorantDeepStats({ stats }) {
     {
       title: "Objective / Round Impact",
       cards: [
+        ["Avg Round Differential", formatSignedValue(stats.averageRoundDiff)],
         ["Average First Bloods", stats.impact.firstBloods],
         ["Average First Blood Differential", Number.isFinite(stats.impact.firstBloodDiff) ? formatSignedValue(stats.impact.firstBloodDiff) : "—"],
         ["Average Plants", stats.impact.plants],
