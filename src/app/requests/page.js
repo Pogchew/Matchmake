@@ -54,6 +54,7 @@ function RequestCard({
   actionLoading = "",
   onAccept,
   onCancel,
+  onComplete,
   onDecline,
   request,
   perspective,
@@ -74,6 +75,7 @@ function RequestCard({
   const isAccepting = actionLoading === `accept:${request.id}`;
   const isDeclining = actionLoading === `decline:${request.id}`;
   const isCancelling = actionLoading === `cancel:${request.id}`;
+  const isCompleting = actionLoading === `complete:${request.id}`;
 
   return (
     <article className="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow">
@@ -150,13 +152,24 @@ function RequestCard({
         )}
         <div className="ml-auto flex flex-wrap items-center gap-sm">
           {isConfirmed && (
-            <Link
-              className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
-              href={`/scrims/${request.id}/chat`}
-            >
-              <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
-              Open Chat
-            </Link>
+            <>
+              <button
+                className="inline-flex items-center gap-1 rounded-lg bg-[#1B5E20] px-4 py-2 font-label-bold text-label-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={Boolean(actionLoading)}
+                onClick={() => onComplete?.(request)}
+                type="button"
+              >
+                <MaterialSymbol className="text-[16px]" fill>flag</MaterialSymbol>
+                {isCompleting ? "Ending..." : "Mark Played"}
+              </button>
+              <Link
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
+                href={`/scrims/${request.id}/chat`}
+              >
+                <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
+                Open Chat
+              </Link>
+            </>
           )}
           <Link
             className="text-primary font-label-bold text-label-bold flex items-center gap-1"
@@ -355,6 +368,7 @@ export default function RequestsPage() {
       const isInboundAction = action === "accept" || action === "decline";
       const ownsPostingTeam = teamIds.includes(request.posting_team_id);
       const ownsMatchedTeam = teamIds.includes(request.matched_team_id);
+      const ownedScrimTeamId = ownsPostingTeam ? request.posting_team_id : ownsMatchedTeam ? request.matched_team_id : "";
 
       if (isInboundAction && !ownsPostingTeam) {
         setActionError("You can only respond to requests for your own posted scrims.");
@@ -366,26 +380,37 @@ export default function RequestsPage() {
         return;
       }
 
-      const updatePayload = action === "accept"
-        ? {
-            status: "confirmed",
-            updated_at: new Date().toISOString(),
-          }
-        : {
-            matched_team_id: null,
-            status: "open",
-            updated_at: new Date().toISOString(),
-          };
+      if (action === "complete" && !ownedScrimTeamId) {
+        setActionError("You can only end scrims involving your own teams.");
+        return;
+      }
+
+      const updatePayload =
+        action === "accept"
+          ? {
+              status: "confirmed",
+              updated_at: new Date().toISOString(),
+            }
+          : action === "complete"
+            ? {
+                status: "completed",
+                updated_at: new Date().toISOString(),
+              }
+            : {
+                matched_team_id: null,
+                status: "open",
+                updated_at: new Date().toISOString(),
+              };
 
       let updateQuery = supabase
         .from("scrim_requests")
         .update(updatePayload)
         .eq("id", request.id)
-        .eq("status", "pending");
+        .eq("status", action === "complete" ? "confirmed" : "pending");
 
       if (isInboundAction) {
         updateQuery = updateQuery.eq("posting_team_id", request.posting_team_id);
-      } else {
+      } else if (action === "cancel") {
         updateQuery = updateQuery.eq("matched_team_id", request.matched_team_id);
       }
 
@@ -408,9 +433,14 @@ export default function RequestsPage() {
           ? "Request accepted."
           : action === "decline"
             ? "Request declined and listing reopened."
-            : "Request cancelled."
+            : action === "complete"
+              ? "Scrim marked as played. Opening post-game dashboard."
+              : "Request cancelled."
       );
       await fetchRequests();
+      if (action === "complete") {
+        router.push(`/team/${ownedScrimTeamId}/dashboard?scrim_id=${request.id}`);
+      }
     } catch (requestError) {
       console.error(`Failed to ${action} scrim request`, requestError);
       setActionError(requestError.message || `Something went wrong while trying to ${action} that request.`);
@@ -521,6 +551,7 @@ export default function RequestsPage() {
                 key={request.id}
                 onAccept={(selectedRequest) => updateRequestStatus(selectedRequest, "accept")}
                 onCancel={(selectedRequest) => updateRequestStatus(selectedRequest, "cancel")}
+                onComplete={(selectedRequest) => updateRequestStatus(selectedRequest, "complete")}
                 onDecline={(selectedRequest) => updateRequestStatus(selectedRequest, "decline")}
                 perspective={activeTab}
                 request={request}

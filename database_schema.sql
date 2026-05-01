@@ -86,6 +86,36 @@ create table if not exists public.scrim_requests (
   check (matched_team_id is null or matched_team_id <> posting_team_id)
 );
 
+create table if not exists public.team_match_reviews (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  scrim_request_id uuid references public.scrim_requests(id) on delete set null,
+  scrim_game_number integer not null default 1 check (scrim_game_number >= 1),
+  series_game_count integer,
+  created_by uuid not null references auth.users(id) on delete cascade,
+  game_title text not null,
+  match_result text,
+  final_score text,
+  team_score integer,
+  opponent_score integer,
+  opponent_name text,
+  map_or_mode text,
+  played_at timestamptz,
+  screenshot_url text,
+  team_comp jsonb not null default '[]'::jsonb,
+  opponent_comp jsonb not null default '[]'::jsonb,
+  team_stats jsonb not null default '{}'::jsonb,
+  opponent_stats jsonb not null default '{}'::jsonb,
+  player_rows jsonb not null default '[]'::jsonb,
+  opponent_rows jsonb not null default '[]'::jsonb,
+  notes text,
+  parser_status text not null default 'manual',
+  parser_confidence numeric,
+  manual_edit_required boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists users_org_id_idx on public.users(org_id);
 create index if not exists organizations_org_admin_id_idx on public.organizations(org_admin_id);
 create index if not exists teams_org_id_idx on public.teams(org_id);
@@ -93,3 +123,7 @@ create index if not exists teams_game_title_region_idx on public.teams(game_titl
 create index if not exists scrim_requests_posting_team_id_idx on public.scrim_requests(posting_team_id);
 create index if not exists scrim_requests_matched_team_id_idx on public.scrim_requests(matched_team_id);
 create index if not exists scrim_requests_board_filter_idx on public.scrim_requests(game_title, status, scheduled_at, expires_at);
+create index if not exists team_match_reviews_team_id_played_at_idx on public.team_match_reviews(team_id, played_at desc);
+create unique index if not exists team_match_reviews_team_scrim_game_unique_idx
+  on public.team_match_reviews(team_id, scrim_request_id, scrim_game_number)
+  where scrim_request_id is not null;

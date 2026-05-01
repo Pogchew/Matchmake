@@ -181,6 +181,7 @@ export default function ScrimDetailPage() {
   const [isCancellingListing, setIsCancellingListing] = useState(false);
   const [editError, setEditError] = useState("");
   const [editSuccess, setEditSuccess] = useState("");
+  const [isCompletingScrim, setIsCompletingScrim] = useState(false);
 
   const fetchScrim = useCallback(async ({ showLoading = false } = {}) => {
     if (!id) return null;
@@ -795,6 +796,63 @@ export default function ScrimDetailPage() {
     }
   }
 
+  async function handleCompleteScrim() {
+    if (!scrim || !isConfirmedParticipant) {
+      setRequestError("You can only end confirmed scrims involving your own team.");
+      return;
+    }
+
+    const ownedScrimTeamId = userTeamIds.includes(scrim.posting_team_id)
+      ? scrim.posting_team_id
+      : userTeamIds.includes(scrim.matched_team_id)
+        ? scrim.matched_team_id
+        : "";
+
+    if (!ownedScrimTeamId) {
+      setRequestError("We could not find your team for this scrim.");
+      return;
+    }
+
+    const confirmed = window.confirm("Mark this scrim as played and open the post-game dashboard?");
+    if (!confirmed) return;
+
+    setIsCompletingScrim(true);
+    setRequestError("");
+    setRequestSuccess("");
+
+    try {
+      const { data: updatedScrim, error: updateError } = await supabase
+        .from("scrim_requests")
+        .update({
+          status: "completed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", scrim.id)
+        .eq("status", "confirmed")
+        .select("id, status")
+        .maybeSingle();
+
+      if (updateError) {
+        console.error("Failed to complete scrim", updateError);
+        setRequestError(updateError.message || "We could not mark this scrim as played.");
+        return;
+      }
+
+      if (!updatedScrim) {
+        setRequestError("This scrim may have changed and could not be ended.");
+        await fetchScrim();
+        return;
+      }
+
+      router.push(`/team/${ownedScrimTeamId}/dashboard?scrim_id=${scrim.id}`);
+    } catch (completeError) {
+      console.error("Failed to complete scrim", completeError);
+      setRequestError(completeError.message || "Something went wrong while ending this scrim.");
+    } finally {
+      setIsCompletingScrim(false);
+    }
+  }
+
   // ── render ──────────────────────────────────────────────────────────────────
   return (
     <div className="bg-background text-on-background min-h-screen">
@@ -925,13 +983,24 @@ export default function ScrimDetailPage() {
           {/* ── CTA ───────────────────────────────────────────────── */}
           <section className="space-y-md">
             {isConfirmedParticipant ? (
-              <Link
-                className="w-full bg-primary text-on-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
-                href={`/scrims/${scrim.id}/chat`}
-              >
-                <MaterialSymbol fill>chat_bubble</MaterialSymbol>
-                Open Chat
-              </Link>
+              <div className="grid gap-sm md:grid-cols-2">
+                <button
+                  className="w-full bg-[#1B5E20] text-white rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isCompletingScrim}
+                  onClick={handleCompleteScrim}
+                  type="button"
+                >
+                  <MaterialSymbol fill>flag</MaterialSymbol>
+                  {isCompletingScrim ? "Ending..." : "Mark Played"}
+                </button>
+                <Link
+                  className="w-full bg-primary text-on-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
+                  href={`/scrims/${scrim.id}/chat`}
+                >
+                  <MaterialSymbol fill>chat_bubble</MaterialSymbol>
+                  Open Chat
+                </Link>
+              </div>
             ) : isOwnListing && isOpen ? (
               <form
                 className="bg-surface-container-lowest rounded-xl p-md border border-surface-container-highest space-y-md"

@@ -3,7 +3,6 @@ export const GAME_OPTIONS = [
   "Counter-Strike 2",
   "League of Legends",
   "Rocket League",
-  "Overwatch",
   "Overwatch 2",
   "Marvel Rivals",
   "Deadlock",
@@ -35,17 +34,6 @@ export const GAME_RANKS = {
     "Champion",
     "Grand Champion",
     "Supersonic Legend",
-  ],
-  Overwatch: [
-    "Bronze",
-    "Silver",
-    "Gold",
-    "Platinum",
-    "Diamond",
-    "Master",
-    "Grandmaster",
-    "Champion",
-    "Top 500",
   ],
   "Overwatch 2": [
     "Bronze",
@@ -100,7 +88,6 @@ export const DEFAULT_RANK_BY_GAME = {
   "Counter-Strike 2": "Master Guardian",
   "League of Legends": "Emerald",
   "Rocket League": "Champion",
-  Overwatch: "Diamond",
   "Overwatch 2": "Diamond",
   "Marvel Rivals": "Diamond",
   Deadlock: "Emissary",
@@ -109,10 +96,12 @@ export const DEFAULT_RANK_BY_GAME = {
 };
 
 export function getRanksForGame(gameTitle) {
+  if (gameTitle === "Overwatch") return GAME_RANKS["Overwatch 2"];
   return GAME_RANKS[gameTitle] || GAME_RANKS.Valorant;
 }
 
 export function getDefaultRankForGame(gameTitle) {
+  if (gameTitle === "Overwatch") return DEFAULT_RANK_BY_GAME["Overwatch 2"];
   return DEFAULT_RANK_BY_GAME[gameTitle] || getRanksForGame(gameTitle)[0];
 }
 
@@ -126,6 +115,6 @@ export function getDefaultModeForGame(gameTitle) {
 export function getModesForGame(gameTitle) {
   if (gameTitle === "Rocket League") return ["3v3", "2v2", "1v1"];
   if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return ["6v6"];
-  if (gameTitle === "SSBU") return ["1v1"];
+  if (gameTitle === "SSBU") return ["1v1", "2v2", "4v4", "5v5"];
   return ["5v5"];
 }

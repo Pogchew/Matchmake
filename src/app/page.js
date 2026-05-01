@@ -80,6 +80,54 @@ function getRankColor(rank = "") {
   return "#717786";
 }
 
+function getRankIndex(rank, ranks) {
+  if (!rank || !ranks.length) return -1;
+  const normalizedRank = rank.toLowerCase().trim();
+  const exactIndex = ranks.findIndex((rankOption) => normalizedRank === rankOption.toLowerCase());
+
+  if (exactIndex !== -1) return exactIndex;
+
+  return ranks
+    .map((rankOption, index) => ({ index, rankOption }))
+    .sort((first, second) => second.rankOption.length - first.rankOption.length)
+    .find(({ rankOption }) => normalizedRank.includes(rankOption.toLowerCase()))?.index ?? -1;
+}
+
+function getRankRangeLabel(filters, ranks) {
+  if (!ranks.length || filters.gameTitle === "all") return "Choose a game";
+  const minRank = ranks[filters.rankMinIndex] || ranks[0];
+  const maxRank = ranks[filters.rankMaxIndex] || ranks[ranks.length - 1];
+  const isAllRanks = filters.rankMinIndex === 0 && filters.rankMaxIndex === ranks.length - 1;
+  return isAllRanks ? "Any rank matchup" : `${minRank} - ${maxRank}`;
+}
+
+function scrimMatchesRankRange(scrimRequest, filters, ranks) {
+  if (filters.gameTitle === "all" || !ranks.length) return true;
+  if (filters.rankMinIndex === 0 && filters.rankMaxIndex === ranks.length - 1) return true;
+
+  const selectedMin = Math.min(filters.rankMinIndex, filters.rankMaxIndex);
+  const selectedMax = Math.max(filters.rankMinIndex, filters.rankMaxIndex);
+  const postingRankIndex = getRankIndex(scrimRequest.team_rank || scrimRequest.posting_team?.rank_tier, ranks);
+  const opponentMinIndex = getRankIndex(scrimRequest.opponent_rank_min, ranks);
+  const opponentMaxIndex = getRankIndex(scrimRequest.opponent_rank_max, ranks);
+  const rankChecks = [];
+
+  if (postingRankIndex !== -1) {
+    rankChecks.push(postingRankIndex >= selectedMin && postingRankIndex <= selectedMax);
+  }
+
+  if (opponentMinIndex !== -1 || opponentMaxIndex !== -1) {
+    const availableOpponentIndexes = [opponentMinIndex, opponentMaxIndex].filter((index) => index !== -1);
+    const opponentRangeMin = Math.min(...availableOpponentIndexes);
+    const opponentRangeMax = Math.max(...availableOpponentIndexes);
+    rankChecks.push(opponentRangeMax >= selectedMin && opponentRangeMin <= selectedMax);
+  }
+
+  if (!rankChecks.length) return true;
+
+  return rankChecks.some(Boolean);
+}
+
 function abbreviateRank(rank = "") {
   const rankMap = {
     Iron: "Ir",
@@ -435,6 +483,127 @@ function BoardDateFilter({ value, onChange, onClear }) {
   );
 }
 
+function RankRangeFilter({ filters, onChange, ranks }) {
+  const disabled = filters.gameTitle === "all" || ranks.length === 0;
+  const minRank = ranks[filters.rankMinIndex] || ranks[0];
+  const maxRank = ranks[filters.rankMaxIndex] || ranks[ranks.length - 1];
+  const sliderMax = Math.max(ranks.length - 1, 0);
+  const selectedMin = Math.min(filters.rankMinIndex, filters.rankMaxIndex);
+  const selectedMax = Math.max(filters.rankMinIndex, filters.rankMaxIndex);
+  const sliderMinPercent = sliderMax ? (selectedMin / sliderMax) * 100 : 0;
+  const sliderMaxPercent = sliderMax ? (selectedMax / sliderMax) * 100 : 100;
+
+  function handleMinChange(event) {
+    const nextMin = Math.min(Number(event.target.value), selectedMax);
+    onChange({ rankMinIndex: nextMin });
+  }
+
+  function handleMaxChange(event) {
+    const nextMax = Math.max(Number(event.target.value), selectedMin);
+    onChange({ rankMaxIndex: nextMax });
+  }
+
+  return (
+    <section
+      className={`rounded-2xl border px-md py-sm shadow-[0_8px_24px_rgba(0,0,0,0.04)] ${
+        disabled
+          ? "border-outline-variant/20 bg-surface-container-low text-outline"
+          : "border-outline-variant/30 bg-surface-container-lowest"
+      }`}
+    >
+      <div className="flex flex-col gap-sm md:flex-row md:items-center md:justify-between">
+        <div className="min-w-[180px]">
+          <p className="font-label-small text-label-small uppercase tracking-wider text-outline">Rank Window</p>
+          <h3 className="mt-0.5 font-label-bold text-label-bold text-on-surface">
+            {disabled ? "Pick a game first" : getRankRangeLabel(filters, ranks)}
+          </h3>
+        </div>
+
+        {!disabled && (
+          <button
+            className="self-start rounded-full px-sm py-xs font-label-small text-label-small text-primary hover:bg-primary-fixed"
+            onClick={() => onChange({ rankMinIndex: 0, rankMaxIndex: sliderMax })}
+            type="button"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      {disabled ? (
+        <div className="mt-sm flex items-center gap-sm rounded-xl bg-surface-container px-md py-sm font-body-sub text-body-sub">
+          <MaterialSymbol className="text-[20px]">sports_esports</MaterialSymbol>
+          Select a game to unlock its rank filter.
+        </div>
+      ) : (
+        <div className="mt-sm rounded-xl bg-surface-container-low px-md py-sm">
+          <div className="relative pb-lg pt-md">
+            <div className="absolute left-0 right-0 top-[22px] h-2 rounded-full bg-surface-container-high" />
+            <div
+              className="absolute top-[22px] h-2 rounded-full bg-primary"
+              style={{
+                left: `${sliderMinPercent}%`,
+                right: `${100 - sliderMaxPercent}%`,
+              }}
+            />
+            <input
+              aria-label="Minimum rank"
+              className="rank-range-slider absolute left-0 top-0 w-full"
+              max={sliderMax}
+              min={0}
+              onChange={handleMinChange}
+              type="range"
+              value={selectedMin}
+            />
+            <input
+              aria-label="Maximum rank"
+              className="rank-range-slider absolute left-0 top-0 w-full"
+              max={sliderMax}
+              min={0}
+              onChange={handleMaxChange}
+              type="range"
+              value={selectedMax}
+            />
+          </div>
+
+          <div className="mt-xs flex items-start justify-between gap-xs overflow-x-auto pb-xs scrollbar-hide">
+            {ranks.map((rank, index) => {
+              const selected = index >= selectedMin && index <= selectedMax;
+              return (
+                <button
+                  className={`flex min-w-[56px] flex-col items-center gap-1 rounded-lg px-1.5 py-1 text-center font-label-small text-[11px] leading-tight transition-colors ${
+                    selected ? "bg-primary-fixed text-on-primary-fixed" : "text-outline hover:bg-surface-container"
+                  }`}
+                  key={rank}
+                  onClick={() => onChange({ rankMinIndex: index, rankMaxIndex: index })}
+                  type="button"
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${selected ? "bg-primary" : "bg-outline-variant"}`}
+                  />
+                  <span className="max-w-[70px] whitespace-normal break-words">{rank}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between gap-sm font-label-small text-label-small text-on-surface">
+            <div className="min-w-0">
+              <span className="text-outline">Low</span>
+              <strong className="ml-xs">{minRank}</strong>
+            </div>
+            <div className="h-px flex-1 bg-outline-variant" />
+            <div className="min-w-0 text-right">
+              <span className="text-outline">High</span>
+              <strong className="ml-xs">{maxRank}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function parseScheduledAt(dateValue, timeValue) {
   const timeMatch = timeValue.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
   const scheduledAt = new Date(`${dateValue}T00:00:00`);
@@ -635,7 +804,8 @@ export default function ScrimBoardPage() {
   const [boardFilters, setBoardFilters] = useState({
     date: "",
     gameTitle: "all",
-    rank: "all",
+    rankMinIndex: 0,
+    rankMaxIndex: 0,
     time: "all",
   });
   const [postForm, setPostForm] = useState(() => createInitialPostForm());
@@ -652,11 +822,28 @@ export default function ScrimBoardPage() {
     return [];
   }, [boardFilters.gameTitle]);
 
+  useEffect(() => {
+    if (!rankFilterOptions.length) return;
+    setBoardFilters((currentFilters) => {
+      const nextMax = rankFilterOptions.length - 1;
+      if (currentFilters.rankMaxIndex === nextMax) return currentFilters;
+      return {
+        ...currentFilters,
+        rankMinIndex: 0,
+        rankMaxIndex: nextMax,
+      };
+    });
+  }, [rankFilterOptions]);
+
   const visibleScrimRequests = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     return scrimRequests.filter((scrimRequest) => {
       if (!matchesTimeBucket(scrimRequest.scheduled_at, boardFilters.time)) {
+        return false;
+      }
+
+      if (!scrimMatchesRankRange(scrimRequest, boardFilters, rankFilterOptions)) {
         return false;
       }
 
@@ -666,7 +853,7 @@ export default function ScrimBoardPage() {
       return [scrim.team, scrim.org, scrim.region, scrim.game, scrim.rank]
         .some((value) => value.toLowerCase().includes(query));
     });
-  }, [boardFilters.time, scrimRequests, searchQuery]);
+  }, [boardFilters, rankFilterOptions, scrimRequests, searchQuery]);
 
   const scrimSections = useMemo(() => groupScrimsByDate(visibleScrimRequests), [visibleScrimRequests]);
 
@@ -740,10 +927,6 @@ export default function ScrimBoardPage() {
 
       if (boardFilters.gameTitle !== "all") {
         filteredQuery = filteredQuery.eq("game_title", boardFilters.gameTitle);
-      }
-
-      if (boardFilters.rank !== "all") {
-        filteredQuery = filteredQuery.ilike("team_rank", `${boardFilters.rank}%`);
       }
 
       const dateRange = boardFilters.date ? getDayRange(boardFilters.date) : null;
@@ -965,12 +1148,14 @@ export default function ScrimBoardPage() {
 
   function handleBoardFilterChange(event) {
     const { name, value } = event.target;
+    const nextRanks = name === "gameTitle" && value !== "all" ? getRanksForGame(value) : [];
     setBoardFilters((currentFilters) => ({
       ...currentFilters,
       [name]: value,
       ...(name === "gameTitle"
         ? {
-            rank: "all",
+            rankMinIndex: 0,
+            rankMaxIndex: nextRanks.length ? nextRanks.length - 1 : 0,
           }
         : {}),
       ...(name === "date" && value
@@ -978,6 +1163,13 @@ export default function ScrimBoardPage() {
             time: "all",
           }
         : {}),
+    }));
+  }
+
+  function handleRankRangeChange(nextRange) {
+    setBoardFilters((currentFilters) => ({
+      ...currentFilters,
+      ...nextRange,
     }));
   }
 
@@ -1146,24 +1338,6 @@ export default function ScrimBoardPage() {
             </BoardFilterSelect>
 
             <BoardFilterSelect
-              disabled={boardFilters.gameTitle === "all"}
-              icon="military_tech"
-              label="Rank"
-              name="rank"
-              onChange={handleBoardFilterChange}
-              value={boardFilters.rank}
-            >
-              <option value="all">
-                {boardFilters.gameTitle === "all" ? "Pick a game first" : "All ranks"}
-              </option>
-              {rankFilterOptions.map((rank) => (
-                <option key={rank} value={rank}>
-                  {rank}
-                </option>
-              ))}
-            </BoardFilterSelect>
-
-            <BoardFilterSelect
               icon="schedule"
               label="Time"
               name="time"
@@ -1177,6 +1351,12 @@ export default function ScrimBoardPage() {
               ))}
             </BoardFilterSelect>
           </div>
+
+          <RankRangeFilter
+            filters={boardFilters}
+            onChange={handleRankRangeChange}
+            ranks={rankFilterOptions}
+          />
         </div>
 
         {isLoadingScrims ? (

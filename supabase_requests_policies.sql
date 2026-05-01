@@ -10,6 +10,7 @@ drop policy if exists "Authenticated users can read own org scrim requests" on p
 drop policy if exists "Posting org can accept inbound scrim requests" on public.scrim_requests;
 drop policy if exists "Posting org can decline inbound scrim requests" on public.scrim_requests;
 drop policy if exists "Matched org can cancel outbound scrim requests" on public.scrim_requests;
+drop policy if exists "Participant org can complete confirmed scrims" on public.scrim_requests;
 
 create policy "Authenticated users can read own org scrim requests"
   on public.scrim_requests
@@ -112,4 +113,41 @@ create policy "Matched org can cancel outbound scrim requests"
   with check (
     status = 'open'
     and matched_team_id is null
+  );
+
+create policy "Participant org can complete confirmed scrims"
+  on public.scrim_requests
+  for update
+  to authenticated
+  using (
+    status = 'confirmed'
+    and matched_team_id is not null
+    and exists (
+      select 1
+      from public.users participant
+      join public.teams participant_team
+        on participant_team.org_id = participant.org_id
+      where participant.id = auth.uid()
+        and participant.org_id is not null
+        and (
+          participant_team.id = public.scrim_requests.posting_team_id
+          or participant_team.id = public.scrim_requests.matched_team_id
+        )
+    )
+  )
+  with check (
+    status = 'completed'
+    and matched_team_id is not null
+    and exists (
+      select 1
+      from public.users participant
+      join public.teams participant_team
+        on participant_team.org_id = participant.org_id
+      where participant.id = auth.uid()
+        and participant.org_id is not null
+        and (
+          participant_team.id = public.scrim_requests.posting_team_id
+          or participant_team.id = public.scrim_requests.matched_team_id
+        )
+    )
   );

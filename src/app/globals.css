@@ -18,3 +18,43 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.rank-range-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: 44px;
+  pointer-events: none;
+}
+
+.rank-range-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #0058bc;
+  border: 3px solid #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(0, 88, 188, 0.3);
+  cursor: pointer;
+  height: 22px;
+  pointer-events: auto;
+  width: 22px;
+}
+
+.rank-range-slider::-moz-range-thumb {
+  background: #0058bc;
+  border: 3px solid #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(0, 88, 188, 0.3);
+  cursor: pointer;
+  height: 18px;
+  pointer-events: auto;
+  width: 18px;
+}
+
+.rank-range-slider::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.rank-range-slider::-moz-range-track {
+  background: transparent;
+}
