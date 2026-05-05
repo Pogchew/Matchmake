@@ -36,31 +36,18 @@ function groupTeamsByGame(teams) {
   }, {});
 }
 
-function StatusBadge({ status }) {
-  if (status === "open") {
-    return (
-      <div className="bg-primary-fixed-dim/30 border border-primary-fixed-dim p-sm rounded-lg flex items-center gap-xs">
-        <MaterialSymbol className="text-on-primary-fixed text-[16px]">search</MaterialSymbol>
-        <span className="font-label-small text-label-small text-on-primary-fixed">Looking for Scrim</span>
-      </div>
-    );
-  }
-
-  if (["pending", "matched", "confirmed"].includes(status)) {
-    return (
-      <div className="bg-surface-container p-sm rounded-lg flex items-center gap-xs text-on-surface-variant font-label-small text-label-small">
-        <span className="w-2 h-2 rounded-full bg-tertiary-container animate-pulse" />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-surface-container p-sm rounded-lg flex items-center gap-xs text-on-surface-variant font-label-small text-label-small">
-      <MaterialSymbol className="text-[16px]">schedule</MaterialSymbol>
-      Idle
-    </div>
+function getScrimCounts(scrims) {
+  return scrims.reduce(
+    (counts, scrim) => ({
+      ...counts,
+      [scrim.status]: (counts[scrim.status] || 0) + 1,
+    }),
+    {},
   );
+}
+
+function getTeamScrims(scrims, teamId) {
+  return scrims.filter((scrim) => scrim.posting_team_id === teamId);
 }
 
 function EmptyState({ icon, title, body, action }) {
@@ -70,6 +57,88 @@ function EmptyState({ icon, title, body, action }) {
       <h3 className="font-headline-3 text-headline-3 text-on-surface">{title}</h3>
       <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">{body}</p>
       {action && <div className="mt-md">{action}</div>}
+    </div>
+  );
+}
+
+function ProgramSection({ game, scrims, teams }) {
+  const gameTeamIds = new Set(teams.map((team) => team.id));
+  const gameScrims = scrims.filter((scrim) => gameTeamIds.has(scrim.posting_team_id));
+  const counts = getScrimCounts(gameScrims);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest">
+      <div className="flex flex-col gap-sm border-b border-outline-variant/20 bg-surface-container-low px-md py-sm md:flex-row md:items-center md:justify-between">
+        <div>
+          <h4 className="font-headline-3 text-headline-3 text-on-surface">{game}</h4>
+          <p className="font-label-small text-label-small text-on-surface-variant">
+            {teams.length} team{teams.length === 1 ? "" : "s"} in this program
+          </p>
+        </div>
+        <CompactStatusSummary counts={counts} />
+      </div>
+      <div className="divide-y divide-outline-variant/15">
+        {teams.map((team) => (
+          <TeamProgramRow key={team.id} scrims={getTeamScrims(scrims, team.id)} team={team} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CompactStatusSummary({ counts }) {
+  return (
+    <div className="flex flex-wrap gap-xs">
+      <span className="rounded-full bg-primary-fixed px-2 py-1 font-label-small text-[10px] text-on-primary-fixed">
+        {counts.open || 0} open
+      </span>
+      <span className="rounded-full bg-surface-container-high px-2 py-1 font-label-small text-[10px] text-on-surface-variant">
+        {counts.pending || 0} pending
+      </span>
+      <span className="rounded-full bg-surface-container-high px-2 py-1 font-label-small text-[10px] text-on-surface-variant">
+        {counts.confirmed || 0} confirmed
+      </span>
+    </div>
+  );
+}
+
+function TeamProgramRow({ scrims, team }) {
+  const counts = getScrimCounts(scrims);
+  const activeCount = (counts.open || 0) + (counts.pending || 0) + (counts.matched || 0) + (counts.confirmed || 0);
+  const rowAccent = activeCount ? "bg-primary" : "bg-outline-variant";
+
+  return (
+    <Link
+      href={`/team?id=${team.id}`}
+      className="grid gap-sm p-md transition-colors hover:bg-surface-container-low md:grid-cols-[minmax(180px,1.5fr)_repeat(5,minmax(88px,auto))_auto] md:items-center"
+    >
+      <div className="flex min-w-0 items-center gap-sm">
+        <span className={`h-10 w-1 rounded-full ${rowAccent}`} />
+        <div className="min-w-0">
+          <p className="truncate font-label-bold text-label-bold text-on-surface">{team.name}</p>
+          <p className="font-label-small text-label-small text-on-surface-variant">{team.game_title || "Game not set"}</p>
+        </div>
+      </div>
+      <ProgramRowPill label="Mode" value={team.mode || "TBD"} />
+      <ProgramRowPill label="Rank" value={team.rank_tier || "TBD"} />
+      <ProgramRowPill label="Region" value={team.region || "Not set"} />
+      <ProgramRowPill label="Open" value={counts.open || 0} />
+      <ProgramRowPill label="Pending" value={counts.pending || 0} />
+      <div className="flex items-center justify-between gap-sm md:justify-end">
+        <span className="font-label-small text-label-small text-on-surface-variant">
+          Rating {Number(team.scrimgg_rating || 0).toFixed(1)}
+        </span>
+        <MaterialSymbol className="text-primary">arrow_forward</MaterialSymbol>
+      </div>
+    </Link>
+  );
+}
+
+function ProgramRowPill({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-sm rounded-lg bg-surface-container-low px-sm py-xs md:block md:bg-transparent md:px-0 md:py-0">
+      <span className="font-label-small text-[10px] uppercase tracking-wide text-outline md:block">{label}</span>
+      <span className="font-label-bold text-label-small text-on-surface md:block">{value}</span>
     </div>
   );
 }
@@ -96,6 +165,7 @@ export default function OrgPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [setupMessage, setSetupMessage] = useState("");
+  const [selectedGame, setSelectedGame] = useState("All");
 
   useEffect(() => {
     async function fetchOrgDashboard() {
@@ -186,6 +256,8 @@ export default function OrgPage() {
 
   const teamsById = useMemo(() => new Map(teams.map((team) => [team.id, team])), [teams]);
   const teamsByGame = useMemo(() => groupTeamsByGame(teams), [teams]);
+  const activeGames = useMemo(() => Object.keys(teamsByGame).sort((a, b) => a.localeCompare(b)), [teamsByGame]);
+  const visibleProgramGames = selectedGame === "All" ? activeGames : [selectedGame];
   const openScrims = scrims.filter((scrim) => scrim.status === "open").length;
   const upcomingScrims = scrims.filter((scrim) => ["open", "pending", "matched", "confirmed"].includes(scrim.status));
 
@@ -347,11 +419,54 @@ export default function OrgPage() {
                 </div>
               </section>
 
-              <section className="lg:col-span-2 flex flex-col gap-md">
-                <h3 className="font-headline-3 text-headline-3 text-on-surface flex items-center gap-sm">
-                  <MaterialSymbol className="text-primary">swords</MaterialSymbol>
-                  My Teams
-                </h3>
+              <section className="lg:col-span-2 flex flex-col gap-lg">
+                <div className="flex flex-col gap-sm">
+                  <div className="flex flex-col gap-xs md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <h3 className="font-headline-3 text-headline-3 text-on-surface flex items-center gap-sm">
+                        <MaterialSymbol className="text-primary">team_dashboard</MaterialSymbol>
+                        Programs
+                      </h3>
+                      <p className="font-body-sub text-body-sub text-on-surface-variant">
+                        One row per team, grouped by game so larger orgs stay easy to scan.
+                      </p>
+                    </div>
+                    <Link
+                      href="/team/new"
+                      className="inline-flex w-fit items-center gap-xs rounded-lg bg-surface-variant px-md py-sm font-label-bold text-label-bold text-primary hover:bg-surface-container-high"
+                    >
+                      <MaterialSymbol className="text-[18px]">add</MaterialSymbol>
+                      Create Team
+                    </Link>
+                  </div>
+                  <div className="flex flex-wrap gap-xs">
+                    <button
+                      className={`rounded-full px-md py-sm font-label-bold text-label-bold transition-colors ${
+                        selectedGame === "All"
+                          ? "bg-primary text-on-primary"
+                          : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                      }`}
+                      onClick={() => setSelectedGame("All")}
+                      type="button"
+                    >
+                      All active programs
+                    </button>
+                    {activeGames.map((game) => (
+                      <button
+                        className={`rounded-full px-md py-sm font-label-bold text-label-bold transition-colors ${
+                          selectedGame === game
+                            ? "bg-primary text-on-primary"
+                            : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                        }`}
+                        key={game}
+                        onClick={() => setSelectedGame(game)}
+                        type="button"
+                      >
+                        {game} <span className="opacity-70">({teamsByGame[game]?.length || 0})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {teams.length === 0 ? (
                   <EmptyState
                     icon="groups"
@@ -368,59 +483,16 @@ export default function OrgPage() {
                     }
                   />
                 ) : (
-                  Object.entries(teamsByGame).map(([game, gameTeams]) => (
-                    <div key={game} className="flex flex-col gap-sm mb-md">
-                      <h4 className="font-label-bold text-label-bold text-outline uppercase tracking-wider pl-xs">{game}</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-                        {gameTeams.map((team) => {
-                          const teamScrims = scrims.filter((scrim) => scrim.posting_team_id === team.id);
-                          const openTeamScrim = teamScrims.find((scrim) => scrim.status === "open");
-
-                          return (
-                            <Link
-                              key={team.id}
-                              href={`/team?id=${team.id}`}
-                              className="bg-surface-container-lowest p-md rounded-xl border border-outline-variant/30 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.05)] relative overflow-hidden block"
-                            >
-                              <div
-                                className="absolute top-0 left-0 w-1 h-full"
-                                style={{
-                                  background: openTeamScrim ? "#0058bc" : "#c1c6d7",
-                                }}
-                              />
-                              <div className="flex justify-between items-start mb-md">
-                                <div>
-                                  <h5 className="font-headline-2 text-headline-2 text-on-surface leading-tight mb-xs">
-                                    {team.name}
-                                  </h5>
-                                  <div className="flex flex-wrap gap-xs">
-                                    <span className="inline-flex items-center px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-small text-[10px] uppercase tracking-wide">
-                                      {team.rank_tier || "Rank TBD"}
-                                    </span>
-                                    <span className="inline-flex items-center px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-small text-[10px] uppercase tracking-wide">
-                                      {team.mode || "Mode TBD"}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span className="text-outline">
-                                  <MaterialSymbol>more_horiz</MaterialSymbol>
-                                </span>
-                              </div>
-                              <div className="mb-sm flex flex-wrap gap-xs">
-                                <span className="font-label-small text-label-small text-on-surface-variant">
-                                  {team.region || "Region not set"}
-                                </span>
-                                <span className="font-label-small text-label-small text-outline">
-                                  Rating {Number(team.scrimgg_rating || 0).toFixed(1)}
-                                </span>
-                              </div>
-                              <StatusBadge status={openTeamScrim?.status || "idle"} />
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))
+                  <div className="grid gap-md">
+                    {visibleProgramGames.map((game) => (
+                      <ProgramSection
+                        game={game}
+                        key={game}
+                        scrims={scrims}
+                        teams={teamsByGame[game] || []}
+                      />
+                    ))}
+                  </div>
                 )}
               </section>
             </div>

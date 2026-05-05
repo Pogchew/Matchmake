@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "fetch:mr-costumes": "node scripts/fetch-marvel-rivals-costumes.mjs",
+    "download:mr-icons": "node scripts/download-marvel-rivals-costume-icons.mjs",
     "lint": "eslint"
   },
   "dependencies": {

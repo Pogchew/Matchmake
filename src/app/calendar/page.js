@@ -15,6 +15,7 @@ const MONTHS = [
 const DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const STATUS_FILTERS = ["all", "open", "pending", "confirmed"];
 const ACTIVE_STATUSES = ["open", "pending", "confirmed"];
+const SCRIM_DURATION_HOURS = 3;
 
 function getDateInputValue(date = new Date()) {
   const year = date.getFullYear();
@@ -47,6 +48,88 @@ function formatScrimTime(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatIcsDate(value) {
+  return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function escapeIcsText(value = "") {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
+function getScrimEndAt(value) {
+  const start = new Date(value);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start);
+  end.setHours(end.getHours() + SCRIM_DURATION_HOURS);
+  return end;
+}
+
+function buildCalendarEventSummary(scrim) {
+  const postingTeam = scrim.posting_team?.name || "Team TBD";
+  const matchedTeam = scrim.matched_team?.name || "Awaiting opponent";
+  return `Matchmake Scrim: ${postingTeam} vs ${matchedTeam}`;
+}
+
+function buildCalendarEventDescription(scrim) {
+  const rank = formatRankRange(scrim);
+  const region = scrim.posting_team?.region || scrim.matched_team?.region || "Region TBD";
+  return [
+    `Game: ${scrim.game_title || "Game TBD"}`,
+    `Status: ${scrim.status || "scheduled"}`,
+    `Looking for: ${rank}`,
+    `Region: ${region}`,
+    `Matchmake: ${typeof window !== "undefined" ? `${window.location.origin}/scrims/${scrim.id}` : ""}`,
+  ].join("\\n");
+}
+
+function buildIcsCalendar(scrims = []) {
+  const now = formatIcsDate(new Date());
+  const events = scrims
+    .filter((scrim) => scrim.scheduled_at)
+    .map((scrim) => {
+      const start = new Date(scrim.scheduled_at);
+      const end = getScrimEndAt(scrim.scheduled_at) || new Date(start.getTime() + SCRIM_DURATION_HOURS * 60 * 60 * 1000);
+      return [
+        "BEGIN:VEVENT",
+        `UID:matchmake-${scrim.id}@matchmake`,
+        `DTSTAMP:${now}`,
+        `DTSTART:${formatIcsDate(start)}`,
+        `DTEND:${formatIcsDate(end)}`,
+        `SUMMARY:${escapeIcsText(buildCalendarEventSummary(scrim))}`,
+        `DESCRIPTION:${escapeIcsText(buildCalendarEventDescription(scrim))}`,
+        `CATEGORIES:${escapeIcsText(scrim.game_title || "Scrim")}`,
+        "END:VEVENT",
+      ].join("\r\n");
+    });
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Matchmake//Scrim Calendar//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:Matchmake Scrims",
+    ...events,
+    "END:VCALENDAR",
+  ].join("\r\n");
+}
+
+function downloadTextFile(filename, content, type = "text/calendar;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function formatRankRange(scrim) {
@@ -129,6 +212,11 @@ export default function CalendarPage() {
   const [scrims, setScrims] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isIntegrationOpen, setIsIntegrationOpen] = useState(false);
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
+  const [discordMessage, setDiscordMessage] = useState("");
+  const [discordError, setDiscordError] = useState("");
+  const [isSendingDiscord, setIsSendingDiscord] = useState(false);
   const localTimeZoneLabel = getLocalTimeZoneLabel();
 
   useEffect(() => {
@@ -275,6 +363,14 @@ export default function CalendarPage() {
   });
   const pendingCount = monthScrims.filter((scrim) => scrim.status === "pending").length;
   const confirmedCount = monthScrims.filter((scrim) => scrim.status === "confirmed").length;
+  const upcomingExportScrims = filteredScrims.filter((scrim) => scrim.scheduled_at && new Date(scrim.scheduled_at) >= new Date());
+  const weekEnd = new Date();
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const weeklyDiscordScrims = filteredScrims.filter((scrim) => {
+    if (!scrim.scheduled_at) return false;
+    const scheduledAt = new Date(scrim.scheduled_at);
+    return scheduledAt >= new Date() && scheduledAt <= weekEnd;
+  });
 
   const changeMonth = (dir) => {
     const next = new Date(current);
@@ -294,13 +390,60 @@ export default function CalendarPage() {
   const selectedMonth = selected.getMonth();
   const dayLabel = `${DAYS_FULL[selected.getDay()]}, ${MONTHS[selectedMonth].slice(0, 3)} ${selectedDayNumber}`;
 
+  const exportIcs = (target) => {
+    if (upcomingExportScrims.length === 0) {
+      setDiscordError("");
+      setDiscordMessage("No upcoming scrims to export.");
+      return;
+    }
+
+    const ics = buildIcsCalendar(upcomingExportScrims);
+    downloadTextFile(`matchmake-${target}-scrims.ics`, ics);
+    setDiscordError("");
+    setDiscordMessage(`Downloaded ${upcomingExportScrims.length} upcoming scrim ${upcomingExportScrims.length === 1 ? "event" : "events"} for ${target === "google" ? "Google Calendar" : "Outlook"}.`);
+  };
+
+  const sendDiscordDigest = async () => {
+    setDiscordError("");
+    setDiscordMessage("");
+    setIsSendingDiscord(true);
+
+    const digestScrims = weeklyDiscordScrims.map((scrim) => ({
+      id: scrim.id,
+      scheduled_at: scrim.scheduled_at,
+      game_title: scrim.game_title,
+      status: scrim.status,
+      postingTeamName: scrim.posting_team?.name,
+      opponentName: scrim.matched_team?.name || "Awaiting opponent",
+    }));
+
+    try {
+      const response = await fetch("/api/calendar/discord-digest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhookUrl: discordWebhookUrl,
+          scrims: digestScrims,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not send Discord digest.");
+      }
+
+      setDiscordMessage(`Sent ${digestScrims.length} scrim ${digestScrims.length === 1 ? "event" : "events"} to Discord.`);
+    } catch (error) {
+      console.error("Failed to send Discord digest", error);
+      setDiscordError(error.message || "Could not send Discord digest.");
+    } finally {
+      setIsSendingDiscord(false);
+    }
+  };
+
   return (
     <>
-      <TopBar right={
-        <button className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors active:scale-95">
-          <MaterialSymbol className="text-primary">settings</MaterialSymbol>
-        </button>
-      } />
+      <TopBar />
 
       <main className="pt-lg pb-[100px] px-margin-mobile max-w-[1200px] mx-auto">
         <div className="mb-md flex flex-col gap-sm md:flex-row md:items-end md:justify-between">
@@ -352,7 +495,100 @@ export default function CalendarPage() {
               {filter === "all" ? "All" : filter}
             </button>
           ))}
+          <button
+            className={`inline-flex items-center gap-xs rounded-full px-md py-sm font-label-bold text-label-bold transition-colors ${
+              isIntegrationOpen
+                ? "bg-primary text-on-primary"
+                : "bg-surface-container-high text-on-surface-variant hover:bg-surface-variant"
+            }`}
+            onClick={() => setIsIntegrationOpen((open) => !open)}
+            type="button"
+          >
+            <MaterialSymbol className="text-[18px]">ios_share</MaterialSymbol>
+            Export
+          </button>
         </div>
+
+        {isIntegrationOpen && (
+          <section className="mb-md rounded-xl border border-surface-variant/50 bg-surface-container-lowest p-md shadow-[0_8px_30px_0_rgba(0,0,0,0.04)]">
+            <div className="mb-md flex flex-col gap-xs sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="font-headline-3 text-headline-3 text-on-surface">Calendar integrations</h2>
+                <p className="font-body-sub text-body-sub text-on-surface-variant">
+                  Export upcoming scrims off-platform or post this week’s schedule into Discord.
+                </p>
+              </div>
+              <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-label-small text-primary">
+                {upcomingExportScrims.length} upcoming
+              </span>
+            </div>
+
+            <div className="grid gap-md lg:grid-cols-3">
+              <button
+                className="flex items-center gap-sm rounded-xl border border-outline-variant/25 bg-surface-container-low p-md text-left transition-colors hover:bg-primary-fixed disabled:opacity-50"
+                disabled={upcomingExportScrims.length === 0}
+                onClick={() => exportIcs("google")}
+                type="button"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-on-primary">
+                  <MaterialSymbol>calendar_add_on</MaterialSymbol>
+                </div>
+                <div>
+                  <p className="font-label-bold text-label-bold text-on-surface">Google Calendar</p>
+                  <p className="font-label-small text-label-small text-on-surface-variant">Download an importable .ics file</p>
+                </div>
+              </button>
+
+              <button
+                className="flex items-center gap-sm rounded-xl border border-outline-variant/25 bg-surface-container-low p-md text-left transition-colors hover:bg-primary-fixed disabled:opacity-50"
+                disabled={upcomingExportScrims.length === 0}
+                onClick={() => exportIcs("outlook")}
+                type="button"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-on-primary">
+                  <MaterialSymbol>event_upcoming</MaterialSymbol>
+                </div>
+                <div>
+                  <p className="font-label-bold text-label-bold text-on-surface">Microsoft Outlook</p>
+                  <p className="font-label-small text-label-small text-on-surface-variant">Download an importable .ics file</p>
+                </div>
+              </button>
+
+              <div className="rounded-xl border border-outline-variant/25 bg-surface-container-low p-md">
+                <div className="mb-sm flex items-center gap-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-tertiary text-on-primary">
+                    <MaterialSymbol>forum</MaterialSymbol>
+                  </div>
+                  <div>
+                    <p className="font-label-bold text-label-bold text-on-surface">Discord weekly digest</p>
+                    <p className="font-label-small text-label-small text-on-surface-variant">{weeklyDiscordScrims.length} scrims this week</p>
+                  </div>
+                </div>
+                <input
+                  className="mb-sm w-full rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-body-sub text-body-sub text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
+                  onChange={(event) => setDiscordWebhookUrl(event.target.value)}
+                  placeholder="Discord webhook URL"
+                  type="password"
+                  value={discordWebhookUrl}
+                />
+                <button
+                  className="w-full rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:opacity-60"
+                  disabled={isSendingDiscord || !discordWebhookUrl.trim()}
+                  onClick={sendDiscordDigest}
+                  type="button"
+                >
+                  {isSendingDiscord ? "Sending..." : "Post This Week"}
+                </button>
+              </div>
+            </div>
+
+            {(discordMessage || discordError) && (
+              <div className={`mt-md rounded-lg px-md py-sm font-body-sub text-body-sub ${discordError ? "bg-error-container text-on-error-container" : "bg-primary-fixed text-on-primary-fixed"}`}>
+                {discordError || discordMessage}
+              </div>
+            )}
+          </section>
+        )}
 
         {isLoading ? (
           <div className="rounded-xl border border-surface-variant/50 bg-surface-container-lowest p-md font-body-sub text-body-sub text-on-surface-variant">

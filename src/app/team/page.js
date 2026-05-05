@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,6 +11,11 @@ import { supabase } from "@/lib/supabase";
 import { getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
 
 const SCRIM_DURATION_HOURS = 3;
+const STATS_TIMELINE_OPTIONS = [
+  { label: "Last 5", value: "last5", limit: 5 },
+  { label: "Last 20", value: "last20", limit: 20 },
+  { label: "All time", value: "all", limit: null },
+];
 const REVIEW_PICK_FIELDS = {
   "League of Legends": { field: "champion", label: "Champion" },
   Valorant: { field: "agent", label: "Agent" },
@@ -606,8 +613,6 @@ function TeamPageContent() {
   }
 
   const teamInitials = getInitials(selectedTeam?.name || "Team");
-  const historyCount = gameHistoryItems.length;
-  const confirmedScrims = selectedTeamScrims.filter((scrim) => scrim.status === "confirmed" || scrim.status === "completed").length;
 
   return (
     <TeamPageShell>
@@ -807,19 +812,6 @@ function TeamPageContent() {
                   </button>
                 </section>
 
-                <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
-                  <h2 className="font-headline-3 text-on-surface mb-md">Team Stats</h2>
-                  <div className="grid grid-cols-2 gap-sm">
-                    <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
-                      <span className="font-editorial-large text-editorial-large text-primary">{historyCount}</span>
-                      <span className="font-label-small text-label-small text-on-surface-variant">Game History</span>
-                    </div>
-                    <div className="bg-surface-container-low p-sm rounded-lg flex flex-col items-center justify-center text-center">
-                      <span className="font-editorial-large text-editorial-large text-secondary">{confirmedScrims}</span>
-                      <span className="font-label-small text-label-small text-on-surface-variant">Confirmed</span>
-                    </div>
-                  </div>
-                </section>
               </div>
 
               <div className="lg:col-span-2 flex flex-col gap-lg">
@@ -909,8 +901,6 @@ function TeamPageShell({ children }) {
 }
 
 function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId }) {
-  const isValorant = gameTitle === "Valorant";
-
   return (
     <section className="mb-lg rounded-xl border border-surface-variant bg-surface-container-lowest p-md shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
       <div className="mb-md flex flex-col gap-xs sm:flex-row sm:items-end sm:justify-between">
@@ -933,18 +923,7 @@ function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId }) {
           )}
         </div>
       </div>
-      {isValorant ? (
-        <ValorantStatsTabs reviews={reviews} />
-      ) : (
-        <div className="grid grid-cols-2 gap-sm md:grid-cols-4">
-          {kpis.map((kpi) => (
-            <div key={kpi.label} className="rounded-xl border border-outline-variant/25 bg-surface-container-low p-md">
-              <p className="font-label-small text-label-small text-on-surface-variant">{kpi.label}</p>
-              <p className="mt-xs font-headline-2 text-headline-2 text-primary">{kpi.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <GameStatsTabs fallbackKpis={kpis} gameTitle={gameTitle} reviews={reviews} />
     </section>
   );
 }
@@ -1003,11 +982,397 @@ function formatPercent(value) {
   return Number.isFinite(value) ? `${Math.round(value)}%` : "—";
 }
 
+function splitFeatureValue(value = "") {
+  if (!value || value === "—") return { primary: "—", meta: "" };
+  const [primary, ...metaParts] = String(value).split(" · ");
+  return {
+    primary: primary || "—",
+    meta: metaParts.join(" · "),
+  };
+}
+
+const LEAGUE_CHAMPION_FILE_ALIASES = {
+  aurelionsol: "AurelionSol",
+  belveth: "Belveth",
+  chogath: "Chogath",
+  drmundo: "DrMundo",
+  jarvaniv: "JarvanIV",
+  kaisa: "Kaisa",
+  khazix: "Khazix",
+  kogmaw: "KogMaw",
+  ksante: "KSante",
+  leesin: "LeeSin",
+  masteryi: "MasterYi",
+  missfortune: "MissFortune",
+  monkeyking: "MonkeyKing",
+  nunuandwillump: "Nunu",
+  reksai: "RekSai",
+  renataglasc: "Renata",
+  tahmkench: "TahmKench",
+  twistedfate: "TwistedFate",
+  velkoz: "Velkoz",
+  wukong: "MonkeyKing",
+  xinzhao: "XinZhao",
+};
+
+function compactPickKey(value = "") {
+  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function toChampionFileStem(name = "") {
+  const key = compactPickKey(name);
+  if (!key) return "";
+  return LEAGUE_CHAMPION_FILE_ALIASES[key] || key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+const VALORANT_AGENT_FILE_ALIASES = {
+  kayo: "kayo",
+  "kay/o": "kayo",
+};
+
+function toAgentFileStem(name = "") {
+  const key = String(name).toLowerCase().replace(/[^a-z0-9/]/g, "");
+  if (!key) return "";
+  return VALORANT_AGENT_FILE_ALIASES[key] || key.replace(/\//g, "");
+}
+
+const MARVEL_HERO_FILE_ALIASES = {
+  cloakdagger: "cloak-and-dagger",
+  cloakanddagger: "cloak-and-dagger",
+  doctorstrange: "doctor-strange",
+  humantorch: "human-torch",
+  invisiblewoman: "invisible-woman",
+  ironfist: "iron-fist",
+  ironman: "iron-man",
+  jeff: "jeff-the-land-shark",
+  jeffthelandshark: "jeff-the-land-shark",
+  misterfantastic: "mister-fantastic",
+  moonknight: "moon-knight",
+  peniparker: "peni-parker",
+  rocketraccoon: "rocket-raccoon",
+  scarletwitch: "scarlet-witch",
+  spiderman: "spider-man",
+  starlord: "star-lord",
+  thepunisher: "the-punisher",
+  thething: "the-thing",
+  wintersoldier: "winter-soldier",
+};
+
+function toMarvelHeroFileStem(name = "") {
+  const key = compactPickKey(name);
+  if (!key) return "";
+  return MARVEL_HERO_FILE_ALIASES[key] || String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function getPickImagePath(gameTitle, pick) {
+  if (!pick) return "";
+  if (gameTitle === "League of Legends") return `/lol/champions/${toChampionFileStem(pick)}.png`;
+  if (gameTitle === "Valorant") return `/valorant/agents/${toAgentFileStem(pick)}.png`;
+  if (gameTitle === "Marvel Rivals") return `/marvel-rivals/heroes/${toMarvelHeroFileStem(pick)}_avatar.png`;
+  return "";
+}
+
+function splitCompPicks(value = "") {
+  const { primary, meta } = splitFeatureValue(value);
+  if (primary === "—") return { picks: [], meta };
+  return {
+    picks: primary.split(" / ").map((pick) => pick.trim()).filter(Boolean),
+    meta,
+  };
+}
+
+function formatPoolHeading(label = "Map") {
+  if (label.includes("/")) return "Map and mode notes";
+  if (label.toLowerCase().includes("mode")) return "Mode notes";
+  if (label.toLowerCase().includes("stage")) return "Stage notes";
+  return `${label} notes`;
+}
+
 function getWinRate(wins, total) {
   return total ? (wins / total) * 100 : null;
 }
 
-function buildValorantAggregateStats(reviews = []) {
+function parseDurationMinutes(value) {
+  if (!value) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const parts = String(value).split(":").map((part) => Number(part));
+  if (parts.length === 2 && parts.every(Number.isFinite)) return parts[0] + parts[1] / 60;
+  const number = Number(String(value).replace(/[^\d.]/g, ""));
+  return Number.isFinite(number) ? number : null;
+}
+
+function getReviewDurationMinutes(review) {
+  return parseDurationMinutes(review?.team_stats?.game_length || review?.team_stats?.duration);
+}
+
+function averageByOutcome(reviews, outcome, getValue) {
+  return averageValues(reviews
+    .filter((review) => getReviewOutcome(review) === outcome)
+    .map(getValue)
+    .filter((value) => value !== null));
+}
+
+function buildLeagueInsights(sortedReviews = []) {
+  const chronologicalReviews = [...sortedReviews].reverse();
+  const getDiff = (review, statKeys, rowKeys) => {
+    const ours = getReviewStat(review, statKeys, rowKeys);
+    const theirs = getReviewStat(review, statKeys, rowKeys, { side: "opponent" });
+    return ours === null || theirs === null ? null : ours - theirs;
+  };
+  const trend = (statKeys, rowKeys) => chronologicalReviews
+    .map((review) => getDiff(review, statKeys, rowKeys))
+    .filter((value) => value !== null)
+    .slice(-6);
+  const roles = ["Top", "Jungle", "Mid", "ADC", "Support"];
+  const roleStats = roles.map((role) => {
+    const rows = sortedReviews.flatMap((review) => getReviewRows(review).filter((row) => row.role === role));
+    const kills = averageValues(rows.map((row) => normalizeExtractedNumber(row.k ?? row.kills)).filter((value) => value !== null));
+    const deaths = averageValues(rows.map((row) => normalizeExtractedNumber(row.d ?? row.deaths)).filter((value) => value !== null));
+    const assists = averageValues(rows.map((row) => normalizeExtractedNumber(row.a ?? row.assists)).filter((value) => value !== null));
+    const gold = averageValues(rows.map((row) => normalizeExtractedNumber(row.gold)).filter((value) => value !== null), 0);
+    const damage = averageValues(rows.map((row) => normalizeExtractedNumber(row.damage_to_champions)).filter((value) => value !== null), 0);
+    const kda = Number.isFinite(deaths) && deaths > 0 && Number.isFinite(kills) && Number.isFinite(assists)
+      ? Number(((kills + assists) / deaths).toFixed(2))
+      : null;
+
+    return { role, kda, gold, damage };
+  });
+
+  return {
+    trends: [
+      { label: "Kill Diff", values: trend(["total_kills", "team_kills"], ["kills", "k"]) },
+      { label: "Gold Diff", values: trend("total_gold", "gold") },
+      { label: "Damage Diff", values: trend("total_damage_to_champions", "damage_to_champions") },
+      { label: "Death Diff", values: trend(["total_deaths", "team_deaths"], ["deaths", "d"]) },
+    ],
+    roleStats,
+    winLoss: [
+      {
+        label: "Gold Diff",
+        wins: averageByOutcome(sortedReviews, "win", (review) => getDiff(review, "total_gold", "gold")),
+        losses: averageByOutcome(sortedReviews, "loss", (review) => getDiff(review, "total_gold", "gold")),
+      },
+      {
+        label: "Damage Diff",
+        wins: averageByOutcome(sortedReviews, "win", (review) => getDiff(review, "total_damage_to_champions", "damage_to_champions")),
+        losses: averageByOutcome(sortedReviews, "loss", (review) => getDiff(review, "total_damage_to_champions", "damage_to_champions")),
+      },
+      {
+        label: "Deaths",
+        wins: averageByOutcome(sortedReviews, "win", (review) => getReviewStat(review, ["total_deaths", "team_deaths"], ["deaths", "d"])),
+        losses: averageByOutcome(sortedReviews, "loss", (review) => getReviewStat(review, ["total_deaths", "team_deaths"], ["deaths", "d"])),
+      },
+    ],
+    avgGameLength: averageValues(sortedReviews.map(getReviewDurationMinutes).filter((value) => value !== null)),
+  };
+}
+
+const GAME_ANALYTICS_CONFIG = {
+  Valorant: {
+    title: "Valorant Stats Dashboard",
+    scoreDiffLabel: "Average Round Differential",
+    pickField: "agent",
+    pickLabel: "Agent",
+    compLabel: "5-Agent Comp",
+    mapLabel: "Map",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Average Kills", statKeys: ["total_kills", "team_kills"], rowKeys: ["kills", "k"] },
+      { label: "Average Deaths", statKeys: ["total_deaths", "team_deaths"], rowKeys: ["deaths", "d"] },
+      { label: "Average Assists", statKeys: ["total_assists", "team_assists"], rowKeys: ["assists", "a"] },
+      { label: "Combat Score", statKeys: "average_acs", rowKeys: ["avg_combat_score", "acs"], average: true },
+      { label: "Econ Rating", statKeys: "average_econ_rating", rowKeys: "econ_rating", average: true },
+    ],
+    impact: [
+      { label: "First Bloods", statKeys: "total_first_bloods", rowKeys: "first_bloods" },
+      { label: "Plants", statKeys: "total_plants", rowKeys: "plants" },
+      { label: "Defuses", statKeys: "total_defuses", rowKeys: "defuses" },
+    ],
+    differentials: [
+      { label: "Average First Blood Differential", statKeys: "total_first_bloods", rowKeys: "first_bloods" },
+    ],
+  },
+  "League of Legends": {
+    title: "League Stats Dashboard",
+    scoreDiffLabel: "Average Kill Differential",
+    pickField: "champion",
+    pickLabel: "Champion",
+    compLabel: "Champion Comp",
+    mapLabel: "Context",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Average Kills", statKeys: ["total_kills", "team_kills"], rowKeys: ["kills", "k"] },
+      { label: "Average Deaths", statKeys: ["total_deaths", "team_deaths"], rowKeys: ["deaths", "d"] },
+      { label: "Average Assists", statKeys: ["total_assists", "team_assists"], rowKeys: ["assists", "a"] },
+      { label: "Gold", statKeys: "total_gold", rowKeys: "gold" },
+      { label: "Damage to Champions", statKeys: "total_damage_to_champions", rowKeys: "damage_to_champions" },
+    ],
+    impact: [
+      { label: "Gold Differential", statKeys: "total_gold", rowKeys: "gold", differentialOnly: true },
+      { label: "Damage Differential", statKeys: "total_damage_to_champions", rowKeys: "damage_to_champions", differentialOnly: true },
+    ],
+    differentials: [
+      { label: "Average Gold Differential", statKeys: "total_gold", rowKeys: "gold" },
+      { label: "Average Damage Differential", statKeys: "total_damage_to_champions", rowKeys: "damage_to_champions" },
+    ],
+  },
+  "Counter-Strike 2": {
+    title: "Counter-Strike Stats Dashboard",
+    scoreDiffLabel: "Average Round Differential",
+    pickField: "role",
+    pickLabel: "Role",
+    compLabel: "Role Mix",
+    mapLabel: "Map",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Average Kills", statKeys: ["total_kills", "team_kills"], rowKeys: ["kills", "k"] },
+      { label: "Average Deaths", statKeys: ["total_deaths", "team_deaths"], rowKeys: ["deaths", "d"] },
+      { label: "Average Assists", statKeys: ["total_assists", "team_assists"], rowKeys: ["assists", "a"] },
+      { label: "Average ADR", statKeys: "average_adr", rowKeys: "adr", average: true },
+      { label: "Average HS%", statKeys: "average_hs_percent", rowKeys: ["hs_percent", "hs"], average: true },
+    ],
+    impact: [
+      { label: "MVPs / Stars", statKeys: "total_mvps", rowKeys: ["mvps", "stars"] },
+      { label: "Score / Rating", statKeys: "score", rowKeys: ["score", "rating"], average: true },
+    ],
+  },
+  "Rocket League": {
+    title: "Rocket League Stats Dashboard",
+    scoreDiffLabel: "Average Goal Differential",
+    pickField: "car",
+    pickLabel: "Car / Role",
+    compLabel: "Lineup",
+    mapLabel: "Arena / Mode",
+    betterWhenLower: [],
+    output: [
+      { label: "Goals", statKeys: "goals", rowKeys: "goals" },
+      { label: "Assists", statKeys: "assists", rowKeys: "assists" },
+      { label: "Saves", statKeys: "saves", rowKeys: "saves" },
+      { label: "Shots", statKeys: "shots", rowKeys: "shots" },
+      { label: "Scoreboard Score", statKeys: "scoreboard_score", rowKeys: "score" },
+    ],
+    impact: [
+      { label: "Demos", statKeys: "demos", rowKeys: "demos" },
+      { label: "Shot Differential", statKeys: "shots", rowKeys: "shots", differentialOnly: true },
+    ],
+  },
+  "Overwatch 2": {
+    title: "Overwatch 2 Stats Dashboard",
+    scoreDiffLabel: "Average Score Differential",
+    pickField: "hero",
+    pickLabel: "Hero",
+    compLabel: "Hero Comp",
+    mapLabel: "Map / Mode",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Eliminations", statKeys: "eliminations", rowKeys: ["eliminations", "kills"] },
+      { label: "Average Deaths", statKeys: "deaths", rowKeys: "deaths" },
+      { label: "Assists", statKeys: "assists", rowKeys: "assists" },
+      { label: "Damage", statKeys: "damage", rowKeys: "damage" },
+      { label: "Healing", statKeys: "healing", rowKeys: "healing" },
+      { label: "Mitigation", statKeys: "mitigation", rowKeys: ["mitigation", "damage_blocked"] },
+    ],
+    impact: [
+      { label: "Damage Differential", statKeys: "damage", rowKeys: "damage", differentialOnly: true },
+      { label: "Healing Differential", statKeys: "healing", rowKeys: "healing", differentialOnly: true },
+    ],
+  },
+  "Marvel Rivals": {
+    title: "Marvel Rivals Stats Dashboard",
+    scoreDiffLabel: "Average Score Differential",
+    pickField: "hero",
+    pickLabel: "Hero",
+    compLabel: "Hero Comp",
+    mapLabel: "Map / Mode",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Average Kills", statKeys: ["total_kills", "team_kills", "kills"], rowKeys: ["kills", "k"] },
+      { label: "Average Deaths", statKeys: ["total_deaths", "team_deaths", "deaths"], rowKeys: ["deaths", "d"] },
+      { label: "Average Assists", statKeys: ["total_assists", "team_assists", "assists"], rowKeys: ["assists", "a"] },
+      { label: "Final Hits", statKeys: ["total_final_hits", "final_hits"], rowKeys: "final_hits" },
+      { label: "Damage", statKeys: ["total_damage", "damage"], rowKeys: "damage" },
+      { label: "Healing", statKeys: ["total_healing", "healing"], rowKeys: "healing" },
+      { label: "Damage Blocked", statKeys: ["total_damage_blocked", "damage_blocked"], rowKeys: "damage_blocked" },
+      { label: "Accuracy", statKeys: ["average_accuracy_percent", "average_accuracy"], rowKeys: "accuracy", average: true },
+    ],
+    impact: [
+      { label: "Damage Differential", statKeys: ["total_damage", "damage"], rowKeys: "damage", differentialOnly: true },
+      { label: "Blocked Damage Differential", statKeys: ["total_damage_blocked", "damage_blocked"], rowKeys: "damage_blocked", differentialOnly: true },
+      { label: "Healing Differential", statKeys: ["total_healing", "healing"], rowKeys: "healing", differentialOnly: true },
+      { label: "Final Hits Differential", statKeys: ["total_final_hits", "final_hits"], rowKeys: "final_hits", differentialOnly: true },
+    ],
+  },
+  Deadlock: {
+    title: "Deadlock Stats Dashboard",
+    scoreDiffLabel: "Average Kill Differential",
+    pickField: "hero",
+    pickLabel: "Hero",
+    compLabel: "Hero Comp",
+    mapLabel: "Match / Lane",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Average Kills", statKeys: ["total_kills", "team_kills"], rowKeys: ["kills", "k"] },
+      { label: "Average Deaths", statKeys: ["total_deaths", "team_deaths"], rowKeys: ["deaths", "d"] },
+      { label: "Average Assists", statKeys: ["total_assists", "team_assists"], rowKeys: ["assists", "a"] },
+      { label: "Souls / Net Worth", statKeys: ["total_souls", "souls", "net_worth"], rowKeys: ["souls", "net_worth"] },
+      { label: "Player Damage", statKeys: "player_damage", rowKeys: "player_damage" },
+      { label: "Objective Damage", statKeys: "objective_damage", rowKeys: "objective_damage" },
+    ],
+    impact: [
+      { label: "Soul Differential", statKeys: ["total_souls", "souls", "net_worth"], rowKeys: ["souls", "net_worth"], differentialOnly: true },
+      { label: "Objective Damage Differential", statKeys: "objective_damage", rowKeys: "objective_damage", differentialOnly: true },
+    ],
+  },
+  SSBU: {
+    title: "SSBU Stats Dashboard",
+    scoreDiffLabel: "Average Stock Differential",
+    pickField: "character",
+    pickLabel: "Character",
+    compLabel: "Crew",
+    mapLabel: "Ruleset / Stage",
+    betterWhenLower: ["Falls", "Self-Destructs", "Damage Taken"],
+    output: [
+      { label: "KOs", statKeys: "kos", rowKeys: ["kos", "kills"] },
+      { label: "Falls", statKeys: "falls", rowKeys: ["falls", "deaths"] },
+      { label: "Self-Destructs", statKeys: "self_destructs", rowKeys: "self_destructs" },
+      { label: "Damage Dealt", statKeys: "damage_dealt", rowKeys: "damage_dealt" },
+      { label: "Damage Taken", statKeys: "damage_taken", rowKeys: "damage_taken" },
+      { label: "Stocks Remaining", statKeys: "stocks_remaining", rowKeys: "stocks_remaining" },
+    ],
+    impact: [
+      { label: "KO Differential", statKeys: "kos", rowKeys: ["kos", "kills"], differentialOnly: true },
+      { label: "Stock Differential", statKeys: "stocks_remaining", rowKeys: "stocks_remaining", differentialOnly: true },
+    ],
+  },
+  "Honor of Kings": {
+    title: "Honor of Kings Stats Dashboard",
+    scoreDiffLabel: "Average Kill Differential",
+    pickField: "hero",
+    pickLabel: "Hero",
+    compLabel: "Hero Comp",
+    mapLabel: "Mode",
+    betterWhenLower: ["Average Deaths"],
+    output: [
+      { label: "Average Kills", statKeys: ["total_kills", "team_kills"], rowKeys: ["kills", "k"] },
+      { label: "Average Deaths", statKeys: ["total_deaths", "team_deaths"], rowKeys: ["deaths", "d"] },
+      { label: "Average Assists", statKeys: ["total_assists", "team_assists"], rowKeys: ["assists", "a"] },
+      { label: "Gold", statKeys: "total_gold", rowKeys: "gold" },
+      { label: "Damage", statKeys: "damage", rowKeys: "damage" },
+      { label: "Healing", statKeys: "healing", rowKeys: "healing" },
+    ],
+    impact: [
+      { label: "Gold Differential", statKeys: "total_gold", rowKeys: "gold", differentialOnly: true },
+      { label: "Damage Differential", statKeys: "damage", rowKeys: "damage", differentialOnly: true },
+    ],
+  },
+};
+
+function getGameAnalyticsConfig(gameTitle) {
+  return GAME_ANALYTICS_CONFIG[gameTitle] || GAME_ANALYTICS_CONFIG.Valorant;
+}
+
+function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
+  const config = getGameAnalyticsConfig(gameTitle);
   const sortedReviews = [...reviews].sort((first, second) => (
     new Date(second.played_at || second.created_at || 0) - new Date(first.played_at || first.created_at || 0)
   ));
@@ -1023,7 +1388,6 @@ function buildValorantAggregateStats(reviews = []) {
       return teamScore === null || opponentScore === null ? null : teamScore - opponentScore;
     })
     .filter((value) => value !== null);
-  const recentForm = reviewsWithOutcome.slice(0, 5).map((entry) => entry.outcome === "win" ? "W" : "L");
   const avg = (values, decimals = 1) => averageValues(values.filter((value) => value !== null), decimals);
   const agentCounts = new Map();
   const agentResults = new Map();
@@ -1031,14 +1395,21 @@ function buildValorantAggregateStats(reviews = []) {
   const compResults = new Map();
   const mapCounts = new Map();
   const mapResults = new Map();
+  const getDiffsForStat = (stat) => sortedReviews
+    .map((review) => {
+      const ours = getReviewStat(review, stat.statKeys, stat.rowKeys, { average: stat.average });
+      const theirs = getReviewStat(review, stat.statKeys, stat.rowKeys, { average: stat.average, side: "opponent" });
+      return ours === null || theirs === null ? null : ours - theirs;
+    })
+    .filter((value) => value !== null);
 
   for (const review of sortedReviews) {
     const outcome = getReviewOutcome(review);
     const map = review.map_or_mode;
-    const agents = getReviewRows(review)
-      .map((row) => row.agent)
+    const picks = getReviewRows(review)
+      .map((row) => row?.[config.pickField] || row?.agent || row?.champion || row?.hero || row?.character || row?.car || row?.role)
       .filter(Boolean);
-    const comp = agents.length ? [...agents].sort((a, b) => a.localeCompare(b)).join(" / ") : "";
+    const comp = picks.length ? [...picks].sort((a, b) => a.localeCompare(b)).join(" / ") : "";
 
     if (map) {
       mapCounts.set(map, (mapCounts.get(map) || 0) + 1);
@@ -1051,11 +1422,11 @@ function buildValorantAggregateStats(reviews = []) {
       }
     }
 
-    for (const agent of agents) {
-      agentCounts.set(agent, (agentCounts.get(agent) || 0) + 1);
+    for (const pick of picks) {
+      agentCounts.set(pick, (agentCounts.get(pick) || 0) + 1);
       if (outcome) {
-        const current = agentResults.get(agent) || { wins: 0, total: 0 };
-        agentResults.set(agent, {
+        const current = agentResults.get(pick) || { wins: 0, total: 0 };
+        agentResults.set(pick, {
           wins: current.wins + (outcome === "win" ? 1 : 0),
           total: current.total + 1,
         });
@@ -1090,27 +1461,30 @@ function buildValorantAggregateStats(reviews = []) {
   const bestComp = bestByWinRate(compResults);
 
   return {
+    config,
+    gameTitle,
     totalReviews: sortedReviews.length,
+    wins,
+    losses,
     winRate: getWinRate(wins, wins + losses),
-    recentForm,
     averageRoundDiff: averageValues(roundDiffs),
-    teamOutput: {
-      kills: avg(sortedReviews.map((review) => getReviewStat(review, ["total_kills", "team_kills"], ["kills", "k"]))),
-      deaths: avg(sortedReviews.map((review) => getReviewStat(review, ["total_deaths", "team_deaths"], ["deaths", "d"]))),
-      assists: avg(sortedReviews.map((review) => getReviewStat(review, ["total_assists", "team_assists"], ["assists", "a"]))),
-      combatScore: avg(sortedReviews.map((review) => getReviewStat(review, "average_acs", ["avg_combat_score", "acs"], { average: true }))),
-      econ: avg(sortedReviews.map((review) => getReviewStat(review, "average_econ_rating", "econ_rating", { average: true }))),
-    },
-    impact: {
-      firstBloods: avg(sortedReviews.map((review) => getReviewStat(review, "total_first_bloods", "first_bloods"))),
-      firstBloodDiff: avg(sortedReviews.map((review) => {
-        const ours = getReviewStat(review, "total_first_bloods", "first_bloods");
-        const theirs = getReviewStat(review, "total_first_bloods", "first_bloods", { side: "opponent" });
-        return ours === null || theirs === null ? null : ours - theirs;
-      })),
-      plants: avg(sortedReviews.map((review) => getReviewStat(review, "total_plants", "plants"))),
-      defuses: avg(sortedReviews.map((review) => getReviewStat(review, "total_defuses", "defuses"))),
-    },
+    teamOutput: config.output.map((stat) => ({
+      ...stat,
+      ours: avg(sortedReviews.map((review) => getReviewStat(review, stat.statKeys, stat.rowKeys, { average: stat.average }))),
+      theirs: avg(sortedReviews.map((review) => getReviewStat(review, stat.statKeys, stat.rowKeys, { average: stat.average, side: "opponent" }))),
+    })),
+    impact: config.impact.map((stat) => ({
+      ...stat,
+      ours: avg(sortedReviews.map((review) => getReviewStat(review, stat.statKeys, stat.rowKeys, { average: stat.average }))),
+      theirs: avg(sortedReviews.map((review) => getReviewStat(review, stat.statKeys, stat.rowKeys, { average: stat.average, side: "opponent" }))),
+      diff: avg(getDiffsForStat(stat)),
+      trend: getDiffsForStat(stat).slice().reverse(),
+    })),
+    differentials: (config.differentials || []).map((stat) => ({
+      ...stat,
+      diff: avg(getDiffsForStat(stat)),
+      trend: getDiffsForStat(stat).slice().reverse(),
+    })),
     mapPool: {
       bestMap: bestMap ? `${bestMap[0]} · ${formatPercent(getWinRate(bestMap[1].wins, bestMap[1].total))}` : "—",
       mostPlayedMap: mostPlayedMap ? `${mostPlayedMap[0]} · ${mostPlayedMap[1]} ${mostPlayedMap[1] === 1 ? "review" : "reviews"}` : "—",
@@ -1121,12 +1495,21 @@ function buildValorantAggregateStats(reviews = []) {
       mostUsedComp: mostUsedComp ? `${mostUsedComp[0]} · ${mostUsedComp[1]} uses` : "—",
       bestComp: bestComp ? `${bestComp[0]} · ${formatPercent(getWinRate(bestComp[1].wins, bestComp[1].total))}` : "—",
     },
+    league: gameTitle === "League of Legends" ? buildLeagueInsights(sortedReviews) : null,
   };
 }
 
-function ValorantStatsTabs({ reviews }) {
+function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
   const [activeTab, setActiveTab] = useState("overview");
-  const stats = useMemo(() => buildValorantAggregateStats(reviews), [reviews]);
+  const [timeline, setTimeline] = useState("last5");
+  const timelineOption = STATS_TIMELINE_OPTIONS.find((option) => option.value === timeline) || STATS_TIMELINE_OPTIONS[0];
+  const sortedReviews = useMemo(() => [...reviews].sort((first, second) => (
+    new Date(second.played_at || second.created_at || 0) - new Date(first.played_at || first.created_at || 0)
+  )), [reviews]);
+  const scopedReviews = useMemo(() => (
+    timelineOption.limit ? sortedReviews.slice(0, timelineOption.limit) : sortedReviews
+  ), [sortedReviews, timelineOption.limit]);
+  const stats = useMemo(() => buildGameAggregateStats(scopedReviews, gameTitle), [gameTitle, scopedReviews]);
   const tabs = [
     { label: "Overview", value: "overview" },
     { label: "Deep Stats", value: "deep" },
@@ -1137,23 +1520,44 @@ function ValorantStatsTabs({ reviews }) {
       <div className="mb-md flex flex-col gap-md md:flex-row md:items-center md:justify-between">
         <div>
           <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Team Form</p>
-          <h3 className="mt-xs font-headline-3 text-headline-3 text-on-surface">Valorant Stats Dashboard</h3>
+          <h3 className="mt-xs font-headline-3 text-headline-3 text-on-surface">{stats.config.title}</h3>
+          <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
+            Showing {timelineOption.label.toLowerCase()} from {reviews.length} saved {reviews.length === 1 ? "review" : "reviews"}.
+          </p>
         </div>
-        <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1">
-          {tabs.map((tab) => (
-            <button
-              className={`rounded-lg px-md py-sm font-label-bold text-label-bold transition-colors ${
-                activeTab === tab.value
-                  ? "bg-surface-container-lowest text-primary shadow-sm"
-                  : "text-on-surface-variant hover:bg-surface-container"
-              }`}
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="grid gap-sm">
+          <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1">
+            {tabs.map((tab) => (
+              <button
+                className={`rounded-lg px-md py-sm font-label-bold text-label-bold transition-colors ${
+                  activeTab === tab.value
+                    ? "bg-surface-container-lowest text-primary shadow-sm"
+                    : "text-on-surface-variant hover:bg-surface-container"
+                }`}
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                type="button"
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 rounded-xl bg-surface-container-low p-1">
+            {STATS_TIMELINE_OPTIONS.map((option) => (
+              <button
+                className={`rounded-lg px-sm py-xs font-label-bold text-label-small transition-colors ${
+                  timeline === option.value
+                    ? "bg-primary text-on-primary shadow-sm"
+                    : "text-on-surface-variant hover:bg-surface-container"
+                }`}
+                key={option.value}
+                onClick={() => setTimeline(option.value)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1161,18 +1565,20 @@ function ValorantStatsTabs({ reviews }) {
         activeTab === "overview" ? (
           <StatsEmptyState
             body="Upload a post-game screenshot to start tracking team form."
-            title="No Valorant reviews yet."
+            title={`No ${gameTitle} reviews yet.`}
           />
         ) : (
           <StatsEmptyState
-            body="Deep stats will appear after you save a few Valorant reviews."
+            body={`Deep stats will appear after you save a few ${gameTitle} reviews.`}
             title="Deep stats are warming up."
           />
         )
       ) : activeTab === "overview" ? (
-        <ValorantOverviewStats stats={stats} />
+        <GameOverviewStats stats={stats} />
+      ) : gameTitle === "League of Legends" ? (
+        <LeagueDeepStats stats={stats} />
       ) : (
-        <ValorantDeepStats stats={stats} />
+        <GameDeepStats fallbackKpis={fallbackKpis} stats={stats} />
       )}
     </div>
   );
@@ -1197,84 +1603,581 @@ function StatKpiCard({ label, value, children }) {
   );
 }
 
-function ValorantOverviewStats({ stats }) {
+function GameOverviewStats({ stats }) {
   return (
     <div className="grid grid-cols-1 gap-md md:grid-cols-3">
+      <StatKpiCard label="# of Reviews" value={stats.totalReviews} />
+      <StatKpiCard label="Record" value={`${stats.wins}W - ${stats.losses}L`} />
       <StatKpiCard label="Win Rate" value={formatPercent(stats.winRate)} />
-      <StatKpiCard label="Recent Form">
-        {stats.recentForm.length ? (
-          <div className="mt-sm flex flex-wrap gap-xs">
-            {stats.recentForm.map((result, index) => (
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full font-label-bold text-label-bold ${
-                  result === "W" ? "bg-[#E3F9E5] text-[#1B5E20]" : "bg-error-container text-on-error-container"
-                }`}
-                key={`${result}-${index}`}
-              >
-                {result}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-xs font-headline-2 text-headline-2 text-primary">—</p>
-        )}
-      </StatKpiCard>
-      <StatKpiCard label="Avg Round Differential" value={formatSignedValue(stats.averageRoundDiff)} />
     </div>
   );
 }
 
-function ValorantDeepStats({ stats }) {
-  const groups = [
+function formatDeepStatValue(value) {
+  return typeof value === "number" ? value.toFixed(1) : value || "—";
+}
+
+function ComparisonBar({ label, ours, theirs, note }) {
+  const hasValues = Number.isFinite(ours) && Number.isFinite(theirs);
+  const max = hasValues ? Math.max(Math.abs(ours), Math.abs(theirs), 1) : 1;
+  const ourWidth = hasValues ? `${Math.max(8, (Math.abs(ours) / max) * 100)}%` : "0%";
+  const theirWidth = hasValues ? `${Math.max(8, (Math.abs(theirs) / max) * 100)}%` : "0%";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm flex items-center justify-between gap-sm">
+        <div>
+          <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
+          {note && <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">{note}</p>}
+        </div>
+        <div className="text-right font-label-bold text-label-bold">
+          <span className="text-primary">{formatDeepStatValue(ours)}</span>
+          <span className="mx-xs text-outline">vs</span>
+          <span className="text-error">{formatDeepStatValue(theirs)}</span>
+        </div>
+      </div>
+      <div className="grid gap-xs">
+        <div className="h-2 overflow-hidden rounded-full bg-primary-fixed">
+          <div className="h-full rounded-full bg-primary" style={{ width: ourWidth }} />
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-error-container">
+          <div className="h-full rounded-full bg-error" style={{ width: theirWidth }} />
+        </div>
+      </div>
+      <div className="mt-xs flex justify-between font-label-small text-label-small text-on-surface-variant">
+        <span>Your team</span>
+        <span>Opponent avg</span>
+      </div>
+    </div>
+  );
+}
+
+function CoachTakeaways({ stats }) {
+  const primaryOutput = stats.teamOutput.find((stat) => Number.isFinite(stat.ours) && Number.isFinite(stat.theirs));
+  const primaryImpact = stats.impact.find((stat) => Number.isFinite(stat.diff));
+  const takeaways = [
     {
-      title: "Team Output",
-      cards: [
-        ["Average Team Kills", stats.teamOutput.kills],
-        ["Average Team Deaths", stats.teamOutput.deaths],
-        ["Average Team Assists", stats.teamOutput.assists],
-        ["Average Combat Score", stats.teamOutput.combatScore],
-        ["Average Econ Rating", stats.teamOutput.econ],
-      ],
+      label: "Strength",
+      icon: "trending_up",
+      value: Number.isFinite(stats.averageRoundDiff) && stats.averageRoundDiff > 0
+        ? `${stats.config.scoreDiffLabel.replace("Average ", "")} is positive (${formatSignedValue(stats.averageRoundDiff)})`
+        : primaryImpact && primaryImpact.diff > 0
+          ? `${primaryImpact.label} trending up (${formatSignedValue(primaryImpact.diff)})`
+          : "Upload more reviews to identify a strength",
     },
     {
-      title: "Objective / Round Impact",
-      cards: [
-        ["Average First Bloods", stats.impact.firstBloods],
-        ["Average First Blood Differential", Number.isFinite(stats.impact.firstBloodDiff) ? formatSignedValue(stats.impact.firstBloodDiff) : "—"],
-        ["Average Plants", stats.impact.plants],
-        ["Average Defuses", stats.impact.defuses],
-      ],
+      label: "Watch",
+      icon: "visibility",
+      value: Number.isFinite(stats.averageRoundDiff) && stats.averageRoundDiff < 0
+        ? `${stats.config.scoreDiffLabel.replace("Average ", "")} is negative (${formatSignedValue(stats.averageRoundDiff)})`
+        : primaryOutput && primaryOutput.ours < primaryOutput.theirs && !stats.config.betterWhenLower?.includes(primaryOutput.label)
+          ? `Opponent average is higher in ${primaryOutput.label.toLowerCase()}`
+          : "No major warning from saved reviews",
     },
     {
-      title: "Map Pool",
-      cards: [
-        ["Best Map by Win Rate", stats.mapPool.bestMap],
-        ["Most Played Map", stats.mapPool.mostPlayedMap],
-      ],
-    },
-    {
-      title: "Agent / Comp",
-      cards: [
-        ["Most Used Agent", stats.agentComp.mostUsedAgent],
-        ["Best Performing Agent", stats.agentComp.bestAgent],
-        ["Most Used 5-Agent Comp", stats.agentComp.mostUsedComp],
-        ["Best Performing 5-Agent Comp", stats.agentComp.bestComp],
-      ],
+      label: "Focus",
+      icon: "flag",
+      value: primaryImpact && primaryImpact.diff < 0
+        ? `Review ${primaryImpact.label.toLowerCase()}`
+        : primaryOutput && primaryOutput.ours < primaryOutput.theirs && !stats.config.betterWhenLower?.includes(primaryOutput.label)
+          ? `Raise ${primaryOutput.label.toLowerCase()}`
+          : "Keep building the review sample",
     },
   ];
 
   return (
-    <div className="grid gap-lg">
-      {groups.map((group) => (
-        <div key={group.title}>
-          <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{group.title}</h3>
-          <div className="grid grid-cols-1 gap-sm md:grid-cols-2 lg:grid-cols-4">
-            {group.cards.map(([label, value]) => (
-              <StatKpiCard key={label} label={label} value={typeof value === "number" ? value.toFixed(1) : value} />
+    <section className="rounded-3xl border border-primary/10 bg-primary-fixed/30 p-md">
+      <div className="mb-sm flex items-center gap-sm">
+        <MaterialSymbol className="text-[22px] text-primary">psychology</MaterialSymbol>
+        <h3 className="font-headline-3 text-headline-3 text-on-surface">Coach Takeaways</h3>
+      </div>
+      <div className="grid gap-sm md:grid-cols-3">
+        {takeaways.map((item) => (
+          <div className="rounded-2xl bg-surface-container-lowest p-md" key={item.label}>
+            <div className="mb-xs flex items-center gap-xs font-label-bold text-label-bold text-primary">
+              <MaterialSymbol className="text-[18px]">{item.icon}</MaterialSymbol>
+              {item.label}
+            </div>
+            <p className="font-body-sub text-body-sub text-on-surface-variant">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FeatureCard({ icon, label, value }) {
+  const { primary, meta } = splitFeatureValue(value);
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm flex h-10 w-10 items-center justify-center rounded-full bg-primary-fixed text-primary">
+        <MaterialSymbol className="text-[21px]">{icon}</MaterialSymbol>
+      </div>
+      <p className="font-label-small text-label-small text-on-surface-variant">{label}</p>
+      <p className="mt-xs font-headline-3 text-headline-3 text-on-surface">{primary}</p>
+      {meta && <p className="mt-xs font-label-small text-label-small text-primary">{meta}</p>}
+    </div>
+  );
+}
+
+function PickAvatar({ gameTitle, name, size = "md" }) {
+  const [failed, setFailed] = useState(false);
+  const imagePath = getPickImagePath(gameTitle, name);
+  const sizeClass = size === "sm" ? "h-9 w-9" : "h-12 w-12";
+  const label = name?.slice(0, 2)?.toUpperCase() || "?";
+
+  useEffect(() => {
+    setFailed(false);
+  }, [imagePath]);
+
+  return (
+    <div className={`${sizeClass} shrink-0 overflow-hidden rounded-xl border border-outline-variant/25 bg-primary-fixed`}>
+      {imagePath && !failed ? (
+        <img
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+          src={imagePath}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center font-label-bold text-label-bold text-primary">
+          {label}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PickFeatureCard({ gameTitle, icon, label, value }) {
+  const { primary, meta } = splitFeatureValue(value);
+  const hasPick = primary && primary !== "—";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="flex items-center gap-sm">
+        {hasPick ? <PickAvatar gameTitle={gameTitle} name={primary} /> : (
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-fixed text-primary">
+            <MaterialSymbol className="text-[22px]">{icon}</MaterialSymbol>
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="font-label-small text-label-small text-on-surface-variant">{label}</p>
+          <p className="truncate font-headline-3 text-headline-3 text-on-surface">{primary}</p>
+          {meta && <p className="font-label-small text-label-small text-primary">{meta}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompFeatureCard({ gameTitle, icon, label, value }) {
+  const { picks, meta } = splitCompPicks(value);
+  const hasPicks = picks.length > 0;
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <p className="font-label-small text-label-small text-on-surface-variant">{label}</p>
+      {hasPicks ? (
+        <>
+          <div className="mt-sm flex flex-wrap gap-xs">
+            {picks.map((pick, index) => (
+              <div className="-mr-2" key={`${pick}-${index}`} title={pick}>
+                <PickAvatar gameTitle={gameTitle} name={pick} size="sm" />
+              </div>
             ))}
           </div>
+          <p className="mt-sm line-clamp-2 font-label-bold text-label-bold text-on-surface">{picks.join(" / ")}</p>
+          {meta && <p className="mt-xs font-label-small text-label-small text-primary">{meta}</p>}
+        </>
+      ) : (
+        <div className="mt-sm flex items-center gap-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-fixed text-primary">
+            <MaterialSymbol className="text-[21px]">{icon}</MaterialSymbol>
+          </div>
+          <p className="font-headline-3 text-headline-3 text-on-surface">—</p>
         </div>
-      ))}
+      )}
+    </div>
+  );
+}
+
+function ImpactDifferentialCard({ stat }) {
+  const hasDiff = Number.isFinite(stat.diff);
+  const diff = hasDiff ? stat.diff : 0;
+  const trend = Array.isArray(stat.trend) ? stat.trend.filter(Number.isFinite) : [];
+  const scale = Math.max(1, ...trend.map((value) => Math.abs(value)), Math.abs(diff));
+  const position = hasDiff ? Math.max(4, Math.min(96, 50 + (diff / scale) * 42)) : 50;
+  const level = !hasDiff
+    ? "unknown"
+    : diff >= scale * 0.35
+      ? "strong"
+      : diff > 0
+        ? "edge"
+        : diff <= -scale * 0.35
+          ? "gap"
+          : diff < 0
+            ? "slight-gap"
+            : "even";
+  const verdict = !hasDiff
+    ? "Needs more reviews"
+    : level === "even"
+      ? "Even with opponents"
+      : level === "strong"
+        ? "Strong team edge"
+        : level === "edge"
+          ? "Slight team edge"
+          : level === "gap"
+            ? "Needs attention"
+            : "Slight opponent edge";
+  const coachText = !hasDiff
+    ? "Save more reviews before reading this pattern."
+    : diff > 0
+      ? "Keep this as part of your practice identity."
+      : diff < 0
+        ? "Review the moments where opponents created this gap."
+        : "This stat is stable. Look for context in the review notes.";
+  const valueTone = diff > 0 ? "text-primary" : diff < 0 ? "text-error" : "text-on-surface";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="flex items-start justify-between gap-sm">
+        <div>
+          <p className="font-label-bold text-label-bold text-on-surface">{stat.label}</p>
+          <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">{verdict}</p>
+        </div>
+        <p className={`font-headline-3 text-headline-3 ${valueTone}`}>
+          {hasDiff ? formatSignedValue(diff) : "—"}
+        </p>
+      </div>
+
+      <div className="mt-md">
+        <div className="relative h-14 rounded-2xl bg-gradient-to-r from-error-container via-surface-container-lowest to-primary-fixed px-md py-sm">
+          <div className="absolute left-1/2 top-2 h-10 w-px bg-outline-variant" />
+          <div
+            className={`absolute top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-surface-container-lowest shadow-sm ${
+              diff > 0 ? "border-primary text-primary" : diff < 0 ? "border-error text-error" : "border-outline text-on-surface"
+            }`}
+            style={{ left: `${position}%` }}
+          >
+            <MaterialSymbol className="text-[18px]">{diff >= 0 ? "arrow_forward" : "arrow_back"}</MaterialSymbol>
+          </div>
+        </div>
+        <div className="mt-xs flex justify-between font-label-small text-label-small text-on-surface-variant">
+          <span>needs work</span>
+          <span>even</span>
+          <span>strong edge</span>
+        </div>
+      </div>
+
+      <div className="mt-md">
+        <div className="mb-xs flex items-center justify-between">
+          <p className="font-label-small text-label-small text-on-surface-variant">Trend in this window</p>
+          <p className="font-label-small text-label-small text-on-surface-variant">{trend.length || 0} games</p>
+        </div>
+        <div className="flex gap-xs">
+          {trend.length ? trend.map((value, index) => (
+            <span
+              className={`h-3 flex-1 rounded-full ${value > 0 ? "bg-primary" : value < 0 ? "bg-error" : "bg-outline-variant"}`}
+              key={`${stat.label}-${index}`}
+              title={`${stat.label}: ${formatSignedValue(value)}`}
+            />
+          )) : (
+            <span className="h-3 flex-1 rounded-full bg-outline-variant/60" />
+          )}
+        </div>
+      </div>
+
+      <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">{coachText}</p>
+    </div>
+  );
+}
+
+function TrendSparkline({ label, values }) {
+  const hasValues = values.length > 0;
+  const min = hasValues ? Math.min(...values) : 0;
+  const max = hasValues ? Math.max(...values) : 1;
+  const range = Math.max(1, max - min);
+  const direction = values.length >= 2 ? values.at(-1) - values[0] : null;
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm flex items-center justify-between">
+        <div>
+          <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
+          <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">
+            {Number.isFinite(direction) ? (direction >= 0 ? "Improving" : "Declining") : "Needs more games"}
+          </p>
+        </div>
+        <p className="font-label-bold text-label-bold text-primary">{hasValues ? formatSignedValue(values.at(-1), 0) : "—"}</p>
+      </div>
+      <div className="flex h-14 items-end gap-xs">
+        {hasValues ? values.map((value, index) => (
+          <div
+            className={`flex-1 rounded-t-md ${value >= 0 ? "bg-primary" : "bg-error"}`}
+            key={`${label}-${index}`}
+            style={{ height: `${22 + ((value - min) / range) * 34}px` }}
+            title={`${label}: ${formatSignedValue(value, 0)}`}
+          />
+        )) : (
+          <div className="flex h-full w-full items-center justify-center rounded-xl bg-surface-container-lowest font-body-sub text-body-sub text-on-surface-variant">
+            Save more reviews
+          </div>
+        )}
+      </div>
+      <p className="mt-xs font-label-small text-label-small text-on-surface-variant">Last {values.length || 0} reviewed games</p>
+    </div>
+  );
+}
+
+function LeagueRoleCard({ role }) {
+  return (
+    <div className="grid grid-cols-[76px_1fr] items-center gap-sm rounded-2xl border border-outline-variant/25 bg-surface-container-low p-sm">
+      <div className="rounded-xl bg-primary-fixed px-sm py-md text-center">
+        <p className="font-label-bold text-label-bold text-on-primary-fixed">{role.role}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-xs">
+        <div>
+          <p className="font-label-small text-label-small text-on-surface-variant">KDA</p>
+          <p className="font-label-bold text-label-bold text-on-surface">{Number.isFinite(role.kda) ? role.kda.toFixed(2) : "—"}</p>
+        </div>
+        <div>
+          <p className="font-label-small text-label-small text-on-surface-variant">Gold</p>
+          <p className="font-label-bold text-label-bold text-primary">{formatDeepStatValue(role.gold)}</p>
+        </div>
+        <div>
+          <p className="font-label-small text-label-small text-on-surface-variant">Damage</p>
+          <p className="font-label-bold text-label-bold text-primary">{formatDeepStatValue(role.damage)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WinLossCard({ row }) {
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <p className="font-label-bold text-label-bold text-on-surface">{row.label}</p>
+      <div className="mt-sm grid grid-cols-2 gap-xs">
+        <div className="rounded-xl bg-[#E3F9E5] p-sm">
+          <p className="font-label-small text-label-small text-[#1B5E20]">Wins</p>
+          <p className="font-headline-3 text-headline-3 text-[#1B5E20]">{formatDeepStatValue(row.wins)}</p>
+        </div>
+        <div className="rounded-xl bg-error-container p-sm">
+          <p className="font-label-small text-label-small text-on-error-container">Losses</p>
+          <p className="font-headline-3 text-headline-3 text-on-error-container">{formatDeepStatValue(row.losses)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeagueCoachRead({ damageDiff, goldDiff, killDiff }) {
+  const reads = [
+    {
+      label: "Strength",
+      icon: "trending_up",
+      value: Number.isFinite(goldDiff?.diff) && goldDiff.diff > 0
+        ? `You are building resource leads (${formatSignedValue(goldDiff.diff, 0)} gold).`
+        : Number.isFinite(damageDiff?.diff) && damageDiff.diff > 0
+          ? `You are creating more champion pressure (${formatSignedValue(damageDiff.diff, 0)} damage).`
+          : "Save more reviews to identify a repeatable strength.",
+    },
+    {
+      label: "Watch",
+      icon: "visibility",
+      value: Number.isFinite(killDiff) && killDiff < 0
+        ? `Opponent is winning fights by ${formatSignedValue(killDiff, 1)} kills.`
+        : Number.isFinite(goldDiff?.diff) && goldDiff.diff < 0
+          ? `Resource control is behind (${formatSignedValue(goldDiff.diff, 0)} gold).`
+          : "No major warning from saved scoreboard data.",
+    },
+    {
+      label: "Focus",
+      icon: "flag",
+      value: Number.isFinite(goldDiff?.diff) && goldDiff.diff < 0
+        ? "Review how lanes and jungle convert farm into team gold."
+        : Number.isFinite(damageDiff?.diff) && damageDiff.diff < 0
+          ? "Work on coordinated fights and damage uptime."
+          : "Keep tracking scrims to confirm the pattern.",
+    },
+  ];
+
+  return (
+    <section className="rounded-3xl border border-primary/10 bg-primary-fixed/30 p-md">
+      <div className="mb-sm flex items-center gap-sm">
+        <MaterialSymbol className="text-[22px] text-primary">school</MaterialSymbol>
+        <h3 className="font-headline-3 text-headline-3 text-on-surface">Coach Read</h3>
+      </div>
+      <div className="grid gap-sm md:grid-cols-3">
+        {reads.map((item) => (
+          <div className="rounded-2xl bg-surface-container-lowest p-md" key={item.label}>
+            <div className="mb-xs flex items-center gap-xs font-label-bold text-label-bold text-primary">
+              <MaterialSymbol className="text-[18px]">{item.icon}</MaterialSymbol>
+              {item.label}
+            </div>
+            <p className="font-body-sub text-body-sub text-on-surface-variant">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LeagueDeepStats({ stats }) {
+  const killStat = stats.teamOutput.find((stat) => stat.label === "Average Kills");
+  const deathStat = stats.teamOutput.find((stat) => stat.label === "Average Deaths");
+  const assistStat = stats.teamOutput.find((stat) => stat.label === "Average Assists");
+  const goldStat = stats.teamOutput.find((stat) => stat.label === "Gold");
+  const damageStat = stats.teamOutput.find((stat) => stat.label === "Damage to Champions");
+  const goldDiff = stats.differentials.find((stat) => stat.label === "Average Gold Differential");
+  const damageDiff = stats.differentials.find((stat) => stat.label === "Average Damage Differential");
+  const leagueTrendLabels = {
+    "Kill Diff": "Fighting Trend",
+    "Gold Diff": "Economy Trend",
+    "Damage Diff": "Pressure Trend",
+    "Death Diff": "Cleanliness Trend",
+  };
+
+  return (
+    <div className="grid gap-lg">
+      <LeagueCoachRead damageDiff={damageDiff} goldDiff={goldDiff} killDiff={stats.averageRoundDiff} />
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Map Control Signals</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
+          <ComparisonBar label="Average Kills" ours={killStat?.ours} theirs={killStat?.theirs} />
+          <ComparisonBar label="Average Deaths" ours={deathStat?.ours} theirs={deathStat?.theirs} note="Lower is usually cleaner." />
+          <ComparisonBar label="Gold" ours={goldStat?.ours} theirs={goldStat?.theirs} />
+          <ComparisonBar label="Damage to Champions" ours={damageStat?.ours} theirs={damageStat?.theirs} />
+        </div>
+        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-3">
+          <StatKpiCard label="Average Kill Differential" value={Number.isFinite(stats.averageRoundDiff) ? formatSignedValue(stats.averageRoundDiff) : "—"} />
+          <StatKpiCard label="Average Gold Differential" value={Number.isFinite(goldDiff?.diff) ? formatSignedValue(goldDiff.diff, 0) : "—"} />
+          <StatKpiCard label="Average Damage Differential" value={Number.isFinite(damageDiff?.diff) ? formatSignedValue(damageDiff.diff, 0) : "—"} />
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Fight Cleanliness</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
+          <StatKpiCard label="Average Kills" value={formatDeepStatValue(killStat?.ours)} />
+          <StatKpiCard label="Average Deaths" value={formatDeepStatValue(deathStat?.ours)} />
+          <StatKpiCard label="Average Assists" value={formatDeepStatValue(assistStat?.ours)} />
+        </div>
+        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
+          <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Last Games Trend</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2 lg:grid-cols-4">
+          {stats.league?.trends.map((trend) => (
+            <TrendSparkline key={trend.label} label={leagueTrendLabels[trend.label] || trend.label} values={trend.values} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Role Review</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
+          {stats.league?.roleStats.map((role) => (
+            <LeagueRoleCard key={role.role} role={role} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Win / Loss Comparison</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
+          {stats.league?.winLoss.map((row) => (
+            <WinLossCard key={row.label} row={row} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Champion Comfort</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+          <PickFeatureCard gameTitle={stats.gameTitle} icon="person_search" label="Most used champion" value={stats.agentComp.mostUsedAgent} />
+          <PickFeatureCard gameTitle={stats.gameTitle} icon="workspace_premium" label="Best performing champion" value={stats.agentComp.bestAgent} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function GameDeepStats({ fallbackKpis, stats }) {
+  const comparableOutput = stats.teamOutput.filter((stat) => !stat.differentialOnly);
+  const comparableImpact = stats.impact.filter((stat) => !stat.differentialOnly);
+  const impactDiffs = [
+    ...stats.impact.filter((stat) => stat.differentialOnly || Number.isFinite(stat.diff)),
+    ...stats.differentials,
+  ];
+
+  return (
+    <div className="grid gap-lg">
+      <CoachTakeaways stats={stats} />
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Team Output</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
+          {comparableOutput.map((stat) => (
+            <ComparisonBar
+              key={stat.label}
+              label={stat.label}
+              note={stats.config.betterWhenLower?.includes(stat.label) ? "Lower is usually cleaner." : ""}
+              ours={stat.ours}
+              theirs={stat.theirs}
+            />
+          ))}
+        </div>
+        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
+          <StatKpiCard label={stats.config.scoreDiffLabel} value={Number.isFinite(stats.averageRoundDiff) ? formatSignedValue(stats.averageRoundDiff) : "—"} />
+          {fallbackKpis?.slice(0, 1).map((kpi) => (
+            <StatKpiCard key={kpi.label} label={kpi.label} value={kpi.value} />
+          ))}
+        </div>
+      </section>
+
+      {(comparableImpact.length > 0 || impactDiffs.length > 0) && (
+        <section>
+          <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Impact Stats</h3>
+          {comparableImpact.length > 0 && (
+            <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+              {comparableImpact.map((stat) => (
+                <ComparisonBar key={stat.label} label={stat.label} ours={stat.ours} theirs={stat.theirs} />
+              ))}
+            </div>
+          )}
+          {impactDiffs.length > 0 && (
+            <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
+              {impactDiffs.map((stat) => (
+                <ImpactDifferentialCard key={stat.label} stat={stat} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{formatPoolHeading(stats.config.mapLabel)}</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+          <FeatureCard icon="map" label="Best win rate" value={stats.mapPool.bestMap} />
+          <FeatureCard icon="repeat" label="Most reviewed" value={stats.mapPool.mostPlayedMap} />
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{stats.config.pickLabel} and comp notes</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+          <PickFeatureCard gameTitle={stats.gameTitle} icon="person_search" label={`Most used ${stats.config.pickLabel.toLowerCase()}`} value={stats.agentComp.mostUsedAgent} />
+          <PickFeatureCard gameTitle={stats.gameTitle} icon="workspace_premium" label={`Best performing ${stats.config.pickLabel.toLowerCase()}`} value={stats.agentComp.bestAgent} />
+          <CompFeatureCard gameTitle={stats.gameTitle} icon="groups" label={`Most used ${stats.config.compLabel.toLowerCase()}`} value={stats.agentComp.mostUsedComp} />
+          <CompFeatureCard gameTitle={stats.gameTitle} icon="trophy" label={`Best performing ${stats.config.compLabel.toLowerCase()}`} value={stats.agentComp.bestComp} />
+        </div>
+      </section>
     </div>
   );
 }

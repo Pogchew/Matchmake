@@ -6,6 +6,258 @@ Low-confidence fields should set manual_edit_required to true.
 Keep team_comp, opponent_comp, team_stats, and opponent_stats shaped for Matchmake review storage.
 `.trim();
 
+export const MARVEL_RIVALS_ALLOWED_HEROES = [
+  "Adam Warlock",
+  "Angela",
+  "Black Panther",
+  "Black Widow",
+  "Blade",
+  "Captain America",
+  "Cloak & Dagger",
+  "Doctor Strange",
+  "Emma Frost",
+  "Groot",
+  "Hawkeye",
+  "Hela",
+  "Hulk",
+  "Human Torch",
+  "Invisible Woman",
+  "Iron Fist",
+  "Iron Man",
+  "Jeff the Land Shark",
+  "Loki",
+  "Luna Snow",
+  "Magik",
+  "Magneto",
+  "Mantis",
+  "Mister Fantastic",
+  "Moon Knight",
+  "Namor",
+  "Peni Parker",
+  "Phoenix",
+  "Psylocke",
+  "Rocket Raccoon",
+  "Scarlet Witch",
+  "Spider-Man",
+  "Squirrel Girl",
+  "Star-Lord",
+  "Storm",
+  "The Punisher",
+  "The Thing",
+  "Thor",
+  "Ultron",
+  "Venom",
+  "Winter Soldier",
+  "Wolverine",
+];
+
+const MARVEL_RIVALS_ALIAS_MAP = {
+  cloakanddagger: "Cloak & Dagger",
+  cloakdagger: "Cloak & Dagger",
+  punisher: "The Punisher",
+  thepunisher: "The Punisher",
+  thing: "The Thing",
+  thething: "The Thing",
+  jeff: "Jeff the Land Shark",
+  jeffthelandshark: "Jeff the Land Shark",
+};
+
+const MARVEL_RIVALS_INVALID_HERO_VALUES = new Set([
+  "vanguard",
+  "duelist",
+  "strategist",
+  "flex",
+  "hero1",
+  "hero2",
+  "hero3",
+  "hero4",
+  "hero5",
+  "hero6",
+  "unknown",
+  "playertbd",
+]);
+
+function compactMarvelHeroKey(value = "") {
+  return String(value).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeMarvelHeroName(value) {
+  if (!value) return null;
+  const key = compactMarvelHeroKey(value);
+  if (!key || MARVEL_RIVALS_INVALID_HERO_VALUES.has(key)) return null;
+  if (MARVEL_RIVALS_ALIAS_MAP[key]) return MARVEL_RIVALS_ALIAS_MAP[key];
+
+  const matchedHero = MARVEL_RIVALS_ALLOWED_HEROES.find((hero) => compactMarvelHeroKey(hero) === key);
+  return matchedHero || null;
+}
+
+function normalizeMarvelNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const cleaned = String(value).replace(/[%,$,\s]/g, "");
+  if (!cleaned) return null;
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : null;
+}
+
+function averageMarvelRows(rows, key) {
+  const values = rows
+    .map((row) => normalizeMarvelNumber(row?.[key]))
+    .filter((value) => Number.isFinite(value));
+  if (!values.length) return null;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function sumMarvelRows(rows, key) {
+  const values = rows
+    .map((row) => normalizeMarvelNumber(row?.[key]))
+    .filter((value) => Number.isFinite(value));
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
+function addManualReviewField(fields, field) {
+  if (!field || fields.includes(field)) return;
+  fields.push(field);
+}
+
+function normalizeMarvelRow(row = {}, path, manualReviewFields, nulledHeroFields) {
+  const rawHero = row.hero_confirmed ?? row.hero;
+  const normalizedHero = normalizeMarvelHeroName(rawHero);
+  const normalizedGuess = normalizeMarvelHeroName(row.hero_guess);
+  const normalizedAssetMatch = normalizeMarvelHeroName(row.hero_asset_match);
+  const rowHadHero = Boolean(rawHero);
+  if (rowHadHero && !normalizedHero) {
+    addManualReviewField(manualReviewFields, `${path}.hero`);
+    nulledHeroFields.push(`${path}.hero`);
+  }
+
+  return {
+    ...row,
+    hero: normalizedHero,
+    hero_guess: normalizedGuess,
+    hero_asset_match: normalizedAssetMatch,
+    hero_guess_confidence: normalizeMarvelNumber(row.hero_guess_confidence) ?? normalizeMarvelNumber(row.hero_confidence) ?? normalizeMarvelNumber(row.confidence) ?? 0,
+    hero_confirmed: normalizedHero,
+    hero_id: row.hero_id || null,
+    costume_name: row.costume_name || null,
+    costume_id: row.costume_id || null,
+    hero_confidence: normalizeMarvelNumber(row.asset_confidence) ?? normalizeMarvelNumber(row.hero_asset_confidence) ?? normalizeMarvelNumber(row.hero_confidence) ?? normalizeMarvelNumber(row.hero_guess_confidence) ?? normalizeMarvelNumber(row.confidence) ?? 0,
+    hero_asset_confidence: normalizeMarvelNumber(row.hero_asset_confidence) ?? null,
+    asset_confidence: normalizeMarvelNumber(row.asset_confidence) ?? null,
+    matched_asset_src: row.matched_asset_src || null,
+    needs_manual_review: Boolean(row.needs_manual_review),
+    needs_hero_review: Boolean(row.needs_hero_review || row.needs_manual_review || (!normalizedHero && normalizedAssetMatch)),
+    kills: normalizeMarvelNumber(row.kills),
+    deaths: normalizeMarvelNumber(row.deaths),
+    assists: normalizeMarvelNumber(row.assists),
+    final_hits: normalizeMarvelNumber(row.final_hits),
+    damage: normalizeMarvelNumber(row.damage),
+    damage_blocked: normalizeMarvelNumber(row.damage_blocked),
+    healing: normalizeMarvelNumber(row.healing),
+    accuracy_percent: normalizeMarvelNumber(row.accuracy_percent),
+    medals: Array.isArray(row.medals) ? row.medals : [],
+    is_mvp: Boolean(row.is_mvp),
+    is_svp: Boolean(row.is_svp),
+    confidence: normalizeMarvelNumber(row.confidence) ?? 0,
+  };
+}
+
+function applyMarvelDuplicateHeroSafety(rowEntries, pathPrefix, manualReviewFields, nulledHeroFields) {
+  const byHero = new Map();
+
+  rowEntries.forEach((entry, fallbackIndex) => {
+    const row = entry?.row || entry;
+    const index = entry?.index ?? fallbackIndex;
+    if (!row.hero) return;
+    const existingRows = byHero.get(row.hero) || [];
+    existingRows.push({ row, index });
+    byHero.set(row.hero, existingRows);
+  });
+
+  for (const [, duplicates] of byHero) {
+    if (duplicates.length < 2) continue;
+
+    const sorted = [...duplicates].sort((a, b) => Number(b.row.hero_confidence || 0) - Number(a.row.hero_confidence || 0));
+    sorted.slice(1).forEach(({ row, index }) => {
+      row.hero = null;
+      row.hero_confirmed = null;
+      addManualReviewField(manualReviewFields, `${pathPrefix}[${index}].hero`);
+      nulledHeroFields.push(`${pathPrefix}[${index}].hero`);
+    });
+  }
+}
+
+function calculateMarvelTeamTotals(team = {}, players = []) {
+  const existingTotals = team.team_totals || {};
+  return {
+    kills: normalizeMarvelNumber(existingTotals.kills) ?? sumMarvelRows(players, "kills"),
+    deaths: normalizeMarvelNumber(existingTotals.deaths) ?? sumMarvelRows(players, "deaths"),
+    assists: normalizeMarvelNumber(existingTotals.assists) ?? sumMarvelRows(players, "assists"),
+    final_hits: normalizeMarvelNumber(existingTotals.final_hits) ?? sumMarvelRows(players, "final_hits"),
+    damage: normalizeMarvelNumber(existingTotals.damage) ?? sumMarvelRows(players, "damage"),
+    damage_blocked: normalizeMarvelNumber(existingTotals.damage_blocked) ?? sumMarvelRows(players, "damage_blocked"),
+    healing: normalizeMarvelNumber(existingTotals.healing) ?? sumMarvelRows(players, "healing"),
+    average_accuracy_percent: normalizeMarvelNumber(existingTotals.average_accuracy_percent) ?? averageMarvelRows(players, "accuracy_percent"),
+  };
+}
+
+export function normalizeMarvelRivalsExtraction(rawJson = {}) {
+  const manualReviewFields = Array.isArray(rawJson.fields_needing_manual_review)
+    ? [...rawJson.fields_needing_manual_review]
+    : [];
+  const nulledHeroFields = [];
+
+  const rows = Array.isArray(rawJson.rows)
+    ? rawJson.rows.map((row, index) => normalizeMarvelRow(row, `rows[${index}]`, manualReviewFields, nulledHeroFields))
+    : [];
+
+  const teams = [0, 1].map((index) => {
+    const rawTeam = Array.isArray(rawJson.teams) ? rawJson.teams[index] || {} : {};
+    let players = Array.isArray(rawTeam.players)
+      ? rawTeam.players.map((row, playerIndex) => normalizeMarvelRow(row, `teams[${index}].players[${playerIndex}]`, manualReviewFields, nulledHeroFields))
+      : [];
+
+    if (!players.length && rows.some((row) => row.team_key === `team_${index + 1}`)) {
+      players = rows.filter((row) => row.team_key === `team_${index + 1}`);
+    }
+
+    return {
+      ...rawTeam,
+      team_key: rawTeam.team_key || `team_${index + 1}`,
+      players,
+    };
+  });
+
+  if (!teams[0].players.length && !teams[1].players.length && rows.length) {
+    teams[0].players = rows.slice(0, 6).map((row) => ({ ...row, team_key: row.team_key || "team_1" }));
+    teams[1].players = rows.slice(6, 12).map((row) => ({ ...row, team_key: row.team_key || "team_2" }));
+    if (rows.length !== 12) addManualReviewField(manualReviewFields, "rows");
+  }
+
+  applyMarvelDuplicateHeroSafety(rows.map((row, index) => ({ row, index })).filter(({ row }) => row.team_key === "team_1"), "rows", manualReviewFields, nulledHeroFields);
+  applyMarvelDuplicateHeroSafety(rows.map((row, index) => ({ row, index })).filter(({ row }) => row.team_key === "team_2"), "rows", manualReviewFields, nulledHeroFields);
+
+  teams.forEach((team, teamIndex) => {
+    applyMarvelDuplicateHeroSafety(team.players, `teams[${teamIndex}].players`, manualReviewFields, nulledHeroFields);
+    team.team_totals = calculateMarvelTeamTotals(team, team.players);
+  });
+
+  const shouldReview = Boolean(rawJson.manual_review_required || nulledHeroFields.length || rows.length !== 12);
+
+  return {
+    ...rawJson,
+    rows,
+    teams,
+    fields_needing_manual_review: manualReviewFields,
+    manual_review_required: shouldReview,
+    meta: {
+      ...(rawJson.meta || {}),
+      hero_fields_nulled: nulledHeroFields,
+    },
+  };
+}
+
 export const POSTGAME_SCREENSHOT_STATS = {
   "League of Legends": {
     pickField: "champion",
@@ -60,11 +312,12 @@ export const POSTGAME_SCREENSHOT_STATS = {
   "Marvel Rivals": {
     pickField: "hero",
     pickLabel: "Hero",
-    mapLabel: "Map / Mode",
+    mapLabel: "Map / Objective",
     visibleStats: [
-      "Result, map, mode, round score or objective progress when visible",
-      "Hero, role, player name, eliminations, deaths, assists, damage, healing, damage blocked when visible",
-      "Team totals for eliminations, deaths, assists, damage, healing, and damage blocked",
+      "Result, final score if visible, Team 1 / Team 2 score if visible, map, objective or mode text, and match duration when visible",
+      "Player row hero portrait identity, player name, K/D/A icon columns, medals, final hits, damage, damage blocked, healing, accuracy, MVP, and SVP when visible",
+      "Team totals for kills, deaths, assists, final hits, damage, damage blocked, healing, and average accuracy percent when grouping is reliable",
+      "Bans or picks only when clearly visible and labeled",
     ],
   },
   Deadlock: {
@@ -383,7 +636,234 @@ Specific extraction instructions:
   `.trim();
 }
 
+export function getMarvelRivalsExtractionPrompt() {
+  return `
+Analyze this Marvel Rivals post-game scoreboard screenshot and extract only visible scoreboard data into valid JSON.
+
+Return JSON only. Do not explain. Do not include markdown.
+
+The final image is the uploaded scoreboard screenshot to extract.
+
+You may also receive reference material before the scoreboard image:
+- A Marvel Rivals base hero reference sheet.
+- Marvel Rivals costume reference sheets.
+- Costume metadata grouped by base hero.
+
+Use reference material only to help identify the small hero portrait inside each scoreboard row.
+Do not extract match data from reference material.
+Only the final uploaded scoreboard image contains the match data.
+
+The screenshot may include:
+- match result, such as VICTORY or DEFEAT
+- final score if visible
+- map name in the top-right
+- objective/mode name in the top-right
+- match duration in the top-right
+- two teams, usually 6 players per team
+- blue/purple team rows and orange/red team rows
+- player names
+- small hero portraits inside each player row
+- K/D/A columns shown with three combat icons
+- Medals column
+- Final Hits
+- Damage
+- Damage Blocked
+- Healing
+- Accuracy
+
+Rules:
+- Only extract data visible in the screenshot.
+- Do not use external APIs or hidden game data.
+- Do not guess hidden stats.
+- If a value is not visible, return null.
+- Preserve row order from top to bottom.
+- Preserve team grouping exactly as shown.
+- Extract all visible player rows.
+- The scoreboard normally has 12 rows total, 6 per team.
+- Extract only these gameplay stats because these are the Marvel Rivals stats Matchmake stores:
+  - player name
+  - hero_guess from the small row portrait when confident
+  - kills
+  - deaths
+  - assists
+  - medals when visible
+  - final hits
+  - damage
+  - damage blocked
+  - healing
+  - accuracy percent
+  - MVP/SVP if clearly attached
+
+Hero identification:
+- Use only the small hero portrait inside the same scoreboard row.
+- Use the base hero and costume reference sheets to map row portraits to a base hero name.
+- If a costume icon matches, return the base hero name, not the costume name.
+- Do not use ban/pick strip portraits, background art, MVP/SVP side art, role icons, medal icons, UI icons, team icons, or menus.
+- Do not output role names such as Vanguard, Duelist, Strategist, or Flex.
+- Do not output placeholders such as Hero 1, Hero 2, Unknown, or Player TBD.
+- If the row portrait is unclear, return hero_guess = null.
+- Return portrait_crop_hint for the row portrait if you can locate it confidently; otherwise leave the crop values null.
+- hero_confirmed should always be null. The app/user confirms heroes later.
+
+K/D/A RULE:
+The three combat-stat columns immediately after Player Name are K/D/A.
+- first number = kills
+- second number = deaths
+- third number = assists
+- kda_text = "kills/deaths/assists"
+
+NUMBER RULES:
+- Convert comma numbers into integers.
+  Example: "47,407" becomes 47407.
+- Convert percentages into numbers.
+  Example: "16%" becomes 16.
+- If a number is unreadable, return null.
+- Do not estimate unreadable numbers.
+
+MATCH HEADER RULES:
+- If VICTORY is visible, match.result = "victory".
+- If DEFEAT is visible, match.result = "defeat".
+- Extract map/objective/duration only from visible top-right match text.
+- Example top-right text may contain:
+  - map: HELLFIRE GALA-ARAKKO
+  - objective/mode: CONVOY
+  - duration: 00:31:20
+- If team score is visible, extract it.
+- If no score is visible, return null.
+
+TEAM GROUPING RULES:
+- Use visual row color to assign team groups.
+- Blue/purple section = one team.
+- Orange/red section = the other team.
+- team_1 should be the first team section shown from top to bottom.
+- team_2 should be the second team section shown from top to bottom.
+- Put each player row in both rows[] and the correct teams[].players array.
+- If team grouping is unclear, still return rows[] and set manual_review_required = true.
+
+MEDALS RULE:
+- Extract medals only if visible in the Medals column.
+- If medals are icons and cannot be named, return a simple array of visible medal descriptions or symbols if possible.
+- If unclear, return [].
+
+MVP/SVP RULE:
+- Mark is_mvp = true only if MVP is clearly attached to that player or team section.
+- Mark is_svp = true only if SVP is clearly attached to that player or team section.
+- If unclear, leave false.
+
+Return this exact JSON shape:
+{
+  "game_title": "Marvel Rivals",
+  "screenshot_type": "post_game_scoreboard",
+  "parser_confidence": 0,
+  "manual_review_required": true,
+  "match": {
+    "result": null,
+    "final_score": null,
+    "team_1_score": null,
+    "team_2_score": null,
+    "map": null,
+    "objective_or_mode": null,
+    "duration": null,
+    "played_at": null,
+    "match_date_text": null
+  },
+  "rows": [
+    {
+      "row_index": 1,
+      "team_key": null,
+      "row_color_group": null,
+      "player_name": null,
+      "hero_guess": null,
+      "hero_guess_confidence": 0,
+      "hero_confirmed": null,
+      "portrait_crop_hint": {
+        "x": null,
+        "y": null,
+        "width": null,
+        "height": null,
+        "coordinate_space": "normalized_0_1000"
+      },
+      "kills": null,
+      "deaths": null,
+      "assists": null,
+      "kda_text": null,
+      "medals": [],
+      "final_hits": null,
+      "damage": null,
+      "damage_blocked": null,
+      "healing": null,
+      "accuracy_percent": null,
+      "is_mvp": false,
+      "is_svp": false,
+      "confidence": 0
+    }
+  ],
+  "teams": [
+    {
+      "team_key": "team_1",
+      "row_color_group": null,
+      "is_winning_team": null,
+      "team_score": null,
+      "team_totals": {
+        "kills": null,
+        "deaths": null,
+        "assists": null,
+        "final_hits": null,
+        "damage": null,
+        "damage_blocked": null,
+        "healing": null,
+        "average_accuracy_percent": null
+      },
+      "players": []
+    },
+    {
+      "team_key": "team_2",
+      "row_color_group": null,
+      "is_winning_team": null,
+      "team_score": null,
+      "team_totals": {
+        "kills": null,
+        "deaths": null,
+        "assists": null,
+        "final_hits": null,
+        "damage": null,
+        "damage_blocked": null,
+        "healing": null,
+        "average_accuracy_percent": null
+      },
+      "players": []
+    }
+  ],
+  "fields_needing_manual_review": []
+}
+
+TEAM TOTALS:
+After extracting player rows, calculate team totals from the visible rows when team grouping is reliable:
+- kills = sum of kills
+- deaths = sum of deaths
+- assists = sum of assists
+- final_hits = sum of final_hits
+- damage = sum of damage
+- damage_blocked = sum of damage_blocked
+- healing = sum of healing
+- average_accuracy_percent = average of visible accuracy_percent values
+
+If a row field is null, skip it in the sum/average.
+If team grouping is not reliable, set team totals to null.
+
+FINAL VALIDATION:
+Before returning JSON:
+- Do not include any fields outside the schema.
+- Make sure rows[] contains every visible scoreboard row.
+- Make sure teams[].players contain the same row objects grouped by team.
+- Make sure hero_confirmed is always null.
+- Make sure no hidden stats are included.
+
+  `.trim();
+}
+
 export function getPostGameExtractionPrompt(gameTitle) {
+  if (gameTitle === "Marvel Rivals") return getMarvelRivalsExtractionPrompt();
   return createPrompt(gameTitle);
 }
 
@@ -500,22 +980,22 @@ const genericMockData = {
     opponentStats: { eliminations: 108, assists: 72, deaths: 52, damage: 46100, healing: 25100, mitigation: 18300 },
   },
   "Marvel Rivals": {
-    final_score: "3 - 1",
-    team_score: 3,
-    opponent_score: 1,
+    final_score: "Victory",
+    team_score: 1,
+    opponent_score: 0,
     opponent_name: "Rivalry Club",
-    map_or_mode: "Domination",
+    map_or_mode: "Klyntar · Convergence",
     roles: ["Vanguard", "Duelist", "Duelist", "Strategist", "Strategist", "Flex"],
     rows: [
-      { hero: "Magneto", role: "Vanguard", eliminations: 24, deaths: 7, assists: 15, damage: 10200, healing: 0, damage_blocked: 18200 },
-      { hero: "Iron Man", role: "Duelist", eliminations: 32, deaths: 9, assists: 6, damage: 16800, healing: 0, damage_blocked: 400 },
-      { hero: "Star-Lord", role: "Duelist", eliminations: 28, deaths: 8, assists: 9, damage: 14100, healing: 0, damage_blocked: 300 },
-      { hero: "Luna Snow", role: "Strategist", eliminations: 13, deaths: 6, assists: 29, damage: 3900, healing: 17400, damage_blocked: 0 },
-      { hero: "Mantis", role: "Strategist", eliminations: 11, deaths: 5, assists: 31, damage: 3400, healing: 15900, damage_blocked: 0 },
-      { hero: "Namor", role: "Flex", eliminations: 20, deaths: 7, assists: 12, damage: 9700, healing: 0, damage_blocked: 900 },
+      { hero: "Magneto", role: "Vanguard", k: 24, d: 7, a: 15, final_hits: 8, damage: 10200, healing: 0, damage_blocked: 18200, accuracy: 42 },
+      { hero: "Iron Man", role: "Duelist", k: 32, d: 9, a: 6, final_hits: 12, damage: 16800, healing: 0, damage_blocked: 400, accuracy: 31 },
+      { hero: "Star-Lord", role: "Duelist", k: 28, d: 8, a: 9, final_hits: 10, damage: 14100, healing: 0, damage_blocked: 300, accuracy: 46 },
+      { hero: "Luna Snow", role: "Strategist", k: 13, d: 6, a: 29, final_hits: 3, damage: 3900, healing: 17400, damage_blocked: 0, accuracy: 53 },
+      { hero: "Mantis", role: "Strategist", k: 11, d: 5, a: 31, final_hits: 2, damage: 3400, healing: 15900, damage_blocked: 0, accuracy: 58 },
+      { hero: "Namor", role: "Flex", k: 20, d: 7, a: 12, final_hits: 7, damage: 9700, healing: 0, damage_blocked: 900, accuracy: 35 },
     ],
-    team_stats: { eliminations: 128, deaths: 42, assists: 102, damage: 58100, healing: 33300, damage_blocked: 19800 },
-    opponent_stats: { eliminations: 101, deaths: 56, assists: 78, damage: 50600, healing: 28400, damage_blocked: 17100 },
+    team_stats: { team_kills: 128, team_deaths: 42, team_assists: 102, final_hits: 42, damage: 58100, healing: 33300, damage_blocked: 19800, average_accuracy: 44 },
+    opponent_stats: { team_kills: 101, team_deaths: 56, team_assists: 78, final_hits: 31, damage: 50600, healing: 28400, damage_blocked: 17100, average_accuracy: 39 },
   },
   Deadlock: {
     final_score: "Victory",

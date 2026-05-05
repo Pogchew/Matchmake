@@ -118,7 +118,7 @@ const GAME_DASHBOARD_CONFIGS = {
   "Overwatch 2": {
     pickField: "hero",
     pickLabel: "Hero",
-    mapLabel: "Map / Mode",
+    mapLabel: "Map / Objective",
     compositionLabel: "Hero Composition",
     defaultMap: "Hybrid",
     roles: ["Tank", "Damage", "Damage", "Support", "Support", "Flex"],
@@ -148,23 +148,24 @@ const GAME_DASHBOARD_CONFIGS = {
     compositionLabel: "Hero Composition",
     defaultMap: "Domination",
     roles: ["Vanguard", "Duelist", "Duelist", "Strategist", "Strategist", "Flex"],
-    editFields: ["eliminations", "deaths", "assists", "damage", "healing", "damage_blocked"],
+    editFields: ["k", "d", "a", "final_hits", "damage", "damage_blocked", "healing", "accuracy"],
     cardStats: [
-      { key: "eliminations", label: "Elims" },
+      { key: "kda", label: "K/D/A" },
       { key: "damage", label: "Damage" },
     ],
     tableFields: [
-      { key: "eliminations", label: "Elims" },
-      { key: "deaths", label: "Deaths" },
-      { key: "assists", label: "Assists" },
+      { key: "kda", label: "K/D/A" },
+      { key: "final_hits", label: "Final Hits" },
       { key: "damage", label: "Damage" },
-      { key: "healing", label: "Healing" },
       { key: "damage_blocked", label: "Blocked" },
+      { key: "healing", label: "Healing" },
+      { key: "accuracy", label: "Accuracy" },
     ],
     highlightStats: [
-      { key: "eliminations", label: "Eliminations" },
-      { key: "damage", label: "Damage" },
-      { key: "healing", label: "Healing" },
+      { key: "total_kills", label: "Kills" },
+      { key: "total_final_hits", label: "Final Hits" },
+      { key: "total_damage", label: "Damage" },
+      { key: "total_healing", label: "Healing" },
     ],
   },
   Deadlock: {
@@ -250,6 +251,51 @@ GAME_DASHBOARD_CONFIGS.Overwatch = GAME_DASHBOARD_CONFIGS["Overwatch 2"];
 
 const SUPPORTED_GAMES = Object.keys(POSTGAME_SCREENSHOT_STATS);
 
+const MARVEL_RIVALS_HERO_OPTIONS = [
+  "Adam Warlock",
+  "Angela",
+  "Black Panther",
+  "Black Widow",
+  "Blade",
+  "Captain America",
+  "Cloak & Dagger",
+  "Doctor Strange",
+  "Emma Frost",
+  "Groot",
+  "Hawkeye",
+  "Hela",
+  "Hulk",
+  "Human Torch",
+  "Invisible Woman",
+  "Iron Fist",
+  "Iron Man",
+  "Jeff the Land Shark",
+  "Loki",
+  "Luna Snow",
+  "Magik",
+  "Magneto",
+  "Mantis",
+  "Mister Fantastic",
+  "Moon Knight",
+  "Namor",
+  "Peni Parker",
+  "Phoenix",
+  "Psylocke",
+  "Rocket Raccoon",
+  "Scarlet Witch",
+  "Spider-Man",
+  "Squirrel Girl",
+  "Star-Lord",
+  "Storm",
+  "The Punisher",
+  "The Thing",
+  "Thor",
+  "Ultron",
+  "Venom",
+  "Winter Soldier",
+  "Wolverine",
+];
+
 function getDashboardConfig(gameTitle) {
   return GAME_DASHBOARD_CONFIGS[gameTitle] || GAME_DASHBOARD_CONFIGS.Valorant;
 }
@@ -325,8 +371,25 @@ function normalizeReviewForForm(review, gameTitle) {
   };
 }
 
+function normalizeRowsForSave(rows = [], gameTitle) {
+  if (gameTitle !== "Marvel Rivals") return rows;
+  return rows.map((row) => ({
+    ...row,
+    hero: row.hero_confirmed || "",
+    hero_confirmed: row.hero_confirmed || "",
+    hero_id: row.hero_id || "",
+    costume_name: row.costume_name || "",
+    costume_id: row.costume_id || "",
+    asset_confidence: row.asset_confidence ?? row.hero_asset_confidence ?? "",
+    matched_asset_src: row.matched_asset_src || "",
+    needs_manual_review: Boolean(row.needs_manual_review || row.needs_hero_review),
+  }));
+}
+
 function buildReviewPayload({ form, team, userId, screenshotPreview }) {
   const derivedFinalScore = formatScore(form.team_score, form.opponent_score);
+  const teamRows = normalizeRowsForSave(form.team_comp || [], team.game_title);
+  const opponentRows = normalizeRowsForSave(form.opponent_comp || [], team.game_title);
 
   return {
     team_id: team.id,
@@ -341,12 +404,12 @@ function buildReviewPayload({ form, team, userId, screenshotPreview }) {
     map_or_mode: team.game_title === "League of Legends" ? null : form.map_or_mode || null,
     played_at: form.played_at ? new Date(form.played_at).toISOString() : null,
     screenshot_url: screenshotPreview || form.screenshot_url || null,
-    team_comp: form.team_comp || [],
-    opponent_comp: form.opponent_comp || [],
+    team_comp: teamRows,
+    opponent_comp: opponentRows,
     team_stats: form.team_stats || {},
     opponent_stats: form.opponent_stats || {},
-    player_rows: form.team_comp || [],
-    opponent_rows: form.opponent_comp || [],
+    player_rows: teamRows,
+    opponent_rows: opponentRows,
     notes: form.notes || null,
     parser_status: form.parser_status || "manual",
     parser_confidence: form.parser_confidence,
@@ -593,6 +656,162 @@ function mapValorantExtractionToReview(extraction) {
     parser_status: "extracted",
     parser_confidence: normalizeExtractedNumber(extraction?.parser_confidence),
     manual_edit_required: Boolean(extraction?.manual_review_required || groupingNeedsReview),
+  };
+}
+
+function mapMarvelRivalsPlayerRow(row = {}) {
+  const parsedKda = parseKdaText(row.kda_text);
+  return {
+    team_key: row.team_key || null,
+    row_color_group: row.row_color_group || null,
+    hero: row.hero_confirmed || row.hero || "",
+    hero_confirmed: row.hero_confirmed || row.hero || "",
+    hero_id: row.hero_id || "",
+    costume_name: row.costume_name || "",
+    costume_id: row.costume_id || "",
+    hero_guess: row.hero_guess || "",
+    hero_asset_match: row.hero_asset_match || "",
+    hero_asset_confidence: normalizeExtractedNumber(row.hero_asset_confidence) ?? "",
+    hero_asset_method: row.hero_asset_method || "",
+    asset_confidence: normalizeExtractedNumber(row.asset_confidence) ?? normalizeExtractedNumber(row.hero_asset_confidence) ?? "",
+    matched_asset_src: row.matched_asset_src || "",
+    needs_manual_review: Boolean(row.needs_manual_review),
+    needs_hero_review: Boolean(row.needs_hero_review || row.needs_manual_review),
+    player_name: row.player_name || "",
+    role: row.role || "",
+    k: normalizeExtractedNumber(row.kills) ?? parsedKda.k,
+    d: normalizeExtractedNumber(row.deaths) ?? parsedKda.d,
+    a: normalizeExtractedNumber(row.assists) ?? parsedKda.a,
+    final_hits: normalizeExtractedNumber(row.final_hits) ?? "",
+    damage: normalizeExtractedNumber(row.damage) ?? "",
+    damage_blocked: normalizeExtractedNumber(row.damage_blocked) ?? "",
+    healing: normalizeExtractedNumber(row.healing) ?? "",
+    accuracy: normalizeExtractedNumber(row.accuracy_percent ?? row.accuracy) ?? "",
+    hero_confidence: normalizeExtractedNumber(row.hero_confidence) ?? normalizeExtractedNumber(row.asset_confidence) ?? normalizeExtractedNumber(row.hero_asset_confidence) ?? normalizeExtractedNumber(row.hero_guess_confidence) ?? normalizeExtractedNumber(row.confidence) ?? 0,
+    is_mvp: Boolean(row.is_mvp),
+    is_svp: Boolean(row.is_svp),
+    medals: Array.isArray(row.medals) ? row.medals : [],
+    confidence: normalizeExtractedNumber(row.confidence),
+  };
+}
+
+function mapMarvelRivalsTeamStats(team = {}, rows = []) {
+  const totals = team.team_totals || {};
+  const totalKills = normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k");
+  const totalDeaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d");
+  const totalAssists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a");
+  const totalFinalHits = normalizeExtractedNumber(totals.final_hits) ?? sumRows(rows, "final_hits");
+  const totalDamage = normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage");
+  const totalDamageBlocked = normalizeExtractedNumber(totals.damage_blocked) ?? sumRows(rows, "damage_blocked");
+  const totalHealing = normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing");
+  const averageAccuracy = normalizeExtractedNumber(totals.average_accuracy_percent ?? totals.average_accuracy) ?? averageRows(rows, "accuracy");
+
+  return {
+    total_kills: totalKills,
+    total_deaths: totalDeaths,
+    total_assists: totalAssists,
+    total_final_hits: totalFinalHits,
+    total_damage: totalDamage,
+    total_damage_blocked: totalDamageBlocked,
+    total_healing: totalHealing,
+    average_accuracy_percent: averageAccuracy,
+    team_kills: totalKills,
+    team_deaths: totalDeaths,
+    team_assists: totalAssists,
+    final_hits: totalFinalHits,
+    damage: totalDamage,
+    damage_blocked: totalDamageBlocked,
+    healing: totalHealing,
+    average_accuracy: averageAccuracy,
+  };
+}
+
+function hasMarvelRowContent(row = {}) {
+  return Boolean(
+    row.player_name ||
+    row.hero ||
+    row.k !== "" ||
+    row.d !== "" ||
+    row.a !== "" ||
+    row.damage !== "" ||
+    row.healing !== "" ||
+    row.damage_blocked !== "" ||
+    row.final_hits !== "",
+  );
+}
+
+function groupMarvelRivalsRows(extraction) {
+  const teams = Array.isArray(extraction?.teams) ? extraction.teams : [];
+  const flatRows = Array.isArray(extraction?.rows) ? extraction.rows : [];
+  const teamOne = teams.find((team) => team?.team_key === "team_1") || teams[0] || {};
+  const teamTwo = teams.find((team) => team?.team_key === "team_2") || teams[1] || {};
+  let groupedTeamOne = (teamOne.players || []).map((row) => mapMarvelRivalsPlayerRow({ ...row, team_key: "team_1" }));
+  let groupedTeamTwo = (teamTwo.players || []).map((row) => mapMarvelRivalsPlayerRow({ ...row, team_key: "team_2" }));
+  const flatTeamOne = flatRows.filter((row) => row.team_key === "team_1").map((row) => mapMarvelRivalsPlayerRow(row));
+  const flatTeamTwo = flatRows.filter((row) => row.team_key === "team_2").map((row) => mapMarvelRivalsPlayerRow(row));
+
+  if (flatTeamOne.some(hasMarvelRowContent)) groupedTeamOne = flatTeamOne;
+  if (flatTeamTwo.some(hasMarvelRowContent)) groupedTeamTwo = flatTeamTwo;
+  if (!groupedTeamOne.length && !groupedTeamTwo.length && flatRows.length) {
+    groupedTeamOne = flatRows.slice(0, 6).map((row) => mapMarvelRivalsPlayerRow({ ...row, team_key: row.team_key || "team_1" }));
+    groupedTeamTwo = flatRows.slice(6, 12).map((row) => mapMarvelRivalsPlayerRow({ ...row, team_key: row.team_key || "team_2" }));
+  }
+  groupedTeamOne = groupedTeamOne.filter(hasMarvelRowContent);
+  groupedTeamTwo = groupedTeamTwo.filter(hasMarvelRowContent);
+
+  return {
+    teamRows: groupedTeamOne,
+    opponentRows: groupedTeamTwo,
+    teamOne,
+    teamTwo,
+    groupingNeedsReview: groupedTeamOne.length !== 6 || groupedTeamTwo.length !== 6,
+  };
+}
+
+function mapMarvelRivalsExtractionToReview(extraction) {
+  const match = extraction?.match || {};
+  const {
+    teamRows,
+    opponentRows,
+    teamOne,
+    teamTwo,
+    groupingNeedsReview,
+  } = groupMarvelRivalsRows(extraction);
+  const normalizedResult = match.result?.toLowerCase?.();
+  const mapMode = [match.map, match.objective_or_mode ?? match.mode].filter(Boolean).join(" · ");
+  const heroFieldsNulled = extraction?.meta?.hero_fields_nulled || [];
+  const heroReviewNeeded = heroFieldsNulled.length > 0;
+  const reviewNotes = groupingNeedsReview
+    ? "Team grouping needs review. Use Swap Teams if the sides are reversed, then check each row before saving."
+    : heroReviewNeeded
+      ? "Some hero names need review because duplicate or low-confidence portraits were detected."
+      : "Marvel Rivals extraction. Review each field before saving.";
+
+  return {
+    match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
+    team_score: normalizeExtractedNumber(match.team_1_score) ?? "",
+    opponent_score: normalizeExtractedNumber(match.team_2_score) ?? "",
+    opponent_name: "",
+    map_or_mode: mapMode,
+    played_at: match.played_at || new Date().toISOString(),
+    team_comp: teamRows,
+    opponent_comp: opponentRows,
+    team_stats: {
+      ...mapMarvelRivalsTeamStats(teamOne, teamRows),
+      duration: match.duration || null,
+      objective_or_mode: match.objective_or_mode ?? match.mode ?? null,
+      match_date_text: match.match_date_text || null,
+      bans_or_picks: extraction?.bans_or_picks || { team_1: [], team_2: [] },
+      hero_fields_nulled: heroFieldsNulled,
+      team_grouping_needs_review: groupingNeedsReview,
+      fields_needing_manual_review: extraction?.fields_needing_manual_review || [],
+    },
+    opponent_stats: mapMarvelRivalsTeamStats(teamTwo, opponentRows),
+    notes: reviewNotes,
+    parser_status: "extracted",
+    parser_confidence: normalizeExtractedNumber(extraction?.parser_confidence),
+    manual_edit_required: Boolean(extraction?.manual_review_required || groupingNeedsReview || heroReviewNeeded),
   };
 }
 
@@ -917,7 +1136,7 @@ export default function TeamDashboardPage() {
     try {
       let extracted;
 
-      if (team.game_title === "League of Legends" || team.game_title === "Valorant") {
+      if (team.game_title === "League of Legends" || team.game_title === "Valorant" || team.game_title === "Marvel Rivals") {
         const extractionFile = await resizeImageForExtraction(file);
         const formData = new FormData();
         formData.append("gameTitle", team.game_title);
@@ -936,9 +1155,20 @@ export default function TeamDashboardPage() {
           throw new Error(payload?.error || "Could not extract scoreboard data. You can still enter stats manually.");
         }
 
-        extracted = team.game_title === "League of Legends"
-          ? mapLeagueExtractionToReview(payload.data, team.name)
-          : mapValorantExtractionToReview(payload.data);
+        if (team.game_title === "League of Legends") {
+          extracted = mapLeagueExtractionToReview(payload.data, team.name);
+        } else if (team.game_title === "Marvel Rivals") {
+          extracted = mapMarvelRivalsExtractionToReview(payload.data);
+          if (process.env.NODE_ENV === "development") {
+            console.debug("Marvel Rivals extraction mapped", {
+              rows: Array.isArray(payload.data?.rows) ? payload.data.rows.length : 0,
+              ourRows: extracted.team_comp?.length || 0,
+              opponentRows: extracted.opponent_comp?.length || 0,
+            });
+          }
+        } else {
+          extracted = mapValorantExtractionToReview(payload.data);
+        }
       } else {
         extracted = await extractPostGameStats({
           gameTitle: team.game_title,
@@ -1339,7 +1569,7 @@ function ReviewMessages({ errorMessage, successMessage }) {
 
 function LeagueDashboard(props) {
   const { form, reviews, selectedReview, team } = props;
-  const displayReview = selectedReview || form;
+  const displayReview = form || selectedReview;
   const gameLength = displayReview?.team_stats?.game_length || "Length TBD";
   const patch = displayReview?.team_stats?.patch;
 
@@ -1399,7 +1629,7 @@ function LeagueDashboard(props) {
 
 function ValorantDashboard(props) {
   const { form, reviews, selectedReview, team } = props;
-  const displayReview = selectedReview || form;
+  const displayReview = form || selectedReview;
   const combinedRows = [
     ...(displayReview?.team_comp || []),
     ...(displayReview?.opponent_comp || []),
@@ -1486,13 +1716,19 @@ function UniversalGameDashboard(props) {
   const { form, reviews, selectedReview, team } = props;
   const config = getDashboardConfig(team.game_title);
   const visibleStats = POSTGAME_SCREENSHOT_STATS[team.game_title]?.visibleStats || [];
-  const displayReview = selectedReview || form;
+  const displayReview = form || selectedReview;
+  const isMarvelRivals = team.game_title === "Marvel Rivals";
+  const heroReviewNeeded = isMarvelRivals && (displayReview?.team_stats?.hero_fields_nulled || []).length > 0;
+  const groupingNeedsReview = isMarvelRivals && (displayReview?.team_stats?.team_grouping_needs_review || displayReview?.manual_edit_required);
+  const performanceRows = isMarvelRivals
+    ? [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])]
+    : displayReview?.team_comp || [];
 
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-lg">
+    <div className={`mx-auto flex max-w-[1240px] flex-col ${isMarvelRivals ? "gap-md" : "gap-lg"}`}>
       <GameSeriesControl {...props} />
-      <section className="grid gap-lg lg:grid-cols-[1fr_440px]">
-        <div className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
+      <section className={`grid ${isMarvelRivals ? "gap-md lg:grid-cols-[1fr_380px]" : "gap-lg lg:grid-cols-[1fr_440px]"}`}>
+        <div className={`rounded-3xl border border-outline-variant/25 bg-surface-container-lowest ${isMarvelRivals ? "p-md" : "p-lg"}`}>
           <div className="mb-sm flex flex-wrap items-center gap-sm">
             <ResultBadge result={displayReview?.match_result} />
             <span className="rounded-full bg-primary-fixed px-sm py-xs font-label-small text-label-small text-on-primary-fixed">
@@ -1500,17 +1736,17 @@ function UniversalGameDashboard(props) {
             </span>
             <span className="font-label-small text-label-small text-on-surface-variant">{formatDate(displayReview?.played_at)}</span>
           </div>
-          <h1 className="font-editorial-large text-editorial-large text-on-surface">
+          <h1 className={`${isMarvelRivals ? "font-headline-1 text-headline-1" : "font-editorial-large text-editorial-large"} text-on-surface`}>
             {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
           </h1>
-          <p className="mt-sm font-body-main text-body-main text-on-surface-variant">
+          <p className={`${isMarvelRivals ? "mt-xs font-body-sub text-body-sub" : "mt-sm font-body-main text-body-main"} text-on-surface-variant`}>
             {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"} · {displayReview?.map_or_mode || config.defaultMap}
           </p>
-          <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-3">
+          <div className={`mt-md grid gap-sm ${isMarvelRivals ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
             {config.highlightStats.map((stat) => (
-              <div className="rounded-2xl bg-surface-container-low p-md" key={stat.key}>
+              <div className={`rounded-2xl bg-surface-container-low ${isMarvelRivals ? "p-sm" : "p-md"}`} key={stat.key}>
                 <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                <p className="mt-xs font-headline-3 text-headline-3 text-primary">{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
+                <p className={`${isMarvelRivals ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
               </div>
             ))}
           </div>
@@ -1527,8 +1763,16 @@ function UniversalGameDashboard(props) {
         )}
       </section>
 
-      <section className="grid gap-lg lg:grid-cols-[1fr_360px]">
-        <div className="space-y-lg">
+      {isMarvelRivals && (groupingNeedsReview || heroReviewNeeded) && (
+        <div className="rounded-xl border border-[#b26a00]/25 bg-[#fff4d6] px-md py-sm font-body-sub text-body-sub text-[#755400]">
+          {heroReviewNeeded
+            ? "Some hero names need review because duplicate or low-confidence portraits were detected."
+            : "Team grouping needs review. Use Swap Teams if the sides are reversed, then check player rows before saving."}
+        </div>
+      )}
+
+      <section className={isMarvelRivals ? "grid gap-md" : "grid gap-lg lg:grid-cols-[1fr_360px]"}>
+        <div className={isMarvelRivals ? "space-y-md" : "space-y-lg"}>
           <CompositionSection game={team.game_title} rows={displayReview?.team_comp || []} title={`Our ${config.compositionLabel}`} />
           <CompositionSection
             accent="bg-[#d12b2b]"
@@ -1537,26 +1781,95 @@ function UniversalGameDashboard(props) {
             rows={displayReview?.opponent_comp || []}
             title={`Opponent ${config.compositionLabel}`}
           />
-          <PerformanceTable game={team.game_title} rows={displayReview?.team_comp || []} />
+          <PerformanceTable game={team.game_title} rows={performanceRows} />
         </div>
 
-        <aside className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
-          <h2 className="font-headline-2 text-headline-2 text-on-surface">Screenshot Stats</h2>
-          <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
-            Matchmake stores only stats visible in each post-game screenshot, so this can become a clean database of scrim history without manual spreadsheets.
-          </p>
-          <div className="mt-md grid gap-sm">
-            {visibleStats.map((stat) => (
-              <div className="rounded-2xl bg-surface-container-low p-md" key={stat}>
-                <p className="font-body-sub text-body-sub text-on-surface">{stat}</p>
-              </div>
-            ))}
-          </div>
-        </aside>
+        {!isMarvelRivals && (
+          <aside className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
+            <h2 className="font-headline-2 text-headline-2 text-on-surface">Screenshot Stats</h2>
+            <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
+              Matchmake stores only stats visible in each post-game screenshot, so this can become a clean database of scrim history without manual spreadsheets.
+            </p>
+            <div className="mt-md grid gap-sm">
+              {visibleStats.map((stat) => (
+                <div className="rounded-2xl bg-surface-container-low p-md" key={stat}>
+                  <p className="font-body-sub text-body-sub text-on-surface">{stat}</p>
+                </div>
+              ))}
+            </div>
+          </aside>
+        )}
       </section>
+
+      {isMarvelRivals && <MarvelRivalsComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
 
       <ReviewEditor {...props} game={team.game_title} />
       <RecentReviewsList reviews={reviews} />
+    </div>
+  );
+}
+
+function MarvelRivalsComparisonPanel({ opponentStats, teamStats }) {
+  const metrics = [
+    { key: "total_kills", fallback: "team_kills", label: "Kills" },
+    { key: "total_assists", fallback: "team_assists", label: "Assists" },
+    { key: "total_final_hits", fallback: "final_hits", label: "Final Hits" },
+    { key: "total_damage", fallback: "damage", label: "Damage" },
+    { key: "total_damage_blocked", fallback: "damage_blocked", label: "Blocked" },
+    { key: "total_healing", fallback: "healing", label: "Healing" },
+    { key: "average_accuracy_percent", fallback: "average_accuracy", label: "Accuracy", percent: true },
+  ];
+
+  return (
+    <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md">
+      <div className="flex flex-col gap-xs md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="font-headline-3 text-headline-3 text-on-surface">Team Comparison</h2>
+          <p className="font-label-small text-label-small text-on-surface-variant">
+            Scoreboard-visible stats only.
+          </p>
+        </div>
+      </div>
+      <div className="mt-md grid grid-cols-1 gap-sm md:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => {
+          const ours = teamStats?.[metric.key] ?? teamStats?.[metric.fallback];
+          const theirs = opponentStats?.[metric.key] ?? opponentStats?.[metric.fallback];
+          return (
+            <MiniComparisonBar
+              key={metric.key}
+              label={metric.label}
+              ours={ours}
+              percent={metric.percent}
+              theirs={theirs}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function MiniComparisonBar({ label, ours, percent = false, theirs }) {
+  const ourValue = Number(ours);
+  const theirValue = Number(theirs);
+  const hasValues = Number.isFinite(ourValue) && Number.isFinite(theirValue);
+  const total = hasValues ? Math.max(ourValue + theirValue, 1) : 1;
+  const ourWidth = hasValues ? `${Math.max(6, Math.min(94, (ourValue / total) * 100))}%` : "0%";
+  const suffix = percent ? "%" : "";
+
+  return (
+    <div className="rounded-xl bg-surface-container-low p-sm">
+      <div className="mb-sm flex items-center justify-between gap-sm">
+        <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
+        <p className="font-label-small text-label-small text-on-surface-variant">
+          <span className="font-label-bold text-primary">{hasValues ? `${formatLargeStat(ourValue)}${suffix}` : "—"}</span>
+          <span className="mx-xs">vs</span>
+          <span className="font-label-bold text-[#d12b2b]">{hasValues ? `${formatLargeStat(theirValue)}${suffix}` : "—"}</span>
+        </p>
+      </div>
+      <div className="overflow-hidden rounded-full bg-[#f4cccc]">
+        <div className="h-2 rounded-full bg-primary" style={{ width: ourWidth }} />
+      </div>
     </div>
   );
 }
@@ -1644,13 +1957,51 @@ function getAgentImagePath(game, pick) {
   return `/valorant/agents/${toAgentFileStem(pick)}.png`;
 }
 
+const MARVEL_HERO_FILE_ALIASES = {
+  blackcat: "black_cat",
+  cloakdagger: "cloak-and-dagger",
+  cloakanddagger: "cloak-and-dagger",
+  doctorstrange: "doctor-strange",
+  elsabloodstone: "elsa_bloodstone",
+  humantorch: "human-torch",
+  invisiblewoman: "invisible-woman",
+  ironfist: "iron-fist",
+  ironman: "iron-man",
+  jeff: "jeff-the-land-shark",
+  jeffthelandshark: "jeff-the-land-shark",
+  misterfantastic: "mister-fantastic",
+  moonknight: "moon-knight",
+  peniparker: "peni-parker",
+  rocket: "rocket-raccoon",
+  rocketraccoon: "rocket-raccoon",
+  scarletwitch: "scarlet-witch",
+  spiderman: "spider-man",
+  starlord: "star-lord",
+  thepunisher: "the-punisher",
+  thething: "the-thing",
+  whitefox: "white_fox",
+  wintersoldier: "winter-soldier",
+};
+
+function toMarvelHeroFileStem(name = "") {
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!key) return "";
+  return MARVEL_HERO_FILE_ALIASES[key] || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function getMarvelHeroImagePath(game, pick) {
+  if (game !== "Marvel Rivals" || !pick) return "";
+  return `/marvel-rivals/heroes/${toMarvelHeroFileStem(pick)}_avatar.png`;
+}
+
 function CharacterTile({ game, row, index }) {
   const [imageFailed, setImageFailed] = useState(false);
   const config = getDashboardConfig(game);
-  const pick = row[config.pickField] || row.agent || row.champion || row.hero || row.character || row.car;
-  const subtitle = row.role || config.pickLabel;
+  const isMarvelRivals = game === "Marvel Rivals";
+  const pick = row.hero_confirmed || row[config.pickField] || row.agent || row.champion || row.hero || row.character || row.car;
+  const subtitle = isMarvelRivals && row.costume_name ? row.costume_name : row.role || config.pickLabel;
   const stat = formatCardStats(row, config);
-  const imagePath = getChampionImagePath(game, pick) || getAgentImagePath(game, pick);
+  const imagePath = getChampionImagePath(game, pick) || getAgentImagePath(game, pick) || getMarvelHeroImagePath(game, pick);
   const showImage = Boolean(imagePath && !imageFailed);
 
   useEffect(() => {
@@ -1659,7 +2010,7 @@ function CharacterTile({ game, row, index }) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-lowest shadow-[0_8px_22px_rgba(0,0,0,0.04)]">
-      <div className="relative flex h-36 items-center justify-center overflow-hidden bg-gradient-to-b from-[#ecf2ff] to-[#dfe7f7] px-md text-center">
+      <div className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-b from-[#ecf2ff] to-[#dfe7f7] px-md text-center ${isMarvelRivals ? "h-24" : "h-36"}`}>
         {showImage && (
           <img
             alt={pick}
@@ -1668,20 +2019,24 @@ function CharacterTile({ game, row, index }) {
             src={imagePath}
           />
         )}
-        {showImage ? (
+        {showImage && isMarvelRivals ? (
+          <span className="absolute bottom-xs left-xs right-xs z-10 truncate rounded-lg bg-black/55 px-xs py-1 font-label-small text-[10px] text-white backdrop-blur-sm">
+            {pick}
+          </span>
+        ) : showImage ? (
           <span className="absolute left-sm top-sm z-10 rounded-full bg-black/55 px-sm py-1 font-label-small text-label-small text-white backdrop-blur-sm">
             {subtitle || "Role TBD"}
           </span>
         ) : (
           <div className="relative z-10 rounded-xl px-sm py-xs">
-            <p className="font-headline-2 text-headline-2 text-on-surface">{pick || `${config.pickLabel} ${index + 1}`}</p>
-            <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{subtitle || "Role TBD"}</p>
+            <p className={`${isMarvelRivals ? "font-label-bold text-label-bold" : "font-headline-2 text-headline-2"} text-on-surface`}>{pick || (isMarvelRivals ? "—" : `${config.pickLabel} TBD`)}</p>
+            {!isMarvelRivals && <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{subtitle || "Role TBD"}</p>}
           </div>
         )}
       </div>
-      <div className="p-md">
+      <div className={isMarvelRivals ? "p-sm" : "p-md"}>
         <p className="font-label-bold text-label-bold text-on-surface">{row.player_name || "Player TBD"}</p>
-        <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{stat}</p>
+        <p className={`mt-xs font-label-small text-label-small text-on-surface-variant ${isMarvelRivals ? "line-clamp-2" : ""}`}>{stat}</p>
       </div>
     </div>
   );
@@ -1691,7 +2046,7 @@ function formatStatValue(row, key) {
   if (key === "kda") return `${row.k ?? "—"}/${row.d ?? "—"}/${row.a ?? "—"}`;
   const value = row[key];
   if (value === null || value === undefined || value === "") return "—";
-  if (key === "hs_percent") return `${value}%`;
+  if (key === "hs_percent" || key === "accuracy") return `${value}%`;
   return value;
 }
 
@@ -1702,16 +2057,18 @@ function formatCardStats(row, config) {
 }
 
 function CompositionSection({ accent = "bg-primary", game, opponentName, rows, title }) {
+  const isMarvelRivals = game === "Marvel Rivals";
+
   return (
     <section>
-      <div className="mb-md flex items-center justify-between">
-        <h2 className="flex items-center gap-sm font-headline-2 text-headline-2 text-on-surface">
-          <span className={`h-8 w-1 rounded-full ${accent}`} />
+      <div className={`${isMarvelRivals ? "mb-sm" : "mb-md"} flex items-center justify-between`}>
+        <h2 className={`flex items-center gap-sm text-on-surface ${isMarvelRivals ? "font-headline-3 text-headline-3" : "font-headline-2 text-headline-2"}`}>
+          <span className={`${isMarvelRivals ? "h-6" : "h-8"} w-1 rounded-full ${accent}`} />
           {title}
         </h2>
         {opponentName && <span className="font-label-small text-label-small uppercase tracking-wider text-on-surface-variant">{opponentName}</span>}
       </div>
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5">
+      <div className={isMarvelRivals ? "grid grid-cols-2 gap-sm md:grid-cols-3 xl:grid-cols-6" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
         {rows.map((row, index) => <CharacterTile game={game} index={index} key={`${row.player_name}-${index}`} row={row} />)}
       </div>
     </section>
@@ -1814,7 +2171,8 @@ function ComparisonMetricCard({ helper, icon, label, left, leftLabel, right, rig
 
 function PerformanceTable({ game = "Valorant", rows }) {
   const config = getDashboardConfig(game);
-  const isValorant = game === "Valorant";
+  const usesTeamTint = game === "Valorant" || game === "Marvel Rivals";
+  const expectedTeamSize = game === "Marvel Rivals" ? 6 : 5;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-lowest">
@@ -1832,18 +2190,18 @@ function PerformanceTable({ game = "Valorant", rows }) {
           </thead>
           <tbody>
             {rows.map((row, index) => {
-              const isOpponent = isValorant && (row.team_key === "team_2" || index >= 5);
-              const rowTone = isValorant
+              const isOpponent = usesTeamTint && (row.team_key === "team_2" || index >= expectedTeamSize);
+              const rowTone = usesTeamTint
                 ? isOpponent
                   ? "border-l-4 border-l-[#d12b2b] bg-[#fff1f1] hover:bg-[#ffe7e7]"
                   : "border-l-4 border-l-primary bg-[#eef5ff] hover:bg-[#e4efff]"
                 : "border-t border-outline-variant/15";
-              const statTone = isValorant && isOpponent ? "text-[#b3261e]" : "text-primary";
+              const statTone = usesTeamTint && isOpponent ? "text-[#b3261e]" : "text-primary";
 
               return (
                 <tr className={`border-t border-outline-variant/15 transition-colors ${rowTone}`} key={`${row.player_name}-${index}`}>
                   <td className="p-md font-label-bold text-label-bold">{row.player_name || "Player TBD"}</td>
-                  <td>{row[config.pickField] || row.role || "—"}</td>
+                  <td>{game === "Marvel Rivals" ? row.hero_confirmed || row[config.pickField] || "—" : row[config.pickField] || row.role || "—"}</td>
                   {config.tableFields.map((field, fieldIndex) => (
                     <td className={fieldIndex === 0 ? `font-label-bold ${statTone}` : ""} key={field.key}>
                       {formatStatValue(row, field.key)}
@@ -1898,7 +2256,7 @@ function ReviewEditor({
                 : `No review saved for Game ${selectedGameNumber} yet. Upload a screenshot or enter stats manually for this game.`}
             </p>
           </div>
-          {(game === "League of Legends" || game === "Valorant") && (
+          {(game === "League of Legends" || game === "Valorant" || game === "Marvel Rivals") && (
             <button
               className="inline-flex items-center justify-center gap-xs rounded-xl bg-surface-container px-md py-sm font-label-bold text-label-bold text-primary hover:bg-primary-fixed"
               onClick={handleSwapTeams}
@@ -1919,7 +2277,14 @@ function ReviewEditor({
         {game !== "League of Legends" && (
           <TextInput label={config.mapLabel} onChange={(value) => updateField("map_or_mode", value)} value={form.map_or_mode || ""} />
         )}
-        {game === "Valorant" && (
+        {game === "Marvel Rivals" && (
+          <TextInput
+            label="Objective / Mode"
+            onChange={(value) => updateStat("team_stats", "objective_or_mode", value)}
+            value={form.team_stats?.objective_or_mode || ""}
+          />
+        )}
+        {(game === "Valorant" || game === "Marvel Rivals") && (
           <TextInput
             label="Duration"
             onChange={(value) => updateStat("team_stats", "duration", value)}
@@ -1958,8 +2323,12 @@ function EditableRows({ game, rows, side, title, updateComp }) {
   const config = getDashboardConfig(game);
   const pickField = config.pickField;
   const statFields = config.editFields;
+  const canEditRole = game === "League of Legends";
+  const usesHeroDropdown = game === "Marvel Rivals";
+  const gridClass = getReviewEditorGridClass(canEditRole, statFields.length);
   const columnLabels = [
     "Player",
+    ...(canEditRole ? ["Role"] : []),
     config.pickLabel,
     ...statFields.map(formatFieldLabel),
   ];
@@ -1968,15 +2337,65 @@ function EditableRows({ game, rows, side, title, updateComp }) {
     <section>
       <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{title}</h3>
       <div className="grid gap-sm">
-        <div className="hidden grid-cols-1 gap-xs px-sm font-label-small text-label-small uppercase tracking-wide text-on-surface-variant md:grid md:grid-cols-[1fr_1fr_repeat(6,80px)]">
+        <div className={`hidden grid-cols-1 gap-xs px-sm font-label-small text-label-small uppercase tracking-wide text-on-surface-variant md:grid ${gridClass}`}>
           {columnLabels.map((label) => (
             <span className="truncate" key={label}>{label}</span>
           ))}
         </div>
         {rows.map((row, index) => (
-          <div className="grid grid-cols-1 gap-xs rounded-xl bg-surface-container-low p-sm md:grid-cols-[1fr_1fr_repeat(6,80px)]" key={`${side}-${index}`}>
+          <div className={`grid grid-cols-1 gap-xs rounded-xl bg-surface-container-low p-sm ${gridClass}`} key={`${side}-${index}`}>
             <input className={smallInputClass()} onChange={(event) => updateComp(side, index, "player_name", event.target.value)} placeholder="Player" value={row.player_name || ""} />
-            <input className={smallInputClass()} onChange={(event) => updateComp(side, index, pickField, event.target.value)} placeholder={config.pickLabel} value={row[pickField] || ""} />
+            {canEditRole && (
+              <select
+                className={smallInputClass()}
+                onChange={(event) => updateComp(side, index, "role", event.target.value)}
+                value={row.role || ""}
+              >
+                <option value="">Role</option>
+                {config.roles.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            )}
+            {usesHeroDropdown ? (
+              <div className="grid gap-1">
+                <select
+                  className={smallInputClass()}
+                  onChange={(event) => {
+                    const selectedHero = event.target.value;
+                    updateComp(side, index, pickField, selectedHero);
+                    updateComp(side, index, "hero_confirmed", selectedHero);
+                    updateComp(side, index, "needs_manual_review", false);
+                    updateComp(side, index, "needs_hero_review", false);
+                    if (selectedHero !== row.hero_asset_match) {
+                      updateComp(side, index, "hero_id", "");
+                      updateComp(side, index, "costume_name", "");
+                      updateComp(side, index, "costume_id", "");
+                      updateComp(side, index, "asset_confidence", "");
+                      updateComp(side, index, "matched_asset_src", "");
+                    }
+                  }}
+                  value={row.hero_confirmed || row[pickField] || ""}
+                >
+                  <option value="">Select hero</option>
+                  {MARVEL_RIVALS_HERO_OPTIONS.map((hero) => (
+                    <option key={hero} value={hero}>{hero}</option>
+                  ))}
+                </select>
+                {row.hero_asset_match && (
+                  <span className="truncate font-label-small text-[10px] text-on-surface-variant">
+                    Matched: {row.hero_asset_match}{row.costume_name ? ` / ${row.costume_name}` : ""} · {Math.round(Number(row.asset_confidence || row.hero_asset_confidence || 0) * 100)}%
+                  </span>
+                )}
+                {!row.hero_asset_match && row.hero_confirmed && row.hero_guess_confidence !== "" && (
+                  <span className="truncate font-label-small text-[10px] text-on-surface-variant">
+                    AI confidence: {Math.round(Number(row.hero_guess_confidence || row.hero_confidence || 0) * 100)}%
+                  </span>
+                )}
+              </div>
+            ) : (
+              <input className={smallInputClass()} onChange={(event) => updateComp(side, index, pickField, event.target.value)} placeholder={config.pickLabel} value={row[pickField] || ""} />
+            )}
             {statFields.map((field) => (
               <input
                 className={smallInputClass()}
@@ -2007,9 +2426,17 @@ function formatFieldLabel(field) {
     player_damage: "Player Dmg",
     objective_damage: "Obj Dmg",
     damage_blocked: "Blocked",
+    final_hits: "Final Hits",
+    accuracy: "Acc%",
   };
 
   return labels[field] || field.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getReviewEditorGridClass(canEditRole, statFieldCount) {
+  if (canEditRole) return "md:grid-cols-[1fr_120px_1fr_repeat(6,80px)]";
+  if (statFieldCount >= 8) return "md:grid-cols-[1fr_1fr_repeat(8,80px)]";
+  return "md:grid-cols-[1fr_1fr_repeat(6,80px)]";
 }
 
 function smallInputClass() {

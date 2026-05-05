@@ -1,0 +1,47 @@
+{
+  "sheets": [
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-01.jpg",
+      "count": 64,
+      "first": "Adam Warlock",
+      "last": "Doctor Strange"
+    },
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-02.jpg",
+      "count": 64,
+      "first": "Doctor Strange",
+      "last": "Invisible Woman"
+    },
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-03.jpg",
+      "count": 64,
+      "first": "Invisible Woman",
+      "last": "Magik"
+    },
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-04.jpg",
+      "count": 64,
+      "first": "Magneto",
+      "last": "Psylocke"
+    },
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-05.jpg",
+      "count": 64,
+      "first": "Psylocke",
+      "last": "Star-Lord"
+    },
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-06.jpg",
+      "count": 64,
+      "first": "Star-Lord",
+      "last": "Winter Soldier"
+    },
+    {
+      "file": "/game-assets/marvel-rivals/reference/marvel-rivals-costume-reference-07.jpg",
+      "count": 16,
+      "first": "Winter Soldier",
+      "last": "Wolverine"
+    }
+  ],
+  "total_assets": 400
+}

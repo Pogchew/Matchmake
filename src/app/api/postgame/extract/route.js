@@ -1,5 +1,8 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { NextResponse } from "next/server";
-import { getLeagueExtractionPrompt, getValorantExtractionPrompt } from "@/lib/postgame-extraction";
+import { getLeagueExtractionPrompt, getMarvelRivalsExtractionPrompt, getValorantExtractionPrompt, normalizeMarvelRivalsExtraction } from "@/lib/postgame-extraction";
+import { matchMarvelRivalsCostumeIcons } from "@/lib/server/marvel-rivals-costume-matcher";
 
 export const runtime = "nodejs";
 
@@ -46,6 +49,170 @@ function errorResponse(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+const MARVEL_HERO_CONFIDENCE_THRESHOLD = 0.6;
+const MARVEL_RIVALS_REFERENCE_DIR = path.join(process.cwd(), "public", "game-assets", "marvel-rivals", "reference");
+const MARVEL_RIVALS_HERO_REFERENCE_FILE = "marvel-rivals-hero-reference.png";
+const MARVEL_RIVALS_COSTUME_DATA_PATH = path.join(process.cwd(), "data", "marvel-rivals-costumes.json");
+const MARVEL_RIVALS_API_ORIGIN = "https://marvelrivalsapi.com";
+
+function applyMarvelMajorityConfidenceHeroes(extraction) {
+  const mergeRow = (row) => {
+    const confidence = Number(row.hero_guess_confidence ?? row.hero_confidence ?? row.confidence ?? 0);
+    const heroGuess = row.hero_guess ?? row.hero ?? null;
+    const heroConfirmed = heroGuess && confidence >= MARVEL_HERO_CONFIDENCE_THRESHOLD ? heroGuess : null;
+
+    return {
+      ...row,
+      hero_guess: heroGuess,
+      hero_guess_confidence: confidence,
+      needs_hero_review: Boolean(!heroConfirmed && heroGuess),
+      hero_confirmed: heroConfirmed,
+      hero: heroConfirmed,
+    };
+  };
+
+  const rows = (extraction.rows || []).map((row) => mergeRow(row));
+  const teams = (extraction.teams || []).map((team) => ({
+    ...team,
+    players: (team.players || []).map((row) => mergeRow(row)),
+  }));
+  const needsManualReview = rows.some((row) => row.needs_hero_review);
+
+  return normalizeMarvelRivalsExtraction({
+    ...extraction,
+    rows,
+    teams,
+    manual_review_required: Boolean(extraction.manual_review_required || needsManualReview),
+  });
+}
+
+function applyMarvelCostumeMatches(extraction, matches = []) {
+  const byRowIndex = new Map(matches.map((match) => [Number(match.row_index), match]));
+
+  const mergeRow = (row, fallbackIndex) => {
+    const rowIndex = Number(row.row_index) || fallbackIndex + 1;
+    const match = byRowIndex.get(rowIndex);
+    const autoConfirmed = match?.hero_name && !match.needs_manual_review;
+    const existingConfirmed = row.hero_confirmed || row.hero || null;
+    const confirmedHero = autoConfirmed ? match.hero_name : existingConfirmed;
+
+    return {
+      ...row,
+      hero_guess: row.hero_guess ?? row.hero ?? null,
+      hero_asset_match: match?.hero_name || null,
+      hero_asset_confidence: match?.asset_confidence ?? null,
+      hero_asset_method: match?.method || null,
+      hero_confirmed: confirmedHero,
+      hero: confirmedHero,
+      hero_id: autoConfirmed ? match.hero_id : row.hero_id || null,
+      costume_name: autoConfirmed ? match.costume_name : row.costume_name || null,
+      costume_id: autoConfirmed ? match.costume_id : row.costume_id || null,
+      asset_confidence: match?.asset_confidence ?? null,
+      matched_asset_src: match?.matched_asset_src || null,
+      needs_manual_review: Boolean(match?.needs_manual_review),
+      needs_hero_review: Boolean(match?.needs_manual_review && !confirmedHero),
+    };
+  };
+
+  const rows = (extraction.rows || []).map((row, index) => mergeRow(row, index));
+  const teams = (extraction.teams || []).map((team) => ({
+    ...team,
+    players: (team.players || []).map((row, index) => mergeRow(row, index)),
+  }));
+
+  return normalizeMarvelRivalsExtraction({
+    ...extraction,
+    rows,
+    teams,
+    manual_review_required: Boolean(extraction.manual_review_required || matches.some((match) => match.needs_manual_review)),
+  });
+}
+
+async function imageReferencePart(filePath, mimeType) {
+  const image = await fs.readFile(filePath);
+  return {
+    inlineData: {
+      mimeType,
+      data: image.toString("base64"),
+    },
+  };
+}
+
+async function getMarvelRivalsReferenceParts(gameTitle) {
+  if (gameTitle !== "Marvel Rivals") return [];
+
+  try {
+    const files = await fs.readdir(MARVEL_RIVALS_REFERENCE_DIR);
+    const costumeSheetFiles = files
+      .filter((file) => /^marvel-rivals-costume-reference-\d+\.jpe?g$/i.test(file))
+      .sort();
+
+    const parts = [
+      await imageReferencePart(path.join(MARVEL_RIVALS_REFERENCE_DIR, MARVEL_RIVALS_HERO_REFERENCE_FILE), "image/png"),
+    ];
+
+    for (const file of costumeSheetFiles) {
+      parts.push(await imageReferencePart(path.join(MARVEL_RIVALS_REFERENCE_DIR, file), "image/jpeg"));
+    }
+
+    return parts;
+  } catch (error) {
+    console.warn("Marvel Rivals reference sheets are unavailable; continuing without them.", error);
+    return [];
+  }
+}
+
+function absolutizeMarvelApiUrl(value) {
+  if (!value || typeof value !== "string" || value === "0") return null;
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  if (value.startsWith("/")) return `${MARVEL_RIVALS_API_ORIGIN}${value}`;
+  return value;
+}
+
+async function getMarvelRivalsCostumeMetadataPart(gameTitle) {
+  if (gameTitle !== "Marvel Rivals") return null;
+
+  try {
+    const raw = await fs.readFile(MARVEL_RIVALS_COSTUME_DATA_PATH, "utf8");
+    const data = JSON.parse(raw);
+    const costumes = Array.isArray(data.costumes) ? data.costumes : [];
+    if (!costumes.length) return null;
+
+    const grouped = new Map();
+    costumes.forEach((costume) => {
+      if (!costume.hero_name || !costume.costume_name) return;
+      const current = grouped.get(costume.hero_name) || [];
+      current.push({
+        costume_name: costume.costume_name,
+        icon_url: absolutizeMarvelApiUrl(costume.icon_url),
+        appearance_url: absolutizeMarvelApiUrl(costume.appearance_url),
+      });
+      grouped.set(costume.hero_name, current);
+    });
+
+    const lines = [];
+    for (const [heroName, heroCostumes] of grouped) {
+      const compactCostumes = heroCostumes
+        .map((costume) => costume.costume_name)
+        .join("; ");
+      lines.push(`${heroName}: ${compactCostumes}`);
+    }
+
+    return {
+      text: [
+        "Marvel Rivals API costume portrait metadata:",
+        "Use this API-collected costume list as label context for the attached Marvel Rivals costume reference sheet images.",
+        "The costume reference sheet images are the visual lookup source. This text only maps costume names to base hero names.",
+        "If a scoreboard row portrait matches a costume/skin, return the associated base hero name as hero_guess.",
+        ...lines,
+      ].join("\n"),
+    };
+  } catch (error) {
+    console.warn("Marvel Rivals costume metadata is unavailable; continuing without it.", error);
+    return null;
+  }
+}
+
 export async function POST(request) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -59,12 +226,13 @@ export async function POST(request) {
 
     const extractionPrompts = {
       "League of Legends": getLeagueExtractionPrompt,
+      "Marvel Rivals": getMarvelRivalsExtractionPrompt,
       Valorant: getValorantExtractionPrompt,
     };
     const getPrompt = extractionPrompts[gameTitle];
 
     if (!getPrompt) {
-      return errorResponse("Gemini extraction is only enabled for League of Legends and Valorant right now.");
+      return errorResponse("Gemini extraction is only enabled for League of Legends, Valorant, and Marvel Rivals right now.");
     }
 
     if (!image || typeof image === "string") {
@@ -77,20 +245,25 @@ export async function POST(request) {
 
     const imageBuffer = Buffer.from(await image.arrayBuffer());
     const base64Image = imageBuffer.toString("base64");
+    const referenceParts = await getMarvelRivalsReferenceParts(gameTitle);
+    const costumeMetadataPart = await getMarvelRivalsCostumeMetadataPart(gameTitle);
+    const promptParts = [
+      { text: getPrompt() },
+      ...referenceParts,
+      ...(costumeMetadataPart ? [costumeMetadataPart] : []),
+      {
+        inlineData: {
+          mimeType: image.type,
+          data: base64Image,
+        },
+      },
+    ];
 
     const requestBody = {
       contents: [
         {
           role: "user",
-          parts: [
-            { text: getPrompt() },
-            {
-              inlineData: {
-                mimeType: image.type,
-                data: base64Image,
-              },
-            },
-          ],
+          parts: promptParts,
         },
       ],
       generationConfig: {
@@ -144,7 +317,32 @@ export async function POST(request) {
     }
 
     try {
-      return NextResponse.json({ data: parseGeminiJson(rawText) });
+      const parsedJson = parseGeminiJson(rawText);
+      let normalizedJson = gameTitle === "Marvel Rivals" ? normalizeMarvelRivalsExtraction(parsedJson) : parsedJson;
+
+      if (gameTitle === "Marvel Rivals") {
+        normalizedJson = applyMarvelMajorityConfidenceHeroes(normalizedJson);
+        const costumeMatchResult = await matchMarvelRivalsCostumeIcons({ imageBuffer, rows: normalizedJson.rows || [] });
+        normalizedJson = applyMarvelCostumeMatches(normalizedJson, costumeMatchResult.matches);
+        normalizedJson.meta = {
+          ...(normalizedJson.meta || {}),
+          costume_match_debug: costumeMatchResult.debug,
+        };
+      }
+
+      if (gameTitle === "Marvel Rivals" && process.env.NODE_ENV === "development") {
+        console.debug("Marvel Rivals extraction normalized", {
+          rows: normalizedJson.rows?.length || 0,
+          team1: normalizedJson.teams?.[0]?.players?.length || 0,
+          team2: normalizedJson.teams?.[1]?.players?.length || 0,
+          nulledHeroes: normalizedJson.meta?.hero_fields_nulled || [],
+          confirmedHeroes: normalizedJson.rows?.filter((row) => row.hero_confirmed).length || 0,
+          heroReviewNeeded: normalizedJson.rows?.filter((row) => row.needs_hero_review).length || 0,
+          costumeMatch: normalizedJson.meta?.costume_match_debug || {},
+        });
+      }
+
+      return NextResponse.json({ data: normalizedJson });
     } catch (parseError) {
       console.error("Gemini extraction returned unparseable JSON", {
         parseError,
