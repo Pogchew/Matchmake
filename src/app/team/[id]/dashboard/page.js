@@ -1277,9 +1277,23 @@ export default function TeamDashboardPage() {
           method: "POST",
           body: formData,
         });
-        const payload = await response.json();
+        const responseText = await response.text();
+        let payload = {};
+        try {
+          payload = responseText ? JSON.parse(responseText) : {};
+        } catch {
+          payload = {};
+        }
 
         if (!response.ok) {
+          if (response.status === 413) {
+            throw new Error("That screenshot is too large for the deployed app. Try a cropped or smaller screenshot, or enter stats manually.");
+          }
+
+          if (response.status === 504) {
+            throw new Error("Screenshot extraction timed out on the deployed app. You can still enter stats manually.");
+          }
+
           throw new Error(payload?.error || "Could not extract scoreboard data. You can still enter stats manually.");
         }
 

@@ -9,6 +9,8 @@ Create or confirm `.env.local` exists locally:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://urrnrcdxekhovsemeuly.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_MODEL=gemini-flash-lite-latest
 ```
 
 Never commit `.env.local`.
@@ -64,7 +66,11 @@ In Vercel Project Settings, add:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://urrnrcdxekhovsemeuly.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_MODEL=gemini-flash-lite-latest
 ```
+
+`GEMINI_API_KEY` is required for post-game screenshot extraction on Vercel. It must be added as a server-side environment variable, not a `NEXT_PUBLIC_` variable.
 
 ## 9. Deploy
 
@@ -78,3 +84,4 @@ After deployment, verify:
 - Logged-in users can access `/`, `/org`, `/requests`, `/calendar`, `/team`, `/chat`, and `/scrims/[id]`.
 - Scrim Board can fetch open scrim listings.
 - Posting a scrim creates a new `scrim_requests` row.
+- A post-game dashboard screenshot upload returns extracted data or a clear Gemini/API error.

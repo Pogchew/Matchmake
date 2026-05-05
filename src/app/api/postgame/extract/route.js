@@ -5,6 +5,7 @@ import { getDeadlockExtractionPrompt, getLeagueExtractionPrompt, getMarvelRivals
 import { matchMarvelRivalsCostumeIcons } from "@/lib/server/marvel-rivals-costume-matcher";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const GEMINI_MODELS = [
   "gemini-flash-lite-latest",
