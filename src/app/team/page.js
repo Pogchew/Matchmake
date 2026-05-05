@@ -2222,60 +2222,38 @@ function PaceDial({ minutes }) {
   );
 }
 
-function RoleRadar({ role, kdaMax, goldMax, damageMax }) {
-  const cx = 50;
-  const cy = 52;
-  const R = 32;
-  const safe = (value, max) => {
+function RoleStatCard({ role, kdaMax, goldMax, damageMax }) {
+  const safeFraction = (value, max) => {
     if (!Number.isFinite(value) || max <= 0) return 0;
-    return Math.max(0.05, Math.min(1, value / max));
+    return Math.max(0, Math.min(1, value / max));
   };
-  const point = (norm, idx) => {
-    const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / 3;
-    const r = R * norm;
-    return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
-  };
-  const ringPoint = (idx) => {
-    const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / 3;
-    return [cx + R * Math.cos(angle), cy + R * Math.sin(angle)];
-  };
-  const ring = [0, 1, 2].map(ringPoint).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const ringHalf = [0, 1, 2].map((idx) => {
-    const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / 3;
-    return [cx + R * 0.5 * Math.cos(angle), cy + R * 0.5 * Math.sin(angle)];
-  }).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const polygon = [
-    point(safe(role.kda, kdaMax), 0),
-    point(safe(role.gold, goldMax), 1),
-    point(safe(role.damage, damageMax), 2),
-  ].map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const formatKda = (value) => (Number.isFinite(value) ? value.toFixed(2) : "—");
+
+  // Each metric gets its own mini bar. KDA stays as decimal; Gold and Damage
+  // use the shared compact formatter so big numbers shrink to "12.1k" etc.
+  const rows = [
+    { key: "kda", label: "KDA", value: formatKda(role.kda), fraction: safeFraction(role.kda, kdaMax), tone: "bg-primary" },
+    { key: "gold", label: "Gold", value: formatDeepStatValue(role.gold), fraction: safeFraction(role.gold, goldMax), tone: "bg-secondary" },
+    { key: "damage", label: "DMG", value: formatDeepStatValue(role.damage), fraction: safeFraction(role.damage, damageMax), tone: "bg-tertiary" },
+  ];
 
   return (
-    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-sm">
-      <div className="mb-xs flex items-center justify-between">
+    <div className="flex flex-col gap-sm rounded-2xl border border-outline-variant/25 bg-surface-container-low p-sm">
+      <div className="flex items-center justify-between">
         <span className="rounded-full bg-primary-fixed px-2 py-0.5 font-label-small text-label-small text-primary">{role.role}</span>
       </div>
-      <svg viewBox="0 0 100 100" className="mx-auto block h-28 w-full">
-        {/* axis lines */}
-        <g stroke="#cbd5e1" strokeWidth="0.6">
-          <line x1={cx} y1={cy} x2={cx} y2={cy - R} />
-          <line x1={cx} y1={cy} x2={cx + R * Math.cos(Math.PI / 6)} y2={cy + R * Math.sin(Math.PI / 6)} />
-          <line x1={cx} y1={cy} x2={cx - R * Math.cos(Math.PI / 6)} y2={cy + R * Math.sin(Math.PI / 6)} />
-        </g>
-        {/* outer ring + half ring */}
-        <polygon points={ring} fill="none" stroke="#cbd5e1" strokeWidth="0.7" />
-        <polygon points={ringHalf} fill="none" stroke="#e2e8f0" strokeWidth="0.6" />
-        {/* data polygon */}
-        <polygon points={polygon} fill="#0058bc" fillOpacity="0.25" stroke="#0058bc" strokeWidth="1.4" />
-        {/* axis labels */}
-        <text x={cx} y={cy - R - 4} fontSize="6.5" textAnchor="middle" fill="#475569">KDA</text>
-        <text x={cx + R * Math.cos(Math.PI / 6) + 5} y={cy + R * Math.sin(Math.PI / 6) + 4} fontSize="6.5" fill="#475569">Gold</text>
-        <text x={cx - R * Math.cos(Math.PI / 6) - 5} y={cy + R * Math.sin(Math.PI / 6) + 4} fontSize="6.5" textAnchor="end" fill="#475569">DMG</text>
-      </svg>
-      <div className="mt-xs grid grid-cols-3 gap-1 text-center font-label-small text-label-small">
-        <span className="text-on-surface">{Number.isFinite(role.kda) ? role.kda.toFixed(1) : "—"}</span>
-        <span className="text-on-surface">{formatDeepStatValue(role.gold)}</span>
-        <span className="text-on-surface">{formatDeepStatValue(role.damage)}</span>
+      <div className="flex flex-col gap-xs">
+        {rows.map((row) => (
+          <div key={row.key}>
+            <div className="flex items-baseline justify-between">
+              <span className="font-label-small text-label-small text-on-surface-variant">{row.label}</span>
+              <span className="font-label-bold text-label-bold text-on-surface">{row.value}</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-container-lowest">
+              <div className={`h-full rounded-full ${row.tone} transition-[width]`} style={{ width: `${row.fraction * 100}%` }} />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -2405,13 +2383,13 @@ function LeagueDeepStats({ stats }) {
 
       <section>
         <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Fight Cleanliness</h3>
-        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
-          <KdaBalanceBar
-            kills={killStat?.ours}
-            deaths={deathStat?.ours}
-            assists={assistStat?.ours}
-          />
-          <PaceDial minutes={stats.league?.avgGameLength} />
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
+          <StatKpiCard label="Average Kills" value={formatDeepStatValue(killStat?.ours)} />
+          <StatKpiCard label="Average Deaths" value={formatDeepStatValue(deathStat?.ours)} />
+          <StatKpiCard label="Average Assists" value={formatDeepStatValue(assistStat?.ours)} />
+        </div>
+        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
+          <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
         </div>
       </section>
 
@@ -2434,7 +2412,7 @@ function LeagueDeepStats({ stats }) {
           return (
             <div className="grid grid-cols-2 gap-sm sm:grid-cols-3 lg:grid-cols-5">
               {roleStats.map((role) => (
-                <RoleRadar
+                <RoleStatCard
                   key={role.role}
                   role={role}
                   kdaMax={kdaMax}
