@@ -868,76 +868,136 @@ Analyze this Deadlock post-game scoreboard screenshot and extract only visible s
 
 Return JSON only. Do not explain. Do not include markdown.
 
-You are extracting from a Deadlock post-game scoreboard or match summary screen.
+The final image is the uploaded scoreboard screenshot to extract.
 
-The screenshot may show:
-- result, such as Victory or Defeat
-- match duration
-- map/lane/match label
-- two teams
-- player rows
-- hero portraits or hero names
-- player names
-- K/D/A
-- Souls
-- Player Damage
-- Objective Damage
+You may also receive reference material before the scoreboard image:
+- One or more Deadlock hero reference sheets showing labeled hero portraits.
+- A Deadlock hero metadata text block listing the allowed hero names.
+
+Use reference material only to help identify the small hero portrait attached to each scoreboard player column.
+Do not extract match data from reference material.
+Only the final uploaded scoreboard image contains the match data.
+
+DEADLOCK SCOREBOARD LAYOUT — READ THIS CAREFULLY:
+The Deadlock end-of-match scoreboard is COLUMN-based with a CENTER LABEL COLUMN between the two teams. It does NOT look like a Valorant or LoL row table.
+
+Visual structure, top to bottom:
+1. Top banner: a match duration in the very center (e.g. "48:47"), with two souls totals in rounded bubbles on either side of it (e.g. "333k" left, "298k" right). A match id may appear top-right.
+2. Team header row: "THE AMBER HAND" on the left and "THE SAPPHIRE FLAME" on the right (these are the default team names; treat them as labels, not opponent identities).
+3. Result banner under each team header: one team shows "Victory" and the other typically shows nothing or "Defeat".
+4. Player portrait row: 6 circular hero portraits on the left, then the center label column, then 6 circular hero portraits on the right.
+5. Player name row: each player's in-game name is directly under their portrait.
+6. Stat grid: each stat occupies a horizontal band that runs across the entire scoreboard. The CENTER column of that band contains the stat label. The 6 cells to the LEFT of the label are the left team's values for that stat (one per left-team player, in the same column order as their portraits). The 6 cells to the RIGHT of the label are the right team's values (in portrait order).
+
+The center label column, top to bottom, is typically:
+- PLAYER STATS (header)
+- TOTAL SOULS
+- KILLS
+- DEATHS
+- ASSISTS
+- PLAYER DMG
+- OBJ DMG
+- HEALING
+
+To extract a single player you must read DOWN their column:
+- Read the portrait at the top of column N → identify the hero from the reference sheet.
+- Read the player name directly below the portrait.
+- For each stat band (TOTAL SOULS, KILLS, DEATHS, ASSISTS, PLAYER DMG, OBJ DMG, HEALING), read the cell in column N — it sits in the same horizontal band as the center label.
+- Repeat for every visible column on both sides of the center label.
+
+CRITICAL:
+- The two teams together typically have 12 columns total (6 left + 6 right). You must produce one JSON row object per visible player column.
+- Returning team_totals without per-player rows is INCORRECT. Even if you cannot read every cell, return one row per visible player column with whatever cells you can read and null for the rest.
+- The left-side souls bubble (e.g. "333k") is the team total for the LEFT team. The right-side souls bubble is the team total for the RIGHT team. These are aggregated values, not player-level values, and they are rounded display numbers — prefer summing the per-player TOTAL SOULS cells when computing team_totals.souls.
+
+Even though the visual layout is column-based, return one JSON row object per player in rows[] (12 rows expected).
+
+The screenshot may include:
+- match result, such as Victory or Defeat (per team section)
+- team names, such as The Amber Hand and The Sapphire Flame
+- match duration in the top center, formatted like "32:45" or "00:32:45"
+- match id if visible
+- aggregated team total souls displayed near the team header (optional)
+- two teams, typically 6 players per team
+- hero portraits at the top of each player column
+- player names directly under each portrait
+- Net Worth / Souls (sometimes labeled "Total Souls" or just a souls icon)
+- Kills
+- Deaths
+- Assists
+- Last Hits (sometimes labeled "LH")
+- Denies (sometimes labeled "DN")
+- Player Damage (sometimes labeled "Player DMG")
+- Objective Damage (sometimes labeled "OBJ DMG")
 - Healing
 
-CORE RULES:
+Rules:
 - Only extract data visible in the screenshot.
-- Do not use external APIs.
+- Do not use external APIs or hidden game data.
 - Do not guess hidden stats.
 - If a value is not visible, return null.
-- Preserve row order from top to bottom, or left to right if the scoreboard uses player columns.
-- Preserve team grouping exactly as shown.
-- Extract all visible player rows or player columns.
-- If a row is partially visible but readable, extract readable fields and set unreadable fields to null.
-- Convert comma numbers into integers. Example: "333,632" becomes 333632.
-- Do not treat Souls, Player Damage, Objective Damage, or Healing as the final score.
-- Do not place large damage/soul values into final_score, team_score, or opponent_score.
-- If no real team score is visible, set final_score, team_1_score, and team_2_score to null.
+- Preserve column order left to right within each team.
+- Preserve team separation exactly as shown.
+- Extract all visible player columns into rows[] (typically 12 total, 6 per team).
+- Extract only these gameplay stats because these are the Deadlock stats Matchmake stores:
+  - player name
+  - hero from the column portrait when confident
+  - kills
+  - deaths
+  - assists
+  - souls (Net Worth / Total Souls)
+  - player_damage
+  - objective_damage
+  - healing
 
-DEADLOCK FIELD RULES:
-For each player row, extract:
-- player_name
-- hero if visible
-- kills
-- deaths
-- assists
-- kda_text
-- souls
-- player_damage
-- objective_damage
-- healing
+HERO IDENTIFICATION:
+- Use only the small hero portrait at the top of the same player column.
+- Compare that column portrait to the labeled Deadlock hero reference sheet provided as reference material.
+- Return a hero name that matches one of the names from the Deadlock hero metadata reference list.
+- Do not use background art, UI icons, badges, report icons, MMR icons, role icons, or team logos as heroes.
+- Do not output placeholders such as Hero 1, Unknown, or Player TBD.
+- Do not output role names or lane names (Solo Lane, Duo Lane, Mid, Roam, Flex, etc.).
+- If the column portrait is unclear or you cannot match it to a hero on the reference sheet, return hero = null and add the field to fields_needing_manual_review.
 
 K/D/A RULE:
-If K/D/A is visible as three numbers:
-- first number = kills
-- second number = deaths
-- third number = assists
-- kda_text = "kills/deaths/assists"
+The center label column has KILLS, DEATHS, and ASSISTS as three separate stat bands (in that order). For each player column, read the value in the cell aligned with each label.
+- kills, deaths, and assists must each be returned as separate integers.
+- Build kda_text as "kills/deaths/assists" only when all three values are extracted for that player.
+- Do not concatenate values from different players.
+
+NUMBER RULES:
+- Convert comma numbers into integers.
+  Example: "59,304" becomes 59304.
+- Strip currency or unit symbols.
+  Example: "32K" becomes null unless an exact number is also visible. Do not estimate from rounded values.
+- If a number is unreadable, return null.
+- Do not estimate unreadable numbers.
 
 MATCH HEADER RULES:
-- If Victory is visible, match.result = "victory".
-- If Defeat is visible, match.result = "defeat".
-- If duration is visible, match.duration = that value.
-- If map/lane/match label is visible, store it in match.map_or_lane.
-- If a true team score is not visible, leave final_score and team scores null.
+- If a team section banner clearly says VICTORY for team_1, set match.result = "victory" and teams[0].is_winning_team = true.
+- If team_1's banner clearly says DEFEAT, set match.result = "defeat" and teams[1].is_winning_team = true.
+- If only the winning side is visible but it is unclear which side is the user team, leave match.result null, set the correct teams[].is_winning_team, and set manual_review_required = true.
+- Extract match duration only from the top center duration text.
+- Extract match_id from a visible match id label if present.
+- Extract team_1_name and team_2_name from the visible team header labels (e.g. "The Amber Hand", "The Sapphire Flame"). Otherwise null.
+
+SCORE RULE — VERY IMPORTANT:
+Deadlock does not display a traditional score. Souls, Player Damage, Objective Damage, and Healing are NOT scores.
+- Do not place souls totals into final_score, team_1_score, team_2_score, or teams[].team_score.
+- Unless a numeric round score is literally visible (it usually is not), set:
+  - final_score = null
+  - team_1_score = null
+  - team_2_score = null
+  - teams[].team_score = null
+- Souls totals belong only in teams[].team_totals.souls.
 
 TEAM GROUPING RULES:
-- If the screenshot clearly separates two teams, assign team_1 to the first visible team section and team_2 to the second visible team section.
-- If team colors indicate teams, preserve that grouping.
-- If team grouping is unclear, still return rows[] and set manual_review_required = true.
-- Put each player row into rows[] and also into the correct teams[].players array when grouping is clear.
-
-HERO RULES:
-- Extract hero only if clearly visible from text or portrait.
-- If a Deadlock hero reference sheet is attached, use it only to identify the hero portrait attached directly to each player row or player column.
-- Do not extract match stats from the reference sheet.
-- If hero is unclear, return null.
-- Do not output placeholder hero names like Hero 1, Hero 2, Unknown, or Player TBD.
-- Do not output role names as heroes.
+- Use the visual side and team color to group players.
+- The left team section is team_1.
+- The right team section is team_2.
+- Amber/orange/yellow rows belong to whichever side that color is shown on. Do not assume amber is always team_1.
+- Put each player row in both rows[] and the correct teams[].players array.
+- If team grouping is unclear, still return rows[] in column-order, leave team_key null on each row, and set manual_review_required = true.
 
 Return this exact JSON shape:
 {
@@ -950,11 +1010,12 @@ Return this exact JSON shape:
     "final_score": null,
     "team_1_score": null,
     "team_2_score": null,
-    "map_or_lane": null,
+    "team_1_name": null,
+    "team_2_name": null,
     "duration": null,
+    "match_id": null,
     "played_at": null,
-    "match_date_text": null,
-    "opponent_name": null
+    "match_date_text": null
   },
   "rows": [
     {
@@ -963,11 +1024,11 @@ Return this exact JSON shape:
       "row_color_group": null,
       "player_name": null,
       "hero": null,
+      "souls": null,
       "kills": null,
       "deaths": null,
       "assists": null,
       "kda_text": null,
-      "souls": null,
       "player_damage": null,
       "objective_damage": null,
       "healing": null,
@@ -977,14 +1038,15 @@ Return this exact JSON shape:
   "teams": [
     {
       "team_key": "team_1",
+      "team_name": null,
       "row_color_group": null,
       "is_winning_team": null,
       "team_score": null,
       "team_totals": {
+        "souls": null,
         "kills": null,
         "deaths": null,
         "assists": null,
-        "souls": null,
         "player_damage": null,
         "objective_damage": null,
         "healing": null
@@ -993,14 +1055,15 @@ Return this exact JSON shape:
     },
     {
       "team_key": "team_2",
+      "team_name": null,
       "row_color_group": null,
       "is_winning_team": null,
       "team_score": null,
       "team_totals": {
+        "souls": null,
         "kills": null,
         "deaths": null,
         "assists": null,
-        "souls": null,
         "player_damage": null,
         "objective_damage": null,
         "healing": null
@@ -1012,25 +1075,31 @@ Return this exact JSON shape:
 }
 
 TEAM TOTALS:
-After extracting player rows, calculate team totals from visible rows when team grouping is reliable:
+After extracting player rows, calculate team_totals from the visible columns when team grouping is reliable:
 - kills = sum of kills
 - deaths = sum of deaths
 - assists = sum of assists
-- souls = sum of souls
+- souls = sum of player souls (or use the aggregated team souls header if visible)
 - player_damage = sum of player_damage
 - objective_damage = sum of objective_damage
 - healing = sum of healing
 
-If a row field is null, skip it in the sum.
-If team grouping is not reliable, set team totals to null.
+If a column field is null, skip it in the sum.
+If team grouping is not reliable, set team_totals fields to null.
+
+CONFIDENCE:
+- Set per-row confidence based on portrait clarity and number readability.
+- Set parser_confidence overall.
+- Add low-confidence fields to fields_needing_manual_review using paths like "rows[3].hero" or "match.duration".
 
 FINAL VALIDATION:
-- Do not include fields outside the schema.
-- Make sure rows[] contains every visible player row or column.
-- Make sure teams[].players contains grouped rows when grouping is clear.
-- Do not put Souls, Player Damage, Objective Damage, or Healing into final_score.
-- final_score should only be used if a real game score is visible.
-- No hidden stats should be included.
+Before returning JSON:
+- Do not include any fields outside the schema.
+- Make sure rows[] contains every visible player column (typically 12).
+- Make sure teams[].players contain the same row objects grouped by team.
+- Make sure final_score, team_1_score, team_2_score, and teams[].team_score are null unless an actual numeric score is visible.
+- Make sure no hidden stats are included (no last hits, denies, accuracy, ult usage, item slots, build details, hero level, or rank tier).
+- Make sure hero names come from the Deadlock hero metadata list when set, and are null otherwise.
   `.trim();
 }
 

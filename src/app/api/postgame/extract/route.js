@@ -54,7 +54,15 @@ const MARVEL_RIVALS_REFERENCE_DIR = path.join(process.cwd(), "public", "game-ass
 const MARVEL_RIVALS_HERO_REFERENCE_FILE = "marvel-rivals-hero-reference.png";
 const MARVEL_RIVALS_COSTUME_DATA_PATH = path.join(process.cwd(), "data", "marvel-rivals-costumes.json");
 const MARVEL_RIVALS_API_ORIGIN = "https://marvelrivalsapi.com";
-const DEADLOCK_REFERENCE_PATH = path.join(process.cwd(), "public", "deadlock", "reference", "deadlock-hero-reference.jpg");
+const DEADLOCK_REFERENCE_DIR = path.join(process.cwd(), "public", "deadlock", "reference");
+// Reference sheets are sent in priority order. Each entry is { file, mimeType, label }.
+// The labeled grid sheet is the primary lookup; the in-game roster sheet provides
+// portrait-style fidelity that better matches small scoreboard portraits.
+const DEADLOCK_REFERENCE_FILES = [
+  { file: "deadlock-hero-reference.jpg", mimeType: "image/jpeg", label: "labeled-card-grid" },
+  { file: "deadlock-hero-reference-ingame.png", mimeType: "image/png", label: "ingame-roster" },
+  { file: "deadlock-hero-reference-ingame.jpg", mimeType: "image/jpeg", label: "ingame-roster" },
+];
 const DEADLOCK_HERO_ASSETS_PATH = path.join(process.cwd(), "src", "lib", "game-assets", "deadlock-hero-assets.json");
 
 function applyMarvelMajorityConfidenceHeroes(extraction) {
@@ -167,12 +175,26 @@ async function getMarvelRivalsReferenceParts(gameTitle) {
 async function getDeadlockReferenceParts(gameTitle) {
   if (gameTitle !== "Deadlock") return [];
 
-  try {
-    return [await imageReferencePart(DEADLOCK_REFERENCE_PATH, "image/jpeg")];
-  } catch (error) {
-    console.warn("Deadlock hero reference sheet is unavailable; continuing without it.", error);
-    return [];
+  const parts = [];
+  const seenLabels = new Set();
+  for (const ref of DEADLOCK_REFERENCE_FILES) {
+    // Avoid double-loading the same logical sheet when both .png and .jpg exist
+    if (seenLabels.has(ref.label)) continue;
+    const filePath = path.join(DEADLOCK_REFERENCE_DIR, ref.file);
+    try {
+      await fs.access(filePath);
+      parts.push(await imageReferencePart(filePath, ref.mimeType));
+      seenLabels.add(ref.label);
+    } catch {
+      // file not present — skip silently; this is expected for optional sheets
+    }
   }
+
+  if (!parts.length) {
+    console.warn("No Deadlock hero reference sheets are available; continuing without them.");
+  }
+
+  return parts;
 }
 
 async function getDeadlockHeroMetadataPart(gameTitle) {
@@ -357,6 +379,13 @@ export async function POST(request) {
       return errorResponse("Could not extract scoreboard data. You can still enter stats manually.", 502);
     }
 
+    if (gameTitle === "Deadlock") {
+      console.log("Deadlock Gemini raw response", {
+        rawTextLength: rawText.length,
+        rawTextPreview: rawText.slice(0, 500),
+      });
+    }
+
     try {
       const parsedJson = parseGeminiJson(rawText);
       let normalizedJson = gameTitle === "Marvel Rivals" ? normalizeMarvelRivalsExtraction(parsedJson) : parsedJson;
@@ -380,6 +409,25 @@ export async function POST(request) {
           confirmedHeroes: normalizedJson.rows?.filter((row) => row.hero_confirmed).length || 0,
           heroReviewNeeded: normalizedJson.rows?.filter((row) => row.needs_hero_review).length || 0,
           costumeMatch: normalizedJson.meta?.costume_match_debug || {},
+        });
+      }
+
+      if (gameTitle === "Deadlock") {
+        const rowsArr = Array.isArray(normalizedJson?.rows) ? normalizedJson.rows : [];
+        const teamsArr = Array.isArray(normalizedJson?.teams) ? normalizedJson.teams : [];
+        console.log("Deadlock extraction summary", {
+          referenceSheetsSent: referenceParts.length,
+          metadataAttached: Boolean(deadlockHeroMetadataPart),
+          result: normalizedJson?.match?.result || null,
+          duration: normalizedJson?.match?.duration || null,
+          team1Name: normalizedJson?.match?.team_1_name || null,
+          team2Name: normalizedJson?.match?.team_2_name || null,
+          rows: rowsArr.length,
+          team1Players: teamsArr[0]?.players?.length || 0,
+          team2Players: teamsArr[1]?.players?.length || 0,
+          rowsWithHero: rowsArr.filter((row) => row?.hero).length,
+          rowsWithName: rowsArr.filter((row) => row?.player_name).length,
+          rowsWithKills: rowsArr.filter((row) => Number.isFinite(Number(row?.kills))).length,
         });
       }
 
