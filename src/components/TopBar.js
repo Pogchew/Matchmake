@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import MaterialSymbol from "./MaterialSymbol";
+import MatchmakeLogo from "./MatchmakeLogo";
 import { clearAuthSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 
@@ -13,9 +14,6 @@ const navItems = [
   { label: "Requests", href: "/requests" },
   { label: "Calendar", href: "/calendar" },
 ];
-
-const AVATAR =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuDZas2PHDhMQf6bh1NqGekpHou2Fk84J0kH5hv9VCjvdsxWej66o0a82Vx5Uymod3zrwESdhL5KpoF6EEdRjTxa6qmfLeqD2arJId1d3y0_gDsrWQccFcPb3Z0ry_GZXzXvN-q6I0qse-d6rJ_hVaxmP7Vwghs6A8jJMjNiXQDeL8niwgPUtvqF3YukqYrrSavndl-4EagChEnEkw3DVtUqxf3SMvL7yEndQcX7HDvu-DdG5rdxcsVfvmrr1ghTYu05Oy7L5b08kOE";
 
 export default function TopBar({ right }) {
   const pathname = usePathname();
@@ -84,12 +82,10 @@ export default function TopBar({ right }) {
 
   return (
     <header className="bg-white/80 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
-      {/* Left: avatar + wordmark */}
-      <div className="flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt="User avatar" className="w-8 h-8 rounded-full object-cover" src={AVATAR} />
-        <span className="text-xl font-bold tracking-tight text-on-surface">Matchmake</span>
-      </div>
+      {/* Left: logo */}
+      <Link href="/" className="flex items-center gap-2 active:scale-95 transition-transform" aria-label="Matchmake home">
+        <MatchmakeLogo markSize={36} />
+      </Link>
 
       {/* Centre: desktop nav */}
       <nav className="hidden md:flex items-center gap-1" aria-label="Primary navigation">

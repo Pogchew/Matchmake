@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import MaterialSymbol from "@/components/MaterialSymbol";
+import MatchmakeLogo from "@/components/MatchmakeLogo";
 import { storeAuthSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 
@@ -38,11 +38,8 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-background px-margin-mobile py-xl text-on-background">
       <section className="mx-auto flex min-h-[calc(100vh-64px)] max-w-[440px] flex-col justify-center">
-        <div className="mb-xl flex items-center gap-sm">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-fixed text-primary">
-            <MaterialSymbol fill>sports_esports</MaterialSymbol>
-          </div>
-          <span className="text-xl font-bold tracking-tight text-on-surface">Matchmake</span>
+        <div className="mb-xl flex items-center">
+          <MatchmakeLogo markSize={44} />
         </div>
 
         <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
