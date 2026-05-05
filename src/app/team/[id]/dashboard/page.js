@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
 import { supabase } from "@/lib/supabase";
@@ -1042,6 +1043,7 @@ export default function TeamDashboardPage() {
   const [seriesGameCount, setSeriesGameCount] = useState(1);
   const [selectedGameNumber, setSelectedGameNumber] = useState(1);
   const [reviews, setReviews] = useState([]);
+  const [historicalReviews, setHistoricalReviews] = useState([]);
   const [form, setForm] = useState(null);
   const [screenshotPreview, setScreenshotPreview] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1176,6 +1178,21 @@ export default function TeamDashboardPage() {
     }
 
     const loadedReviews = reviewData || [];
+    const { data: historicalReviewData, error: historicalReviewError } = await supabase
+      .from("team_match_reviews")
+      .select("*")
+      .eq("team_id", teamData.id)
+      .eq("game_title", teamData.game_title)
+      .order("played_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
+
+    if (historicalReviewError) {
+      console.warn("Failed to load historical reviews for comparison", historicalReviewError);
+      setHistoricalReviews(loadedReviews);
+    } else {
+      setHistoricalReviews(historicalReviewData || []);
+    }
+
     if (activeReviewId && loadedReviews.length === 0) {
       setErrorMessage("We could not find that saved match review.");
       setReviews([]);
@@ -1468,6 +1485,7 @@ export default function TeamDashboardPage() {
     handleSaveReview,
     handleScreenshotChange,
     handleSwapTeams,
+    historicalReviews,
     reviews,
     saving,
     screenshotPreview,
@@ -1760,68 +1778,218 @@ function ReviewMessages({ errorMessage, successMessage }) {
   );
 }
 
+const REVIEW_DASHBOARD_TABS = [
+  { label: "Overview", value: "overview" },
+  { label: "Stats", value: "stats" },
+  { label: "Compare", value: "compare" },
+  { label: "Deep Stats", value: "deep" },
+];
+
+function ReviewDashboardTabs({ activeTab, onChange }) {
+  return (
+    <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1 md:inline-grid md:grid-cols-4">
+      {REVIEW_DASHBOARD_TABS.map((tab) => (
+        <button
+          className={`rounded-lg px-md py-sm font-label-bold text-label-bold transition-colors ${
+            activeTab === tab.value
+              ? "bg-surface-container-lowest text-primary shadow-sm"
+              : "text-on-surface-variant hover:bg-surface-container"
+          }`}
+          key={tab.value}
+          onClick={() => onChange(tab.value)}
+          type="button"
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatCompareValue(value) {
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${trimTrailingZero((value / 1_000_000).toFixed(1))}M`;
+  if (abs >= 10_000) return `${trimTrailingZero((value / 1000).toFixed(1))}k`;
+  if (abs >= 100) return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
+}
+
+function CompareStatCard({ item }) {
+  const deltaTone = item.status === "better" ? "text-primary" : item.status === "worse" ? "text-error" : "text-on-surface-variant";
+  const statusLabel = item.status === "better" ? "Better" : item.status === "worse" ? "Needs attention" : "Around average";
+  const deltaSign = item.delta > 0 ? "+" : "";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="flex items-start justify-between gap-sm">
+        <div>
+          <p className="font-label-bold text-label-bold text-on-surface">{item.label}</p>
+          <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{item.explanation}</p>
+        </div>
+        <span className={`rounded-full px-sm py-1 font-label-small text-label-small ${
+          item.status === "better"
+            ? "bg-primary-fixed text-primary"
+            : item.status === "worse"
+              ? "bg-error-container text-error"
+              : "bg-surface-container text-on-surface-variant"
+        }`}>
+          {statusLabel}
+        </span>
+      </div>
+      <div className="mt-md grid grid-cols-3 gap-sm">
+        <div className="rounded-xl bg-surface-container-lowest p-sm">
+          <p className="font-label-small text-label-small text-on-surface-variant">Current</p>
+          <p className="mt-xs font-headline-3 text-headline-3 text-primary">{formatCompareValue(item.current)}</p>
+        </div>
+        <div className="rounded-xl bg-surface-container-lowest p-sm">
+          <p className="font-label-small text-label-small text-on-surface-variant">Average</p>
+          <p className="mt-xs font-headline-3 text-headline-3 text-on-surface">{formatCompareValue(item.average)}</p>
+        </div>
+        <div className="rounded-xl bg-surface-container-lowest p-sm">
+          <p className="font-label-small text-label-small text-on-surface-variant">Delta</p>
+          <p className={`mt-xs font-headline-3 text-headline-3 ${deltaTone}`}>{deltaSign}{formatCompareValue(item.delta)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompareTab({ currentReview, gameTitle, historicalReviews }) {
+  const comparison = useMemo(
+    () => compareReviewToAverage(currentReview, historicalReviews, gameTitle),
+    [currentReview, gameTitle, historicalReviews]
+  );
+  const groups = comparison.items.reduce((grouped, item) => {
+    grouped[item.group] = [...(grouped[item.group] || []), item];
+    return grouped;
+  }, {});
+
+  return (
+    <section className="mx-auto grid max-w-[1240px] gap-lg">
+      <div>
+        <h2 className="font-headline-1 text-headline-1 text-on-surface">This Game vs Your Average</h2>
+        <p className="mt-xs font-body-main text-body-main text-on-surface-variant">
+          Compare this review against your saved scrim history for this game.
+        </p>
+      </div>
+
+      {comparison.sampleSize < 2 ? (
+        <div className="rounded-2xl border border-dashed border-outline-variant bg-surface-container-lowest p-xl text-center">
+          <MaterialSymbol className="mx-auto mb-sm block text-[34px] text-outline">query_stats</MaterialSymbol>
+          <h3 className="font-headline-3 text-headline-3 text-on-surface">Not enough history yet.</h3>
+          <p className="mx-auto mt-xs max-w-md font-body-sub text-body-sub text-on-surface-variant">
+            Save a few more post-game reviews to compare this game against your team average.
+          </p>
+        </div>
+      ) : comparison.items.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-outline-variant bg-surface-container-lowest p-xl text-center">
+          <h3 className="font-headline-3 text-headline-3 text-on-surface">No comparable stats available from this screenshot.</h3>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
+            <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md">
+              <p className="font-label-small text-label-small text-on-surface-variant">Better than average</p>
+              <p className="mt-xs font-headline-2 text-headline-2 text-primary">{comparison.betterCount}</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md">
+              <p className="font-label-small text-label-small text-on-surface-variant">Around average</p>
+              <p className="mt-xs font-headline-2 text-headline-2 text-on-surface">{comparison.neutralCount}</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md">
+              <p className="font-label-small text-label-small text-on-surface-variant">Needs attention</p>
+              <p className="mt-xs font-headline-2 text-headline-2 text-error">{comparison.worseCount}</p>
+            </div>
+          </div>
+
+          {Object.entries(groups).map(([group, items]) => (
+            <section key={group}>
+              <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{group}</h3>
+              <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
+                {items.map((item) => <CompareStatCard item={item} key={item.key} />)}
+              </div>
+            </section>
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
+function DeepStatsTab({ reviews }) {
+  return (
+    <section className="mx-auto max-w-[1240px]">
+      <RecentReviewsList reviews={reviews} />
+    </section>
+  );
+}
+
 function LeagueDashboard(props) {
-  const { form, reviews, selectedReview, team } = props;
+  const { form, historicalReviews, reviews, selectedReview, team } = props;
+  const [activeTab, setActiveTab] = useState("overview");
   const displayReview = form || selectedReview;
   const gameLength = displayReview?.team_stats?.game_length || "Length TBD";
   const patch = displayReview?.team_stats?.patch;
+  const combinedRows = [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])];
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-lg">
       <GameSeriesControl {...props} />
-      <UploadCard
-        extracting={props.extracting}
-        handleScreenshotChange={props.handleScreenshotChange}
-        screenshotPreview={props.screenshotPreview}
-        title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
-      />
-      <section className="grid gap-lg lg:grid-cols-[1fr_360px]">
-        <div className="space-y-lg">
-          <div className="flex items-end justify-between border-b border-outline-variant/40 pb-md">
-            <div>
-              <div className="mb-xs flex flex-wrap items-center gap-sm">
-                <ResultBadge result={displayReview?.match_result} />
-                {patch && <span className="font-body-main text-body-main text-on-surface-variant">Patch {patch}</span>}
+      <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "overview" && (
+        <>
+          <UploadCard
+            extracting={props.extracting}
+            handleScreenshotChange={props.handleScreenshotChange}
+            screenshotPreview={props.screenshotPreview}
+            title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
+          />
+          <section className="grid gap-lg">
+            <div className="flex items-end justify-between border-b border-outline-variant/40 pb-md">
+              <div>
+                <div className="mb-xs flex flex-wrap items-center gap-sm">
+                  <ResultBadge result={displayReview?.match_result} />
+                  {patch && <span className="font-body-main text-body-main text-on-surface-variant">Patch {patch}</span>}
+                </div>
+                <h1 className="font-editorial-large text-editorial-large text-on-surface">Match Overview</h1>
+                <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">{team.name} • League of Legends</p>
               </div>
-              <h1 className="font-editorial-large text-editorial-large text-on-surface">Match Overview</h1>
-              <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">{team.name} • League of Legends</p>
+              <div className="text-right">
+                <p className="font-headline-2 text-headline-2 text-on-surface">{gameLength}</p>
+                <p className="font-body-sub text-body-sub text-on-surface-variant">{formatDate(displayReview?.played_at)}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="font-headline-2 text-headline-2 text-on-surface">{gameLength}</p>
-              <p className="font-body-sub text-body-sub text-on-surface-variant">{formatDate(displayReview?.played_at)}</p>
-            </div>
-          </div>
 
-          <CompositionSection
-            accent="bg-primary"
-            game="League of Legends"
-            rows={displayReview?.team_comp || []}
-            title="Our Team Composition"
+            <CompositionSection accent="bg-primary" game="League of Legends" rows={displayReview?.team_comp || []} title="Our Team Composition" />
+            <CompositionSection accent="bg-[#d12b2b]" game="League of Legends" rows={displayReview?.opponent_comp || []} title="Enemy Composition" />
+          </section>
+        </>
+      )}
+
+      {activeTab === "stats" && (
+        <>
+          <LeagueComparisonPanel
+            opponentName={displayReview?.opponent_name || "Opponent"}
+            opponentStats={displayReview?.opponent_stats || {}}
+            teamName={team.name}
+            teamStats={displayReview?.team_stats || {}}
           />
-          <CompositionSection
-            accent="bg-[#d12b2b]"
-            game="League of Legends"
-            rows={displayReview?.opponent_comp || []}
-            title="Enemy Composition"
-          />
-        </div>
+          <PerformanceTable game="League of Legends" rows={combinedRows} />
+          <ReviewEditor {...props} game="League of Legends" />
+        </>
+      )}
 
-        <LeagueComparisonPanel
-          opponentName={displayReview?.opponent_name || "Opponent"}
-          opponentStats={displayReview?.opponent_stats || {}}
-          teamName={team.name}
-          teamStats={displayReview?.team_stats || {}}
-        />
-      </section>
-
-      <ReviewEditor {...props} game="League of Legends" />
-      <RecentReviewsList reviews={reviews} />
+      {activeTab === "compare" && <CompareTab currentReview={displayReview} gameTitle="League of Legends" historicalReviews={historicalReviews} />}
+      {activeTab === "deep" && <DeepStatsTab reviews={reviews} />}
     </div>
   );
 }
 
 function ValorantDashboard(props) {
-  const { form, reviews, selectedReview, team } = props;
+  const { form, historicalReviews, reviews, selectedReview, team } = props;
+  const [activeTab, setActiveTab] = useState("overview");
   const displayReview = form || selectedReview;
   const combinedRows = [
     ...(displayReview?.team_comp || []),
@@ -1834,28 +2002,7 @@ function ValorantDashboard(props) {
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-lg">
       <GameSeriesControl {...props} />
-      <section className="grid gap-lg lg:grid-cols-[1fr_470px]">
-        <div>
-          <div className="mb-sm flex flex-wrap items-center gap-sm">
-            <ResultBadge result={displayReview?.match_result} />
-            <span className="font-label-small text-label-small text-on-surface-variant">{displayReview?.map_or_mode || "Map TBD"}</span>
-            <span className="font-label-small text-label-small text-on-surface-variant">{matchDateText || formatDate(displayReview?.played_at)}</span>
-            {duration && <span className="font-label-small text-label-small text-on-surface-variant">{duration}</span>}
-          </div>
-          <h1 className="font-editorial-large text-[42px] font-black leading-none text-on-surface">
-            {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
-          </h1>
-          <p className="mt-sm font-body-main text-body-main text-on-surface-variant">
-            {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"}
-          </p>
-        </div>
-        <UploadCard
-          extracting={props.extracting}
-          handleScreenshotChange={props.handleScreenshotChange}
-          screenshotPreview={props.screenshotPreview}
-          title={`Post-Game Screenshot · Game ${props.selectedGameNumber}`}
-        />
-      </section>
+      <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
 
       {groupingNeedsReview && (
         <div className="rounded-xl border border-[#b26a00]/25 bg-[#fff4d6] px-md py-sm font-body-sub text-body-sub text-[#755400]">
@@ -1863,14 +2010,45 @@ function ValorantDashboard(props) {
         </div>
       )}
 
-      <CompositionSection game="Valorant" rows={displayReview?.team_comp || []} title="Team Composition" />
-      <CompositionSection game="Valorant" rows={displayReview?.opponent_comp || []} title="Opponent Team Composition" opponentName={displayReview?.opponent_name} />
+      {activeTab === "overview" && (
+        <>
+          <section className="grid gap-lg lg:grid-cols-[1fr_470px]">
+            <div>
+              <div className="mb-sm flex flex-wrap items-center gap-sm">
+                <ResultBadge result={displayReview?.match_result} />
+                <span className="font-label-small text-label-small text-on-surface-variant">{displayReview?.map_or_mode || "Map TBD"}</span>
+                <span className="font-label-small text-label-small text-on-surface-variant">{matchDateText || formatDate(displayReview?.played_at)}</span>
+                {duration && <span className="font-label-small text-label-small text-on-surface-variant">{duration}</span>}
+              </div>
+              <h1 className="font-editorial-large text-[42px] font-black leading-none text-on-surface">
+                {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
+              </h1>
+              <p className="mt-sm font-body-main text-body-main text-on-surface-variant">
+                {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"}
+              </p>
+            </div>
+            <UploadCard
+              extracting={props.extracting}
+              handleScreenshotChange={props.handleScreenshotChange}
+              screenshotPreview={props.screenshotPreview}
+              title={`Post-Game Screenshot · Game ${props.selectedGameNumber}`}
+            />
+          </section>
+          <CompositionSection game="Valorant" rows={displayReview?.team_comp || []} title="Team Composition" />
+          <CompositionSection game="Valorant" rows={displayReview?.opponent_comp || []} title="Opponent Team Composition" opponentName={displayReview?.opponent_name} />
+        </>
+      )}
 
-      <ValorantSummaryCards stats={displayReview?.team_stats || {}} />
-      <PerformanceTable game="Valorant" rows={combinedRows} />
+      {activeTab === "stats" && (
+        <>
+          <ValorantSummaryCards stats={displayReview?.team_stats || {}} />
+          <PerformanceTable game="Valorant" rows={combinedRows} />
+          <ReviewEditor {...props} game="Valorant" />
+        </>
+      )}
 
-      <ReviewEditor {...props} game="Valorant" />
-      <RecentReviewsList reviews={reviews} />
+      {activeTab === "compare" && <CompareTab currentReview={displayReview} gameTitle="Valorant" historicalReviews={historicalReviews} />}
+      {activeTab === "deep" && <DeepStatsTab reviews={reviews} />}
     </div>
   );
 }

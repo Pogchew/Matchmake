@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
+import LandingPage from "@/components/LandingPage";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { GAME_OPTIONS, getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
 
@@ -794,7 +795,37 @@ function PostScrimModal({
   );
 }
 
-export default function ScrimBoardPage() {
+export default function RootPage() {
+  const [authState, setAuthState] = useState("loading");
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!active) return;
+      setAuthState(data?.user ? "authed" : "guest");
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setAuthState(session?.user ? "authed" : "guest");
+    });
+    return () => {
+      active = false;
+      subscription?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  if (authState === "loading") {
+    return <div className="min-h-screen bg-background" aria-hidden />;
+  }
+
+  if (authState === "guest") {
+    return <LandingPage />;
+  }
+
+  return <ScrimBoardPage />;
+}
+
+function ScrimBoardPage() {
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [scrimRequests, setScrimRequests] = useState([]);
