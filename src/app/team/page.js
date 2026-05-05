@@ -1632,7 +1632,41 @@ function GameOverviewStats({ stats }) {
 }
 
 function formatDeepStatValue(value) {
-  return typeof value === "number" ? value.toFixed(1) : value || "—";
+  if (typeof value !== "number") return value || "—";
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  // Match the dashboard formatLargeStat behavior: keep small stats precise,
+  // compact large ones to "k" / "M" so souls and damage are scannable.
+  if (abs >= 1_000_000) {
+    return `${trimDeepStatTrailingZero((value / 1_000_000).toFixed(1))}M`;
+  }
+  if (abs >= 10_000) {
+    return `${trimDeepStatTrailingZero((value / 1000).toFixed(1))}k`;
+  }
+  return value.toFixed(1);
+}
+
+function trimDeepStatTrailingZero(value) {
+  return String(value).replace(/\.0$/, "");
+}
+
+// Returns the percentage by which `ours` exceeds `theirs`, rounded to a whole
+// number. Positive = your edge, negative = opponent edge. Returns null when
+// either value is missing or the opponent is zero.
+function calcDeepStatPercentGap(ours, theirs) {
+  const ourValue = Number(ours);
+  const theirValue = Number(theirs);
+  if (!Number.isFinite(ourValue) || !Number.isFinite(theirValue)) return null;
+  if (theirValue === 0) return null;
+  return Math.round(((ourValue - theirValue) / Math.abs(theirValue)) * 100);
+}
+
+// Appends a parenthesized percent gap to a formatted differential string when
+// the gap is meaningful. Produces e.g. "+1.2k (+8%)" or "−54 (−5%)".
+function appendPercentGapText(baseText, percentGap) {
+  if (percentGap === null || percentGap === undefined) return baseText;
+  const formatted = percentGap > 0 ? `+${percentGap}%` : `${percentGap}%`;
+  return `${baseText} (${formatted})`;
 }
 
 function ComparisonBar({ label, ours, theirs, note }) {
@@ -1640,6 +1674,21 @@ function ComparisonBar({ label, ours, theirs, note }) {
   const max = hasValues ? Math.max(Math.abs(ours), Math.abs(theirs), 1) : 1;
   const ourWidth = hasValues ? `${Math.max(8, (Math.abs(ours) / max) * 100)}%` : "0%";
   const theirWidth = hasValues ? `${Math.max(8, (Math.abs(theirs) / max) * 100)}%` : "0%";
+  const gap = hasValues ? calcDeepStatPercentGap(ours, theirs) : null;
+  const gapTone = gap === null
+    ? "bg-surface-container text-on-surface-variant"
+    : gap > 0
+      ? "bg-primary-fixed text-primary"
+      : gap < 0
+        ? "bg-error-container text-error"
+        : "bg-surface-container text-on-surface-variant";
+  const gapLabel = gap === null
+    ? "—"
+    : gap > 0
+      ? `+${gap}% you`
+      : gap < 0
+        ? `${gap}% opp`
+        : "Even";
 
   return (
     <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
@@ -1648,10 +1697,15 @@ function ComparisonBar({ label, ours, theirs, note }) {
           <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
           {note && <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">{note}</p>}
         </div>
-        <div className="text-right font-label-bold text-label-bold">
-          <span className="text-primary">{formatDeepStatValue(ours)}</span>
-          <span className="mx-xs text-outline">vs</span>
-          <span className="text-error">{formatDeepStatValue(theirs)}</span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`rounded-full px-2 py-0.5 font-label-small text-label-small ${gapTone}`}>
+            {gapLabel}
+          </span>
+          <div className="text-right font-label-bold text-label-bold">
+            <span className="text-primary">{formatDeepStatValue(ours)}</span>
+            <span className="mx-xs text-outline">vs</span>
+            <span className="text-error">{formatDeepStatValue(theirs)}</span>
+          </div>
         </div>
       </div>
       <div className="grid gap-xs">
@@ -1823,6 +1877,7 @@ function CompFeatureCard({ gameTitle, icon, label, value }) {
 function ImpactDifferentialCard({ stat }) {
   const hasDiff = Number.isFinite(stat.diff);
   const diff = hasDiff ? stat.diff : 0;
+  const percentGap = calcDeepStatPercentGap(stat.ours, stat.theirs);
   const trend = Array.isArray(stat.trend) ? stat.trend.filter(Number.isFinite) : [];
   const scale = Math.max(1, ...trend.map((value) => Math.abs(value)), Math.abs(diff));
   const position = hasDiff ? Math.max(4, Math.min(96, 50 + (diff / scale) * 42)) : 50;
@@ -1864,9 +1919,16 @@ function ImpactDifferentialCard({ stat }) {
           <p className="font-label-bold text-label-bold text-on-surface">{stat.label}</p>
           <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">{verdict}</p>
         </div>
-        <p className={`font-headline-3 text-headline-3 ${valueTone}`}>
-          {hasDiff ? formatSignedValue(diff) : "—"}
-        </p>
+        <div className="flex flex-col items-end">
+          <p className={`font-headline-3 text-headline-3 ${valueTone}`}>
+            {hasDiff ? formatSignedValue(diff) : "—"}
+          </p>
+          {percentGap !== null && (
+            <span className={`mt-0.5 font-label-small text-label-small ${valueTone}`}>
+              {percentGap > 0 ? `+${percentGap}%` : `${percentGap}%`}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-md">
@@ -2070,9 +2132,24 @@ function LeagueDeepStats({ stats }) {
           <ComparisonBar label="Damage to Champions" ours={damageStat?.ours} theirs={damageStat?.theirs} />
         </div>
         <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-3">
-          <StatKpiCard label="Average Kill Differential" value={Number.isFinite(stats.averageRoundDiff) ? formatSignedValue(stats.averageRoundDiff) : "—"} />
-          <StatKpiCard label="Average Gold Differential" value={Number.isFinite(goldDiff?.diff) ? formatSignedValue(goldDiff.diff, 0) : "—"} />
-          <StatKpiCard label="Average Damage Differential" value={Number.isFinite(damageDiff?.diff) ? formatSignedValue(damageDiff.diff, 0) : "—"} />
+          <StatKpiCard
+            label="Average Kill Differential"
+            value={Number.isFinite(stats.averageRoundDiff)
+              ? appendPercentGapText(formatSignedValue(stats.averageRoundDiff), calcDeepStatPercentGap(killStat?.ours, killStat?.theirs))
+              : "—"}
+          />
+          <StatKpiCard
+            label="Average Gold Differential"
+            value={Number.isFinite(goldDiff?.diff)
+              ? appendPercentGapText(formatSignedValue(goldDiff.diff, 0), calcDeepStatPercentGap(goldStat?.ours, goldStat?.theirs))
+              : "—"}
+          />
+          <StatKpiCard
+            label="Average Damage Differential"
+            value={Number.isFinite(damageDiff?.diff)
+              ? appendPercentGapText(formatSignedValue(damageDiff.diff, 0), calcDeepStatPercentGap(damageStat?.ours, damageStat?.theirs))
+              : "—"}
+          />
         </div>
       </section>
 
@@ -2152,7 +2229,18 @@ function GameDeepStats({ fallbackKpis, stats }) {
           ))}
         </div>
         <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
-          <StatKpiCard label={stats.config.scoreDiffLabel} value={Number.isFinite(stats.averageRoundDiff) ? formatSignedValue(stats.averageRoundDiff) : "—"} />
+          <StatKpiCard
+            label={stats.config.scoreDiffLabel}
+            value={Number.isFinite(stats.averageRoundDiff)
+              ? appendPercentGapText(
+                  formatSignedValue(stats.averageRoundDiff),
+                  // Use the leading comparable output stat (kills/score) as the
+                  // basis for the percent gap, since averageRoundDiff is derived
+                  // from it for most games.
+                  calcDeepStatPercentGap(comparableOutput[0]?.ours, comparableOutput[0]?.theirs)
+                )
+              : "—"}
+          />
           {fallbackKpis?.slice(0, 1).map((kpi) => (
             <StatKpiCard key={kpi.label} label={kpi.label} value={kpi.value} />
           ))}

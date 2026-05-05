@@ -2070,16 +2070,36 @@ function MiniComparisonBar({ label, ours, percent = false, theirs }) {
   const total = hasValues ? Math.max(ourValue + theirValue, 1) : 1;
   const ourWidth = hasValues ? `${Math.max(6, Math.min(94, (ourValue / total) * 100))}%` : "0%";
   const suffix = percent ? "%" : "";
+  const gap = hasValues ? calcPercentGap(ourValue, theirValue) : null;
+  const gapTone = gap === null
+    ? "bg-surface-container text-on-surface-variant"
+    : gap > 0
+      ? "bg-primary-fixed text-primary"
+      : gap < 0
+        ? "bg-[#fde4e4] text-[#b3261e]"
+        : "bg-surface-container text-on-surface-variant";
+  const gapLabel = gap === null
+    ? "—"
+    : gap > 0
+      ? `+${gap}% you`
+      : gap < 0
+        ? `${gap}% opp`
+        : "Even";
 
   return (
     <div className="rounded-xl bg-surface-container-low p-sm">
       <div className="mb-sm flex items-center justify-between gap-sm">
         <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
-        <p className="font-label-small text-label-small text-on-surface-variant">
-          <span className="font-label-bold text-primary">{hasValues ? `${formatLargeStat(ourValue)}${suffix}` : "—"}</span>
-          <span className="mx-xs">vs</span>
-          <span className="font-label-bold text-[#d12b2b]">{hasValues ? `${formatLargeStat(theirValue)}${suffix}` : "—"}</span>
-        </p>
+        <div className="flex items-center gap-xs">
+          <span className={`rounded-full px-2 py-0.5 font-label-small text-label-small ${gapTone}`}>
+            {gapLabel}
+          </span>
+          <p className="font-label-small text-label-small text-on-surface-variant">
+            <span className="font-label-bold text-primary">{hasValues ? `${formatLargeStat(ourValue)}${suffix}` : "—"}</span>
+            <span className="mx-xs">vs</span>
+            <span className="font-label-bold text-[#d12b2b]">{hasValues ? `${formatLargeStat(theirValue)}${suffix}` : "—"}</span>
+          </p>
+        </div>
       </div>
       <div className="overflow-hidden rounded-full bg-[#f4cccc]">
         <div className="h-2 rounded-full bg-primary" style={{ width: ourWidth }} />
@@ -2360,7 +2380,32 @@ function LeagueComparisonPanel({ opponentName, opponentStats, teamName, teamStat
 function formatLargeStat(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
+  const abs = Math.abs(number);
+  // Below 10,000 we keep full digits with thousands separators so small stats
+  // (kills, ACS, damage_blocked under 10k) stay precise. Above 10k we switch
+  // to compact "k" / "M" suffixes so the eye doesn't have to count zeros.
+  if (abs >= 1_000_000) {
+    return `${trimTrailingZero((number / 1_000_000).toFixed(1))}M`;
+  }
+  if (abs >= 10_000) {
+    return `${trimTrailingZero((number / 1000).toFixed(1))}k`;
+  }
   return new Intl.NumberFormat("en-US").format(number);
+}
+
+function trimTrailingZero(value) {
+  return String(value).replace(/\.0$/, "");
+}
+
+// Returns the percentage by which `ours` exceeds `theirs`, rounded to a whole
+// number. Positive = your edge, negative = opponent edge. Returns null when
+// either value is missing or the opponent is zero (so we cannot divide).
+function calcPercentGap(ours, theirs) {
+  const ourValue = Number(ours);
+  const theirValue = Number(theirs);
+  if (!Number.isFinite(ourValue) || !Number.isFinite(theirValue)) return null;
+  if (theirValue === 0) return null;
+  return Math.round(((ourValue - theirValue) / Math.abs(theirValue)) * 100);
 }
 
 function ComparisonMetricCard({ helper, icon, label, left, leftLabel, right, rightLabel }) {
