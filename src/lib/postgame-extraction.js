@@ -868,57 +868,76 @@ Analyze this Deadlock post-game scoreboard screenshot and extract only visible s
 
 Return JSON only. Do not explain. Do not include markdown.
 
-The screenshot is a Deadlock ending match scoreboard. It may show:
-- match result, such as Victory or Defeat
-- team names, such as The Amber Hand and The Sapphire Flame
-- team total souls at the top
-- match duration at the top center
-- match id if visible
-- two teams, usually 6 players per team
-- hero portraits above or inside each player column
+You are extracting from a Deadlock post-game scoreboard or match summary screen.
+
+The screenshot may show:
+- result, such as Victory or Defeat
+- match duration
+- map/lane/match label
+- two teams
+- player rows
+- hero portraits or hero names
 - player names
-- Total Souls
-- Kills
-- Deaths
-- Assists
-- Player DMG
-- OBJ DMG
+- K/D/A
+- Souls
+- Player Damage
+- Objective Damage
 - Healing
 
-You may also receive a Deadlock hero reference sheet before the scoreboard image.
-Use the reference sheet only to identify the small hero portraits attached to player columns.
-Do not extract match stats from the reference sheet.
-Only the final uploaded scoreboard image contains match data.
-
-Rules:
-- Extract only data visible in the screenshot.
-- Do not use external APIs or hidden game data.
-- Do not infer unavailable values.
+CORE RULES:
+- Only extract data visible in the screenshot.
+- Do not use external APIs.
+- Do not guess hidden stats.
 - If a value is not visible, return null.
-- Preserve team separation exactly as shown.
-- Preserve player order left to right within each team.
-- Extract all visible player columns.
-- If a number uses commas, convert it to an integer. Example: "59,304" becomes 59304.
-- If a value is unreadable, return null and add the field to fields_needing_manual_review.
+- Preserve row order from top to bottom, or left to right if the scoreboard uses player columns.
+- Preserve team grouping exactly as shown.
+- Extract all visible player rows or player columns.
+- If a row is partially visible but readable, extract readable fields and set unreadable fields to null.
+- Convert comma numbers into integers. Example: "333,632" becomes 333632.
+- Do not treat Souls, Player Damage, Objective Damage, or Healing as the final score.
+- Do not place large damage/soul values into final_score, team_score, or opponent_score.
+- If no real team score is visible, set final_score, team_1_score, and team_2_score to null.
 
-Hero rules:
-- Identify hero only from the visible hero portrait directly attached to that player column.
-- Compare that player-column portrait to the labeled Deadlock hero reference sheet.
-- Return a hero name from the reference sheet/metadata only when the visual match is clear.
-- Do not use background art, UI icons, badges, report icons, or team logos as heroes.
-- If the hero portrait is unclear, return hero = null.
-- Do not force hero names.
-- Do not output placeholders like Hero 1, Unknown, or Player TBD.
+DEADLOCK FIELD RULES:
+For each player row, extract:
+- player_name
+- hero if visible
+- kills
+- deaths
+- assists
+- kda_text
+- souls
+- player_damage
+- objective_damage
+- healing
 
-Match result rules:
-- If a team section clearly says Victory, set match.result = "victory" for team_1 when the first/left team is the winner.
-- If the first/left team is clearly defeated, set match.result = "defeat".
-- If the screenshot only makes the winning team clear but not which side is the user team, preserve team_1/team_2 and set manual_review_required = true.
+K/D/A RULE:
+If K/D/A is visible as three numbers:
+- first number = kills
+- second number = deaths
+- third number = assists
+- kda_text = "kills/deaths/assists"
 
-Team grouping:
-- team_1 is the first/left team section.
-- team_2 is the second/right team section.
-- Put each player row in both rows[] and the correct teams[].players array.
+MATCH HEADER RULES:
+- If Victory is visible, match.result = "victory".
+- If Defeat is visible, match.result = "defeat".
+- If duration is visible, match.duration = that value.
+- If map/lane/match label is visible, store it in match.map_or_lane.
+- If a true team score is not visible, leave final_score and team scores null.
+
+TEAM GROUPING RULES:
+- If the screenshot clearly separates two teams, assign team_1 to the first visible team section and team_2 to the second visible team section.
+- If team colors indicate teams, preserve that grouping.
+- If team grouping is unclear, still return rows[] and set manual_review_required = true.
+- Put each player row into rows[] and also into the correct teams[].players array when grouping is clear.
+
+HERO RULES:
+- Extract hero only if clearly visible from text or portrait.
+- If a Deadlock hero reference sheet is attached, use it only to identify the hero portrait attached directly to each player row or player column.
+- Do not extract match stats from the reference sheet.
+- If hero is unclear, return null.
+- Do not output placeholder hero names like Hero 1, Hero 2, Unknown, or Player TBD.
+- Do not output role names as heroes.
 
 Return this exact JSON shape:
 {
@@ -931,24 +950,24 @@ Return this exact JSON shape:
     "final_score": null,
     "team_1_score": null,
     "team_2_score": null,
-    "team_1_name": null,
-    "team_2_name": null,
+    "map_or_lane": null,
     "duration": null,
-    "match_id": null,
     "played_at": null,
-    "match_date_text": null
+    "match_date_text": null,
+    "opponent_name": null
   },
   "rows": [
     {
       "row_index": 1,
       "team_key": null,
+      "row_color_group": null,
       "player_name": null,
       "hero": null,
-      "souls": null,
       "kills": null,
       "deaths": null,
       "assists": null,
       "kda_text": null,
+      "souls": null,
       "player_damage": null,
       "objective_damage": null,
       "healing": null,
@@ -958,14 +977,14 @@ Return this exact JSON shape:
   "teams": [
     {
       "team_key": "team_1",
-      "team_name": null,
+      "row_color_group": null,
       "is_winning_team": null,
       "team_score": null,
       "team_totals": {
-        "souls": null,
         "kills": null,
         "deaths": null,
         "assists": null,
+        "souls": null,
         "player_damage": null,
         "objective_damage": null,
         "healing": null
@@ -974,14 +993,14 @@ Return this exact JSON shape:
     },
     {
       "team_key": "team_2",
-      "team_name": null,
+      "row_color_group": null,
       "is_winning_team": null,
       "team_score": null,
       "team_totals": {
-        "souls": null,
         "kills": null,
         "deaths": null,
         "assists": null,
+        "souls": null,
         "player_damage": null,
         "objective_damage": null,
         "healing": null
@@ -992,23 +1011,26 @@ Return this exact JSON shape:
   "fields_needing_manual_review": []
 }
 
-Team totals:
-- If team grouping is reliable, calculate team_totals from visible player rows:
-  - souls = sum of Total Souls
-  - kills = sum of Kills
-  - deaths = sum of Deaths
-  - assists = sum of Assists
-  - player_damage = sum of Player DMG
-  - objective_damage = sum of OBJ DMG
-  - healing = sum of Healing
-- If top team soul totals are visible, they may be used for team_totals.souls.
-- If a row field is null, skip it in sums.
+TEAM TOTALS:
+After extracting player rows, calculate team totals from visible rows when team grouping is reliable:
+- kills = sum of kills
+- deaths = sum of deaths
+- assists = sum of assists
+- souls = sum of souls
+- player_damage = sum of player_damage
+- objective_damage = sum of objective_damage
+- healing = sum of healing
 
-Final validation:
+If a row field is null, skip it in the sum.
+If team grouping is not reliable, set team totals to null.
+
+FINAL VALIDATION:
 - Do not include fields outside the schema.
-- Make sure rows[] contains every visible player column.
-- Make sure teams[].players contains the same player rows grouped by team.
-- Do not include hidden stats.
+- Make sure rows[] contains every visible player row or column.
+- Make sure teams[].players contains grouped rows when grouping is clear.
+- Do not put Souls, Player Damage, Objective Damage, or Healing into final_score.
+- final_score should only be used if a real game score is visible.
+- No hidden stats should be included.
   `.trim();
 }
 

@@ -190,8 +190,9 @@ const GAME_DASHBOARD_CONFIGS = {
     highlightStats: [
       { key: "team_kills", label: "Team Kills" },
       { key: "total_souls", label: "Souls" },
-      { key: "player_damage", label: "Player Dmg" },
-      { key: "objective_damage", label: "Objective Dmg" },
+      { key: "total_player_damage", label: "Player Dmg" },
+      { key: "total_objective_damage", label: "Objective Dmg" },
+      { key: "total_healing", label: "Healing" },
     ],
   },
   SSBU: {
@@ -301,6 +302,10 @@ function getDashboardConfig(gameTitle) {
   return GAME_DASHBOARD_CONFIGS[gameTitle] || GAME_DASHBOARD_CONFIGS.Valorant;
 }
 
+function isStatFirstGame(gameTitle) {
+  return gameTitle === "Deadlock";
+}
+
 function createBlankReview(gameTitle, matchType = "scrim") {
   const config = getDashboardConfig(gameTitle);
 
@@ -357,13 +362,15 @@ function formatDate(value) {
 
 function normalizeReviewForForm(review, gameTitle) {
   const base = createBlankReview(gameTitle);
+  const showScore = !isStatFirstGame(gameTitle);
+
   return {
     ...base,
     ...review,
     match_type: review?.match_type || base.match_type,
-    final_score: formatScore(review?.team_score, review?.opponent_score) || review?.final_score || "",
-    team_score: review?.team_score ?? "",
-    opponent_score: review?.opponent_score ?? "",
+    final_score: showScore ? formatScore(review?.team_score, review?.opponent_score) || review?.final_score || "" : "",
+    team_score: showScore ? review?.team_score ?? "" : "",
+    opponent_score: showScore ? review?.opponent_score ?? "" : "",
     played_at: toDateInputValue(review?.played_at || new Date()),
     team_comp: review?.team_comp?.length ? review.team_comp : base.team_comp,
     opponent_comp: review?.opponent_comp?.length ? review.opponent_comp : base.opponent_comp,
@@ -388,7 +395,8 @@ function normalizeRowsForSave(rows = [], gameTitle) {
 }
 
 function buildReviewPayload({ form, team, userId, screenshotPreview }) {
-  const derivedFinalScore = formatScore(form.team_score, form.opponent_score);
+  const showScore = !isStatFirstGame(team.game_title);
+  const derivedFinalScore = showScore ? formatScore(form.team_score, form.opponent_score) : "";
   const teamRows = normalizeRowsForSave(form.team_comp || [], team.game_title);
   const opponentRows = normalizeRowsForSave(form.opponent_comp || [], team.game_title);
 
@@ -399,8 +407,8 @@ function buildReviewPayload({ form, team, userId, screenshotPreview }) {
     match_type: form.match_type || "scrim",
     match_result: form.match_result || null,
     final_score: derivedFinalScore || null,
-    team_score: form.team_score === "" ? null : Number(form.team_score),
-    opponent_score: form.opponent_score === "" ? null : Number(form.opponent_score),
+    team_score: showScore && form.team_score !== "" ? Number(form.team_score) : null,
+    opponent_score: showScore && form.opponent_score !== "" ? Number(form.opponent_score) : null,
     opponent_name: form.opponent_name || null,
     map_or_mode: team.game_title === "League of Legends" ? null : form.map_or_mode || null,
     played_at: form.played_at ? new Date(form.played_at).toISOString() : null,
@@ -432,6 +440,17 @@ function formatScore(teamScore, opponentScore) {
   const hasOpponentScore = opponentScore !== null && opponentScore !== undefined && opponentScore !== "";
   if (!hasTeamScore && !hasOpponentScore) return "";
   return `${hasTeamScore ? teamScore : "—"} - ${hasOpponentScore ? opponentScore : "—"}`;
+}
+
+function getReviewStatValue(stats = {}, key) {
+  const fallbacks = {
+    total_player_damage: "player_damage",
+    total_objective_damage: "objective_damage",
+    total_healing: "healing",
+    total_souls: "souls",
+  };
+
+  return stats?.[key] ?? stats?.[fallbacks[key]];
 }
 
 function mapLeaguePlayerRow(player = {}) {
@@ -839,6 +858,10 @@ function mapDeadlockTeamStats(team = {}, rows = []) {
   const totalKills = normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k");
   const totalDeaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d");
   const totalAssists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a");
+  const totalSouls = normalizeExtractedNumber(totals.souls ?? totals.total_souls) ?? sumRows(rows, "souls");
+  const totalPlayerDamage = normalizeExtractedNumber(totals.player_damage) ?? sumRows(rows, "player_damage");
+  const totalObjectiveDamage = normalizeExtractedNumber(totals.objective_damage ?? totals.obj_damage) ?? sumRows(rows, "objective_damage");
+  const totalHealing = normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing");
 
   return {
     team_kills: totalKills,
@@ -847,12 +870,21 @@ function mapDeadlockTeamStats(team = {}, rows = []) {
     total_kills: totalKills,
     total_deaths: totalDeaths,
     total_assists: totalAssists,
-    total_souls: normalizeExtractedNumber(totals.souls ?? totals.total_souls) ?? sumRows(rows, "souls"),
-    souls: normalizeExtractedNumber(totals.souls ?? totals.total_souls) ?? sumRows(rows, "souls"),
-    player_damage: normalizeExtractedNumber(totals.player_damage) ?? sumRows(rows, "player_damage"),
-    objective_damage: normalizeExtractedNumber(totals.objective_damage ?? totals.obj_damage) ?? sumRows(rows, "objective_damage"),
-    healing: normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing"),
+    total_souls: totalSouls,
+    souls: totalSouls,
+    total_player_damage: totalPlayerDamage,
+    player_damage: totalPlayerDamage,
+    total_objective_damage: totalObjectiveDamage,
+    objective_damage: totalObjectiveDamage,
+    total_healing: totalHealing,
+    healing: totalHealing,
   };
+}
+
+function normalizeDeadlockScore(value) {
+  const score = normalizeExtractedNumber(value);
+  if (score === null) return null;
+  return Math.abs(score) <= 99 ? score : null;
 }
 
 function groupDeadlockRows(extraction) {
@@ -898,22 +930,24 @@ function mapDeadlockExtractionToReview(extraction) {
     groupingNeedsReview,
   } = groupDeadlockRows(extraction);
   const normalizedResult = match.result?.toLowerCase?.();
-  const teamOneScore = normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score ?? teamOne.team_totals?.souls);
-  const teamTwoScore = normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score ?? teamTwo.team_totals?.souls);
+  const teamOneScore = normalizeDeadlockScore(match.team_1_score ?? teamOne.team_score);
+  const teamTwoScore = normalizeDeadlockScore(match.team_2_score ?? teamTwo.team_score);
+  const mapOrLane = match.map_or_lane || match.map || match.lane || match.match_label || "";
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(teamOneScore, teamTwoScore) || match.final_score || "",
+    final_score: formatScore(teamOneScore, teamTwoScore) || "",
     team_score: teamOneScore ?? "",
     opponent_score: teamTwoScore ?? "",
-    opponent_name: match.team_2_name || teamTwo.team_name || "",
-    map_or_mode: match.duration ? `Duration ${match.duration}` : "Ending Match",
+    opponent_name: match.opponent_name || match.team_2_name || teamTwo.team_name || "",
+    map_or_mode: mapOrLane || "Ending Match",
     played_at: match.played_at || new Date().toISOString(),
     team_comp: teamRows,
     opponent_comp: opponentRows,
     team_stats: {
       ...mapDeadlockTeamStats(teamOne, teamRows),
       duration: match.duration || null,
+      map_or_lane: mapOrLane || null,
       match_id: match.match_id || null,
       team_name: match.team_1_name || teamOne.team_name || null,
       team_grouping_needs_review: groupingNeedsReview,
@@ -1839,6 +1873,9 @@ function UniversalGameDashboard(props) {
   const isMarvelRivals = team.game_title === "Marvel Rivals";
   const isDeadlock = team.game_title === "Deadlock";
   const isCompactSix = isMarvelRivals || isDeadlock;
+  const headlineValue = isDeadlock
+    ? displayReview?.team_stats?.duration || displayReview?.map_or_mode || "Deadlock Review"
+    : formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD";
   const heroReviewNeeded = isMarvelRivals && (displayReview?.team_stats?.hero_fields_nulled || []).length > 0;
   const groupingNeedsReview = (isMarvelRivals || isDeadlock) && (displayReview?.team_stats?.team_grouping_needs_review || displayReview?.manual_edit_required);
   const performanceRows = isCompactSix
@@ -1858,7 +1895,7 @@ function UniversalGameDashboard(props) {
             <span className="font-label-small text-label-small text-on-surface-variant">{formatDate(displayReview?.played_at)}</span>
           </div>
           <h1 className={`${isCompactSix ? "font-headline-1 text-headline-1" : "font-editorial-large text-editorial-large"} text-on-surface`}>
-            {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
+            {headlineValue}
           </h1>
           <p className={`${isCompactSix ? "mt-xs font-body-sub text-body-sub" : "mt-sm font-body-main text-body-main"} text-on-surface-variant`}>
             {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"} · {displayReview?.map_or_mode || config.defaultMap}
@@ -1867,7 +1904,7 @@ function UniversalGameDashboard(props) {
             {config.highlightStats.map((stat) => (
               <div className={`rounded-2xl bg-surface-container-low ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
                 <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
+                <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{getReviewStatValue(displayReview?.team_stats, stat.key) ?? "—"}</p>
               </div>
             ))}
           </div>
@@ -2351,8 +2388,8 @@ function ComparisonMetricCard({ helper, icon, label, left, leftLabel, right, rig
 
 function PerformanceTable({ game = "Valorant", rows }) {
   const config = getDashboardConfig(game);
-  const usesTeamTint = game === "Valorant" || game === "Marvel Rivals";
-  const expectedTeamSize = game === "Marvel Rivals" ? 6 : 5;
+  const usesTeamTint = game === "Valorant" || game === "Marvel Rivals" || game === "Deadlock";
+  const expectedTeamSize = game === "Marvel Rivals" || game === "Deadlock" ? 6 : 5;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-lowest">
@@ -2423,6 +2460,7 @@ function ReviewEditor({
 }) {
   const config = getDashboardConfig(game);
   const primaryHighlight = config.highlightStats[0];
+  const showScoreInputs = !isStatFirstGame(game);
 
   return (
     <form className="grid gap-lg rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg" onSubmit={handleSaveReview}>
@@ -2436,7 +2474,7 @@ function ReviewEditor({
                 : `No review saved for Game ${selectedGameNumber} yet. Upload a screenshot or enter stats manually for this game.`}
             </p>
           </div>
-          {(game === "League of Legends" || game === "Valorant" || game === "Marvel Rivals") && (
+          {(game === "League of Legends" || game === "Valorant" || game === "Marvel Rivals" || game === "Deadlock") && (
             <button
               className="inline-flex items-center justify-center gap-xs rounded-xl bg-surface-container px-md py-sm font-label-bold text-label-bold text-primary hover:bg-primary-fixed"
               onClick={handleSwapTeams}
@@ -2452,8 +2490,12 @@ function ReviewEditor({
       <div className="grid grid-cols-1 gap-md md:grid-cols-4">
         <SelectInput label="Review Type" onChange={(value) => updateField("match_type", value)} value={form.match_type || "scrim"} options={["scrim", "match"]} />
         <SelectInput label="Result" onChange={(value) => updateField("match_result", value)} value={form.match_result} options={["victory", "defeat"]} />
-        <TextInput label={game === "League of Legends" ? "Our Kills" : "Our Score"} onChange={(value) => updateField("team_score", value)} type="number" value={form.team_score} />
-        <TextInput label={game === "League of Legends" ? "Opponent Kills" : "Opponent Score"} onChange={(value) => updateField("opponent_score", value)} type="number" value={form.opponent_score} />
+        {showScoreInputs && (
+          <>
+            <TextInput label={game === "League of Legends" ? "Our Kills" : "Our Score"} onChange={(value) => updateField("team_score", value)} type="number" value={form.team_score} />
+            <TextInput label={game === "League of Legends" ? "Opponent Kills" : "Opponent Score"} onChange={(value) => updateField("opponent_score", value)} type="number" value={form.opponent_score} />
+          </>
+        )}
         {game !== "League of Legends" && (
           <TextInput label={config.mapLabel} onChange={(value) => updateField("map_or_mode", value)} value={form.map_or_mode || ""} />
         )}
@@ -2464,7 +2506,7 @@ function ReviewEditor({
             value={form.team_stats?.objective_or_mode || ""}
           />
         )}
-        {(game === "Valorant" || game === "Marvel Rivals") && (
+        {(game === "Valorant" || game === "Marvel Rivals" || game === "Deadlock") && (
           <TextInput
             label="Duration"
             onChange={(value) => updateStat("team_stats", "duration", value)}
@@ -2616,6 +2658,7 @@ function formatFieldLabel(field) {
 function getReviewEditorGridClass(canEditRole, statFieldCount) {
   if (canEditRole) return "md:grid-cols-[1fr_120px_1fr_repeat(6,80px)]";
   if (statFieldCount >= 8) return "md:grid-cols-[1fr_1fr_repeat(8,80px)]";
+  if (statFieldCount >= 7) return "md:grid-cols-[1fr_1fr_repeat(7,80px)]";
   return "md:grid-cols-[1fr_1fr_repeat(6,80px)]";
 }
 
@@ -2657,7 +2700,7 @@ function RecentReviewsList({ reviews }) {
             <div className="flex flex-col gap-sm rounded-xl bg-surface-container-low p-md sm:flex-row sm:items-center sm:justify-between" key={review.id}>
               <div>
                 <p className="font-label-bold text-label-bold text-on-surface">
-                  Game {getReviewGameNumber(review)} · {formatScore(review.team_score, review.opponent_score) || "Score TBD"} vs {review.opponent_name || "Opponent"}
+                  Game {getReviewGameNumber(review)} · {isStatFirstGame(review.game_title) ? review.team_stats?.duration || review.map_or_mode || "Deadlock Review" : formatScore(review.team_score, review.opponent_score) || "Score TBD"} vs {review.opponent_name || "Opponent"}
                 </p>
                 <p className="font-label-small text-label-small text-on-surface-variant">
                   {(review.match_type || "scrim").replace(/\b\w/g, (letter) => letter.toUpperCase())} review • {review.game_title === "League of Legends" ? "League of Legends" : review.map_or_mode || "Mode TBD"} • {formatDate(review.played_at || review.created_at)}
