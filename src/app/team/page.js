@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { supabase } from "@/lib/supabase";
-import { getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
+import { getDefaultRankForGame, getDisplayModeForTeam, getRanksForGame } from "@/lib/game-options";
 
 const SCRIM_DURATION_HOURS = 3;
 const STATS_TIMELINE_OPTIONS = [
@@ -659,7 +659,7 @@ function TeamPageContent() {
                 </p>
                 <div className="flex flex-wrap gap-sm">
                   <span className="bg-primary-fixed text-on-primary-fixed font-label-small px-3 py-1 rounded-full">{selectedTeam.game_title}</span>
-                  <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">{selectedTeam.mode || "Mode TBD"}</span>
+                  <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">{getDisplayModeForTeam(selectedTeam)}</span>
                   <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">{selectedTeam.rank_tier || "Rank TBD"}</span>
                   <span className="bg-surface-container text-on-surface-variant font-label-small px-3 py-1 rounded-full">Rating {Number(selectedTeam.scrimgg_rating || 0).toFixed(1)}</span>
                 </div>
@@ -1064,11 +1064,29 @@ function toMarvelHeroFileStem(name = "") {
   return MARVEL_HERO_FILE_ALIASES[key] || String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+const DEADLOCK_HERO_FILE_ALIASES = {
+  graytalon: "grey-talon",
+  greytalon: "grey-talon",
+  ladygeist: "lady-geist",
+  mcginnis: "mcginnis",
+  moandkrill: "mo-krill",
+  mokrill: "mo-krill",
+  theboss: "the-boss",
+  thedoorman: "the-doorman",
+};
+
+function toDeadlockHeroFileStem(name = "") {
+  const key = compactPickKey(String(name).replace(/&/g, "and"));
+  if (!key) return "";
+  return DEADLOCK_HERO_FILE_ALIASES[key] || String(name).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 function getPickImagePath(gameTitle, pick) {
   if (!pick) return "";
   if (gameTitle === "League of Legends") return `/lol/champions/${toChampionFileStem(pick)}.png`;
   if (gameTitle === "Valorant") return `/valorant/agents/${toAgentFileStem(pick)}.png`;
   if (gameTitle === "Marvel Rivals") return `/marvel-rivals/heroes/${toMarvelHeroFileStem(pick)}_avatar.png`;
+  if (gameTitle === "Deadlock") return `/deadlock/heroes/${toDeadlockHeroFileStem(pick)}.png`;
   return "";
 }
 

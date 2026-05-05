@@ -107,14 +107,20 @@ export function getDefaultRankForGame(gameTitle) {
 
 export function getDefaultModeForGame(gameTitle) {
   if (gameTitle === "Rocket League") return "3v3";
-  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return "6v6";
+  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals" || gameTitle === "Deadlock") return "6v6";
   if (gameTitle === "SSBU") return "1v1";
   return "5v5";
 }
 
 export function getModesForGame(gameTitle) {
   if (gameTitle === "Rocket League") return ["3v3", "2v2", "1v1"];
-  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals") return ["6v6"];
+  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals" || gameTitle === "Deadlock") return ["6v6"];
   if (gameTitle === "SSBU") return ["1v1", "2v2", "4v4", "5v5"];
   return ["5v5"];
+}
+
+export function getDisplayModeForTeam(team = {}) {
+  const defaultMode = getDefaultModeForGame(team.game_title);
+  if (team.game_title === "Deadlock" && team.mode === "5v5") return defaultMode;
+  return team.mode || defaultMode || "Mode TBD";
 }

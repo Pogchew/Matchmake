@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { getLeagueExtractionPrompt, getMarvelRivalsExtractionPrompt, getValorantExtractionPrompt, normalizeMarvelRivalsExtraction } from "@/lib/postgame-extraction";
+import { getDeadlockExtractionPrompt, getLeagueExtractionPrompt, getMarvelRivalsExtractionPrompt, getValorantExtractionPrompt, normalizeMarvelRivalsExtraction } from "@/lib/postgame-extraction";
 import { matchMarvelRivalsCostumeIcons } from "@/lib/server/marvel-rivals-costume-matcher";
 
 export const runtime = "nodejs";
@@ -54,6 +54,8 @@ const MARVEL_RIVALS_REFERENCE_DIR = path.join(process.cwd(), "public", "game-ass
 const MARVEL_RIVALS_HERO_REFERENCE_FILE = "marvel-rivals-hero-reference.png";
 const MARVEL_RIVALS_COSTUME_DATA_PATH = path.join(process.cwd(), "data", "marvel-rivals-costumes.json");
 const MARVEL_RIVALS_API_ORIGIN = "https://marvelrivalsapi.com";
+const DEADLOCK_REFERENCE_PATH = path.join(process.cwd(), "public", "deadlock", "reference", "deadlock-hero-reference.jpg");
+const DEADLOCK_HERO_ASSETS_PATH = path.join(process.cwd(), "src", "lib", "game-assets", "deadlock-hero-assets.json");
 
 function applyMarvelMajorityConfidenceHeroes(extraction) {
   const mergeRow = (row) => {
@@ -162,6 +164,39 @@ async function getMarvelRivalsReferenceParts(gameTitle) {
   }
 }
 
+async function getDeadlockReferenceParts(gameTitle) {
+  if (gameTitle !== "Deadlock") return [];
+
+  try {
+    return [await imageReferencePart(DEADLOCK_REFERENCE_PATH, "image/jpeg")];
+  } catch (error) {
+    console.warn("Deadlock hero reference sheet is unavailable; continuing without it.", error);
+    return [];
+  }
+}
+
+async function getDeadlockHeroMetadataPart(gameTitle) {
+  if (gameTitle !== "Deadlock") return null;
+
+  try {
+    const raw = await fs.readFile(DEADLOCK_HERO_ASSETS_PATH, "utf8");
+    const heroes = JSON.parse(raw);
+    if (!Array.isArray(heroes) || !heroes.length) return null;
+
+    return {
+      text: [
+        "Deadlock hero reference metadata:",
+        "Use this list with the attached Deadlock hero reference sheet to identify only the small hero portraits attached to scoreboard player columns.",
+        "Return a hero name from this list or null.",
+        heroes.map((hero) => hero.hero_name).join(", "),
+      ].join("\n"),
+    };
+  } catch (error) {
+    console.warn("Deadlock hero metadata is unavailable; continuing without it.", error);
+    return null;
+  }
+}
+
 function absolutizeMarvelApiUrl(value) {
   if (!value || typeof value !== "string" || value === "0") return null;
   if (value.startsWith("http://") || value.startsWith("https://")) return value;
@@ -225,6 +260,7 @@ export async function POST(request) {
     const image = formData.get("image");
 
     const extractionPrompts = {
+      Deadlock: getDeadlockExtractionPrompt,
       "League of Legends": getLeagueExtractionPrompt,
       "Marvel Rivals": getMarvelRivalsExtractionPrompt,
       Valorant: getValorantExtractionPrompt,
@@ -232,7 +268,7 @@ export async function POST(request) {
     const getPrompt = extractionPrompts[gameTitle];
 
     if (!getPrompt) {
-      return errorResponse("Gemini extraction is only enabled for League of Legends, Valorant, and Marvel Rivals right now.");
+      return errorResponse("Gemini extraction is only enabled for League of Legends, Valorant, Marvel Rivals, and Deadlock right now.");
     }
 
     if (!image || typeof image === "string") {
@@ -245,12 +281,17 @@ export async function POST(request) {
 
     const imageBuffer = Buffer.from(await image.arrayBuffer());
     const base64Image = imageBuffer.toString("base64");
-    const referenceParts = await getMarvelRivalsReferenceParts(gameTitle);
+    const referenceParts = [
+      ...(await getMarvelRivalsReferenceParts(gameTitle)),
+      ...(await getDeadlockReferenceParts(gameTitle)),
+    ];
     const costumeMetadataPart = await getMarvelRivalsCostumeMetadataPart(gameTitle);
+    const deadlockHeroMetadataPart = await getDeadlockHeroMetadataPart(gameTitle);
     const promptParts = [
       { text: getPrompt() },
       ...referenceParts,
       ...(costumeMetadataPart ? [costumeMetadataPart] : []),
+      ...(deadlockHeroMetadataPart ? [deadlockHeroMetadataPart] : []),
       {
         inlineData: {
           mimeType: image.type,

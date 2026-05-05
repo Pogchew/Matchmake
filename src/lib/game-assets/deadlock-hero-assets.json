@@ -1,0 +1,450 @@
+[
+  {
+    "hero_id": "abrams",
+    "hero_name": "Abrams",
+    "src": "/deadlock/heroes/abrams.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/abrams/bull_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "airheart",
+    "hero_name": "Airheart",
+    "src": "/deadlock/heroes/airheart.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/airheart/airheart_card.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "apollo",
+    "hero_name": "Apollo",
+    "src": "/deadlock/heroes/apollo.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/apollo/fencer_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "bebop",
+    "hero_name": "Bebop",
+    "src": "/deadlock/heroes/bebop.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/bebop/bebop_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "billy",
+    "hero_name": "Billy",
+    "src": "/deadlock/heroes/billy.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/billy/punkgoat_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "cadence",
+    "hero_name": "Cadence",
+    "src": "/deadlock/heroes/cadence.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/cadence/cadence_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "calico",
+    "hero_name": "Calico",
+    "src": "/deadlock/heroes/calico.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/calico/nano_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "celeste",
+    "hero_name": "Celeste",
+    "src": "/deadlock/heroes/celeste.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/celeste/unicorn_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "drifter",
+    "hero_name": "Drifter",
+    "src": "/deadlock/heroes/drifter.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/drifter/drifter_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "druid",
+    "hero_name": "Druid",
+    "src": "/deadlock/heroes/druid.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/druid/druid_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "dynamo",
+    "hero_name": "Dynamo",
+    "src": "/deadlock/heroes/dynamo.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/dynamo/sumo_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "fathom",
+    "hero_name": "Fathom",
+    "src": "/deadlock/heroes/fathom.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/fathom/slork_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "fortuna",
+    "hero_name": "Fortuna",
+    "src": "/deadlock/heroes/fortuna.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/fortuna/fortuna_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "graf",
+    "hero_name": "Graf",
+    "src": "/deadlock/heroes/graf.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/graf/graf_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "graves",
+    "hero_name": "Graves",
+    "src": "/deadlock/heroes/graves.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/graves/necro_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "grey-talon",
+    "hero_name": "Grey Talon",
+    "src": "/deadlock/heroes/grey-talon.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/grey-talon/archer_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "gunslinger",
+    "hero_name": "Gunslinger",
+    "src": "/deadlock/heroes/gunslinger.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/gunslinger/gunslinger_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "haze",
+    "hero_name": "Haze",
+    "src": "/deadlock/heroes/haze.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/haze/haze_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "holliday",
+    "hero_name": "Holliday",
+    "src": "/deadlock/heroes/holliday.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/holliday/astro_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "infernus",
+    "hero_name": "Infernus",
+    "src": "/deadlock/heroes/infernus.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/infernus/inferno_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "ivy",
+    "hero_name": "Ivy",
+    "src": "/deadlock/heroes/ivy.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/ivy/tengu_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "kali",
+    "hero_name": "Kali",
+    "src": "/deadlock/heroes/kali.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/kali/kali_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "kelvin",
+    "hero_name": "Kelvin",
+    "src": "/deadlock/heroes/kelvin.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/kelvin/kelvin_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "lady-geist",
+    "hero_name": "Lady Geist",
+    "src": "/deadlock/heroes/lady-geist.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/lady-geist/spectre_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "lash",
+    "hero_name": "Lash",
+    "src": "/deadlock/heroes/lash.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/lash/lash_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "mcginnis",
+    "hero_name": "McGinnis",
+    "src": "/deadlock/heroes/mcginnis.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/mcginnis/engineer_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "mina",
+    "hero_name": "Mina",
+    "src": "/deadlock/heroes/mina.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/mina/vampirebat_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "mirage",
+    "hero_name": "Mirage",
+    "src": "/deadlock/heroes/mirage.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/mirage/mirage_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "mo-krill",
+    "hero_name": "Mo & Krill",
+    "src": "/deadlock/heroes/mo-krill.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/mo-krill/digger_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "paige",
+    "hero_name": "Paige",
+    "src": "/deadlock/heroes/paige.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/paige/bookworm_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "paradox",
+    "hero_name": "Paradox",
+    "src": "/deadlock/heroes/paradox.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/paradox/chrono_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "pocket",
+    "hero_name": "Pocket",
+    "src": "/deadlock/heroes/pocket.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/pocket/synth_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "raven",
+    "hero_name": "Raven",
+    "src": "/deadlock/heroes/raven.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/raven/operative_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "rem",
+    "hero_name": "Rem",
+    "src": "/deadlock/heroes/rem.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/rem/familiar_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "rutger",
+    "hero_name": "Rutger",
+    "src": "/deadlock/heroes/rutger.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/rutger/rutger_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "seven",
+    "hero_name": "Seven",
+    "src": "/deadlock/heroes/seven.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/seven/gigawatt_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "shiv",
+    "hero_name": "Shiv",
+    "src": "/deadlock/heroes/shiv.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/shiv/shiv_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "silver",
+    "hero_name": "Silver",
+    "src": "/deadlock/heroes/silver.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/silver/werewolf_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "sinclair",
+    "hero_name": "Sinclair",
+    "src": "/deadlock/heroes/sinclair.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/sinclair/magician_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "skyrunner",
+    "hero_name": "Skyrunner",
+    "src": "/deadlock/heroes/skyrunner.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/skyrunner/skyrunner_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "swan",
+    "hero_name": "Swan",
+    "src": "/deadlock/heroes/swan.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/swan/swan_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "the-boss",
+    "hero_name": "The Boss",
+    "src": "/deadlock/heroes/the-boss.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/the-boss/yakuza_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "the-doorman",
+    "hero_name": "The Doorman",
+    "src": "/deadlock/heroes/the-doorman.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/the-doorman/doorman_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "thumper",
+    "hero_name": "Thumper",
+    "src": "/deadlock/heroes/thumper.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/thumper/thumper_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "tokamak",
+    "hero_name": "Tokamak",
+    "src": "/deadlock/heroes/tokamak.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/tokamak/tokamak_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "trapper",
+    "hero_name": "Trapper",
+    "src": "/deadlock/heroes/trapper.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/trapper/trapper_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "vandal",
+    "hero_name": "Vandal",
+    "src": "/deadlock/heroes/vandal.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/vandal/vandal_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "venator",
+    "hero_name": "Venator",
+    "src": "/deadlock/heroes/venator.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/venator/priest_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "victor",
+    "hero_name": "Victor",
+    "src": "/deadlock/heroes/victor.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/victor/frank_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "vindicta",
+    "hero_name": "Vindicta",
+    "src": "/deadlock/heroes/vindicta.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/vindicta/hornet_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "viscous",
+    "hero_name": "Viscous",
+    "src": "/deadlock/heroes/viscous.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/viscous/viscous_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "vyper",
+    "hero_name": "Vyper",
+    "src": "/deadlock/heroes/vyper.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/vyper/kali_vertical.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "warden",
+    "hero_name": "Warden",
+    "src": "/deadlock/heroes/warden.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/warden/warden_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "wraith",
+    "hero_name": "Wraith",
+    "src": "/deadlock/heroes/wraith.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/wraith/wraith_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "wrecker",
+    "hero_name": "Wrecker",
+    "src": "/deadlock/heroes/wrecker.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/wrecker/wrecker_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  },
+  {
+    "hero_id": "yamato",
+    "hero_name": "Yamato",
+    "src": "/deadlock/heroes/yamato.png",
+    "source_file": "/Users/nicholaschiu/Downloads/deadlock-heroes/hero-assets/yamato/yamato_sm.png",
+    "asset_type": "scoreboard_portrait",
+    "source": "manual"
+  }
+]

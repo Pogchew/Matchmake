@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { getDisplayModeForTeam } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 function formatOrgType(type) {
@@ -119,7 +120,7 @@ function TeamProgramRow({ scrims, team }) {
           <p className="font-label-small text-label-small text-on-surface-variant">{team.game_title || "Game not set"}</p>
         </div>
       </div>
-      <ProgramRowPill label="Mode" value={team.mode || "TBD"} />
+      <ProgramRowPill label="Mode" value={getDisplayModeForTeam(team)} />
       <ProgramRowPill label="Rank" value={team.rank_tier || "TBD"} />
       <ProgramRowPill label="Region" value={team.region || "Not set"} />
       <ProgramRowPill label="Open" value={counts.open || 0} />
