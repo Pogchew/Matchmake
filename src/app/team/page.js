@@ -2104,6 +2104,256 @@ function LeagueCoachRead({ damageDiff, goldDiff, killDiff }) {
   );
 }
 
+function KdaBalanceBar({ kills, deaths, assists }) {
+  const k = Math.max(0, Number(kills) || 0);
+  const d = Math.max(0, Number(deaths) || 0);
+  const a = Math.max(0, Number(assists) || 0);
+  const total = k + d + a;
+  const kPct = total > 0 ? (k / total) * 100 : 0;
+  const dPct = total > 0 ? (d / total) * 100 : 0;
+  const aPct = total > 0 ? (a / total) * 100 : 0;
+  const ratio = d > 0 ? ((k + a) / d) : null;
+  const ratioLabel = total === 0 ? "—" : ratio === null ? "Perfect" : ratio.toFixed(2);
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-md flex items-end justify-between">
+        <div>
+          <p className="font-label-small text-label-small text-on-surface-variant">KDA Balance</p>
+          <p className="mt-0.5 font-headline-2 text-headline-2 text-on-surface">{ratioLabel}</p>
+        </div>
+        <div className="flex items-center gap-xs font-label-small text-label-small">
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#1B5E20]" />K</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-error" />D</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" />A</span>
+        </div>
+      </div>
+      {total === 0 ? (
+        <div className="flex h-7 items-center justify-center rounded-full bg-surface-container-lowest font-label-small text-label-small text-on-surface-variant">
+          Save more reviews
+        </div>
+      ) : (
+        <>
+          <div className="flex h-7 overflow-hidden rounded-full bg-surface-container-lowest">
+            <div className="bg-[#1B5E20] transition-[width]" style={{ width: `${kPct}%` }} title={`Kills: ${k.toFixed(1)}`} />
+            <div className="bg-error transition-[width]" style={{ width: `${dPct}%` }} title={`Deaths: ${d.toFixed(1)}`} />
+            <div className="bg-primary transition-[width]" style={{ width: `${aPct}%` }} title={`Assists: ${a.toFixed(1)}`} />
+          </div>
+          <div className="mt-xs grid grid-cols-3 font-label-small text-label-small">
+            <span className="text-[#1B5E20]">{k.toFixed(1)}</span>
+            <span className="text-center text-error">{d.toFixed(1)}</span>
+            <span className="text-right text-primary">{a.toFixed(1)}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PaceDial({ minutes }) {
+  const value = Number(minutes);
+  const min = 20;
+  const max = 50;
+  const hasValue = Number.isFinite(value);
+  const clamped = hasValue ? Math.max(min, Math.min(max, value)) : min;
+  const fraction = (clamped - min) / (max - min);
+  // Semicircle from 180deg (left) to 0deg (right), needle angle in radians
+  const angleRad = Math.PI - fraction * Math.PI;
+  const cx = 100;
+  const cy = 100;
+  const radius = 78;
+  const needleX = cx + Math.cos(angleRad) * radius * 0.85;
+  const needleY = cy - Math.sin(angleRad) * radius * 0.85;
+
+  // Build the three colored arc segments via stroke-dasharray on a circle path.
+  // Total arc length for a semicircle of r=78 ≈ 245.
+  const arcLen = Math.PI * radius;
+  const segLen = arcLen / 3;
+  const tone = !hasValue
+    ? "—"
+    : value < 28
+      ? "Snowball pace"
+      : value < 36
+        ? "Even pace"
+        : "Long games";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm flex items-end justify-between">
+        <div>
+          <p className="font-label-small text-label-small text-on-surface-variant">Average Game Pace</p>
+          <p className="mt-0.5 font-headline-2 text-headline-2 text-on-surface">{hasValue ? `${value.toFixed(1)} min` : "—"}</p>
+        </div>
+        <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-label-small text-primary">{tone}</span>
+      </div>
+      <svg viewBox="0 0 200 130" className="mx-auto block w-full max-w-[260px]">
+        {/* Three arc segments; we draw each as a stroked circle with a dash to reveal a third. */}
+        <g fill="none" strokeWidth="14" strokeLinecap="butt">
+          <circle cx={cx} cy={cy} r={radius}
+            stroke="#1B5E20" strokeOpacity="0.45"
+            strokeDasharray={`${segLen} ${arcLen + arcLen}`}
+            strokeDashoffset={arcLen}
+            transform={`rotate(180 ${cx} ${cy})`} />
+          <circle cx={cx} cy={cy} r={radius}
+            stroke="#9e3d00" strokeOpacity="0.4"
+            strokeDasharray={`${segLen} ${arcLen + arcLen}`}
+            strokeDashoffset={arcLen - segLen}
+            transform={`rotate(180 ${cx} ${cy})`} />
+          <circle cx={cx} cy={cy} r={radius}
+            stroke="#ba1a1a" strokeOpacity="0.45"
+            strokeDasharray={`${segLen} ${arcLen + arcLen}`}
+            strokeDashoffset={arcLen - segLen * 2}
+            transform={`rotate(180 ${cx} ${cy})`} />
+        </g>
+        {/* Tick labels */}
+        <text x="22" y="118" fontSize="10" fill="#475569">20</text>
+        <text x="100" y="20" fontSize="10" textAnchor="middle" fill="#475569">35</text>
+        <text x="178" y="118" fontSize="10" textAnchor="end" fill="#475569">50</text>
+        {/* Needle */}
+        {hasValue && (
+          <>
+            <line x1={cx} y1={cy} x2={needleX} y2={needleY} stroke="#0f172a" strokeWidth="3" strokeLinecap="round" />
+            <circle cx={cx} cy={cy} r="7" fill="#0f172a" />
+            <circle cx={cx} cy={cy} r="3" fill="#ffffff" />
+          </>
+        )}
+      </svg>
+    </div>
+  );
+}
+
+function RoleRadar({ role, kdaMax, goldMax, damageMax }) {
+  const cx = 50;
+  const cy = 52;
+  const R = 32;
+  const safe = (value, max) => {
+    if (!Number.isFinite(value) || max <= 0) return 0;
+    return Math.max(0.05, Math.min(1, value / max));
+  };
+  const point = (norm, idx) => {
+    const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / 3;
+    const r = R * norm;
+    return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+  };
+  const ringPoint = (idx) => {
+    const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / 3;
+    return [cx + R * Math.cos(angle), cy + R * Math.sin(angle)];
+  };
+  const ring = [0, 1, 2].map(ringPoint).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const ringHalf = [0, 1, 2].map((idx) => {
+    const angle = (-Math.PI / 2) + (idx * 2 * Math.PI) / 3;
+    return [cx + R * 0.5 * Math.cos(angle), cy + R * 0.5 * Math.sin(angle)];
+  }).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const polygon = [
+    point(safe(role.kda, kdaMax), 0),
+    point(safe(role.gold, goldMax), 1),
+    point(safe(role.damage, damageMax), 2),
+  ].map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-sm">
+      <div className="mb-xs flex items-center justify-between">
+        <span className="rounded-full bg-primary-fixed px-2 py-0.5 font-label-small text-label-small text-primary">{role.role}</span>
+      </div>
+      <svg viewBox="0 0 100 100" className="mx-auto block h-28 w-full">
+        {/* axis lines */}
+        <g stroke="#cbd5e1" strokeWidth="0.6">
+          <line x1={cx} y1={cy} x2={cx} y2={cy - R} />
+          <line x1={cx} y1={cy} x2={cx + R * Math.cos(Math.PI / 6)} y2={cy + R * Math.sin(Math.PI / 6)} />
+          <line x1={cx} y1={cy} x2={cx - R * Math.cos(Math.PI / 6)} y2={cy + R * Math.sin(Math.PI / 6)} />
+        </g>
+        {/* outer ring + half ring */}
+        <polygon points={ring} fill="none" stroke="#cbd5e1" strokeWidth="0.7" />
+        <polygon points={ringHalf} fill="none" stroke="#e2e8f0" strokeWidth="0.6" />
+        {/* data polygon */}
+        <polygon points={polygon} fill="#0058bc" fillOpacity="0.25" stroke="#0058bc" strokeWidth="1.4" />
+        {/* axis labels */}
+        <text x={cx} y={cy - R - 4} fontSize="6.5" textAnchor="middle" fill="#475569">KDA</text>
+        <text x={cx + R * Math.cos(Math.PI / 6) + 5} y={cy + R * Math.sin(Math.PI / 6) + 4} fontSize="6.5" fill="#475569">Gold</text>
+        <text x={cx - R * Math.cos(Math.PI / 6) - 5} y={cy + R * Math.sin(Math.PI / 6) + 4} fontSize="6.5" textAnchor="end" fill="#475569">DMG</text>
+      </svg>
+      <div className="mt-xs grid grid-cols-3 gap-1 text-center font-label-small text-label-small">
+        <span className="text-on-surface">{Number.isFinite(role.kda) ? role.kda.toFixed(1) : "—"}</span>
+        <span className="text-on-surface">{formatDeepStatValue(role.gold)}</span>
+        <span className="text-on-surface">{formatDeepStatValue(role.damage)}</span>
+      </div>
+    </div>
+  );
+}
+
+function WinLossDots({ row, lowerIsBetter = false }) {
+  const wins = Number(row.wins);
+  const losses = Number(row.losses);
+  const hasValues = Number.isFinite(wins) && Number.isFinite(losses);
+  // Build axis range with padding so dots don't sit at the very edges.
+  let winsX = 50;
+  let lossesX = 50;
+  let gapStart = 50;
+  let gapWidth = 0;
+  if (hasValues) {
+    const min = Math.min(wins, losses);
+    const max = Math.max(wins, losses);
+    const span = Math.max(max - min, Math.abs(max) * 0.4, Math.abs(min) * 0.4, 1);
+    const lo = min - span * 0.4;
+    const hi = max + span * 0.4;
+    const range = hi - lo;
+    winsX = ((wins - lo) / range) * 100;
+    lossesX = ((losses - lo) / range) * 100;
+    gapStart = Math.min(winsX, lossesX);
+    gapWidth = Math.abs(winsX - lossesX);
+  }
+  const winsBetter = hasValues && (lowerIsBetter ? wins < losses : wins > losses);
+  const verdict = !hasValues
+    ? "Needs more reviews"
+    : winsBetter
+      ? "Correlates with winning"
+      : Math.abs(wins - losses) < Math.abs(wins) * 0.05
+        ? "No clear pattern"
+        : "Correlates with losing";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm flex items-baseline justify-between">
+        <p className="font-label-bold text-label-bold text-on-surface">{row.label}</p>
+        <span className={`font-label-small text-label-small ${winsBetter ? "text-[#1B5E20]" : "text-on-surface-variant"}`}>{verdict}</span>
+      </div>
+      <div className="relative mt-md mb-sm h-6">
+        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-outline-variant/40" />
+        {hasValues && (
+          <div
+            className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-primary-fixed"
+            style={{ left: `${gapStart}%`, width: `${Math.max(2, gapWidth)}%` }}
+          />
+        )}
+        {hasValues && (
+          <>
+            <div
+              className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-error shadow"
+              style={{ left: `${lossesX}%` }}
+              title={`In losses: ${losses}`}
+            />
+            <div
+              className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#1B5E20] shadow"
+              style={{ left: `${winsX}%` }}
+              title={`In wins: ${wins}`}
+            />
+          </>
+        )}
+      </div>
+      <div className="flex items-center justify-between font-label-small text-label-small">
+        <span className="inline-flex items-center gap-1 text-error">
+          <span className="h-2 w-2 rounded-full bg-error" />
+          Losses {hasValues ? formatDeepStatValue(losses) : "—"}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[#1B5E20]">
+          Wins {hasValues ? formatDeepStatValue(wins) : "—"}
+          <span className="h-2 w-2 rounded-full bg-[#1B5E20]" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function LeagueDeepStats({ stats }) {
   const killStat = stats.teamOutput.find((stat) => stat.label === "Average Kills");
   const deathStat = stats.teamOutput.find((stat) => stat.label === "Average Deaths");
@@ -2155,13 +2405,13 @@ function LeagueDeepStats({ stats }) {
 
       <section>
         <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Fight Cleanliness</h3>
-        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
-          <StatKpiCard label="Average Kills" value={formatDeepStatValue(killStat?.ours)} />
-          <StatKpiCard label="Average Deaths" value={formatDeepStatValue(deathStat?.ours)} />
-          <StatKpiCard label="Average Assists" value={formatDeepStatValue(assistStat?.ours)} />
-        </div>
-        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
-          <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
+          <KdaBalanceBar
+            kills={killStat?.ours}
+            deaths={deathStat?.ours}
+            assists={assistStat?.ours}
+          />
+          <PaceDial minutes={stats.league?.avgGameLength} />
         </div>
       </section>
 
@@ -2176,18 +2426,32 @@ function LeagueDeepStats({ stats }) {
 
       <section>
         <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Role Review</h3>
-        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
-          {stats.league?.roleStats.map((role) => (
-            <LeagueRoleCard key={role.role} role={role} />
-          ))}
-        </div>
+        {(() => {
+          const roleStats = stats.league?.roleStats || [];
+          const kdaMax = Math.max(0.01, ...roleStats.map((role) => Number(role.kda) || 0));
+          const goldMax = Math.max(0.01, ...roleStats.map((role) => Number(role.gold) || 0));
+          const damageMax = Math.max(0.01, ...roleStats.map((role) => Number(role.damage) || 0));
+          return (
+            <div className="grid grid-cols-2 gap-sm sm:grid-cols-3 lg:grid-cols-5">
+              {roleStats.map((role) => (
+                <RoleRadar
+                  key={role.role}
+                  role={role}
+                  kdaMax={kdaMax}
+                  goldMax={goldMax}
+                  damageMax={damageMax}
+                />
+              ))}
+            </div>
+          );
+        })()}
       </section>
 
       <section>
-        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Win / Loss Comparison</h3>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Win / Loss Patterns</h3>
         <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
           {stats.league?.winLoss.map((row) => (
-            <WinLossCard key={row.label} row={row} />
+            <WinLossDots key={row.label} row={row} lowerIsBetter={row.label === "Deaths"} />
           ))}
         </div>
       </section>
