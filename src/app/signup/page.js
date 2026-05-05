@@ -99,7 +99,7 @@ export default function SignupPage() {
     <main className="min-h-screen bg-background px-margin-mobile py-xl text-on-background">
       <section className="mx-auto flex min-h-[calc(100vh-64px)] max-w-[480px] flex-col justify-center">
         <div className="mb-xl flex items-center">
-          <MatchmakeLogo markSize={44} />
+          <MatchmakeLogo height={72} />
         </div>
 
         <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_8px_28px_rgba(0,0,0,0.06)]">

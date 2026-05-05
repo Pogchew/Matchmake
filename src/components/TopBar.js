@@ -83,8 +83,8 @@ export default function TopBar({ right }) {
   return (
     <header className="bg-white/80 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
       {/* Left: logo */}
-      <Link href="/" className="flex items-center gap-2 active:scale-95 transition-transform" aria-label="Matchmake home">
-        <MatchmakeLogo markSize={36} />
+      <Link href="/" className="flex items-center active:scale-95 transition-transform" aria-label="Matchmake home">
+        <MatchmakeLogo height={52} />
       </Link>
 
       {/* Centre: desktop nav */}
