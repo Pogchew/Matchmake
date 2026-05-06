@@ -1780,14 +1780,12 @@ function ReviewMessages({ errorMessage, successMessage }) {
 
 const REVIEW_DASHBOARD_TABS = [
   { label: "Overview", value: "overview" },
-  { label: "Stats", value: "stats" },
   { label: "Compare", value: "compare" },
-  { label: "Deep Stats", value: "deep" },
 ];
 
 function ReviewDashboardTabs({ activeTab, onChange }) {
   return (
-    <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1 md:inline-grid md:grid-cols-4">
+    <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1 md:inline-grid">
       {REVIEW_DASHBOARD_TABS.map((tab) => (
         <button
           className={`rounded-lg px-md py-sm font-label-bold text-label-bold transition-colors ${
@@ -1917,14 +1915,6 @@ function CompareTab({ currentReview, gameTitle, historicalReviews }) {
   );
 }
 
-function DeepStatsTab({ reviews }) {
-  return (
-    <section className="mx-auto max-w-[1240px]">
-      <RecentReviewsList reviews={reviews} />
-    </section>
-  );
-}
-
 function LeagueDashboard(props) {
   const { form, historicalReviews, reviews, selectedReview, team } = props;
   const [activeTab, setActiveTab] = useState("overview");
@@ -1964,11 +1954,13 @@ function LeagueDashboard(props) {
 
             <CompositionSection accent="bg-primary" game="League of Legends" rows={displayReview?.team_comp || []} title="Our Team Composition" />
             <CompositionSection accent="bg-[#d12b2b]" game="League of Legends" rows={displayReview?.opponent_comp || []} title="Enemy Composition" />
+            <PerformanceTable game="League of Legends" rows={combinedRows} />
+            <ReviewEditor {...props} game="League of Legends" />
           </section>
         </>
       )}
 
-      {activeTab === "stats" && (
+      {activeTab === "compare" && (
         <>
           <LeagueComparisonPanel
             opponentName={displayReview?.opponent_name || "Opponent"}
@@ -1976,13 +1968,9 @@ function LeagueDashboard(props) {
             teamName={team.name}
             teamStats={displayReview?.team_stats || {}}
           />
-          <PerformanceTable game="League of Legends" rows={combinedRows} />
-          <ReviewEditor {...props} game="League of Legends" />
+          <CompareTab currentReview={displayReview} gameTitle="League of Legends" historicalReviews={historicalReviews} />
         </>
       )}
-
-      {activeTab === "compare" && <CompareTab currentReview={displayReview} gameTitle="League of Legends" historicalReviews={historicalReviews} />}
-      {activeTab === "deep" && <DeepStatsTab reviews={reviews} />}
     </div>
   );
 }
@@ -2036,24 +2024,37 @@ function ValorantDashboard(props) {
           </section>
           <CompositionSection game="Valorant" rows={displayReview?.team_comp || []} title="Team Composition" />
           <CompositionSection game="Valorant" rows={displayReview?.opponent_comp || []} title="Opponent Team Composition" opponentName={displayReview?.opponent_name} />
-        </>
-      )}
-
-      {activeTab === "stats" && (
-        <>
           <ValorantSummaryCards stats={displayReview?.team_stats || {}} />
           <PerformanceTable game="Valorant" rows={combinedRows} />
           <ReviewEditor {...props} game="Valorant" />
         </>
       )}
 
-      {activeTab === "compare" && <CompareTab currentReview={displayReview} gameTitle="Valorant" historicalReviews={historicalReviews} />}
-      {activeTab === "deep" && <DeepStatsTab reviews={reviews} />}
+      {activeTab === "compare" && (
+        <>
+          <CurrentOpponentComparisonPanel
+            metrics={[
+              { key: "total_kills", fallback: "team_kills", label: "Kills" },
+              { key: "total_deaths", fallback: "team_deaths", label: "Deaths" },
+              { key: "total_assists", fallback: "team_assists", label: "Assists" },
+              { key: "average_acs", label: "Combat Score" },
+              { key: "average_econ_rating", label: "Econ" },
+              { key: "total_first_bloods", label: "First Bloods" },
+            ]}
+            opponentName={displayReview?.opponent_name || "Opponent"}
+            opponentStats={displayReview?.opponent_stats || {}}
+            teamName={team.name}
+            teamStats={displayReview?.team_stats || {}}
+            title="Opponent Comparison"
+          />
+          <CompareTab currentReview={displayReview} gameTitle="Valorant" historicalReviews={historicalReviews} />
+        </>
+      )}
     </div>
   );
 }
 
-function ValorantSummaryCards({ stats }) {
+function ValorantSummaryCards({ limit, stats }) {
   const cards = [
     { key: "total_kills", label: "Total Kills" },
     { key: "total_deaths", label: "Total Deaths" },
@@ -2064,6 +2065,7 @@ function ValorantSummaryCards({ stats }) {
     { key: "total_plants", label: "Plants" },
     { key: "total_defuses", label: "Defuses" },
   ];
+  const visibleCards = limit ? cards.slice(0, limit) : cards;
 
   return (
     <section>
@@ -2072,7 +2074,7 @@ function ValorantSummaryCards({ stats }) {
         <h2 className="font-headline-3 text-headline-3 text-on-surface">Your Team Stats</h2>
       </div>
       <div className="grid grid-cols-2 gap-sm md:grid-cols-4">
-        {cards.map((card) => (
+        {visibleCards.map((card) => (
           <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md" key={card.key}>
             <p className="font-label-small text-label-small text-on-surface-variant">{card.label}</p>
             <p className="mt-xs font-headline-2 text-headline-2 text-primary">{stats?.[card.key] ?? "—"}</p>
@@ -2084,7 +2086,8 @@ function ValorantSummaryCards({ stats }) {
 }
 
 function UniversalGameDashboard(props) {
-  const { form, reviews, selectedReview, team } = props;
+  const { form, historicalReviews, reviews, selectedReview, team } = props;
+  const [activeTab, setActiveTab] = useState("overview");
   const config = getDashboardConfig(team.game_title);
   const visibleStats = POSTGAME_SCREENSHOT_STATS[team.game_title]?.visibleStats || [];
   const displayReview = form || selectedReview;
@@ -2100,86 +2103,144 @@ function UniversalGameDashboard(props) {
   return (
     <div className={`mx-auto flex max-w-[1240px] flex-col ${isCompactSix ? "gap-md" : "gap-lg"}`}>
       <GameSeriesControl {...props} />
-      <section className={`grid ${isCompactSix ? "gap-md lg:grid-cols-[1fr_380px]" : "gap-lg lg:grid-cols-[1fr_440px]"}`}>
-        <div className={`rounded-3xl border border-outline-variant/25 bg-surface-container-lowest ${isCompactSix ? "p-md" : "p-lg"}`}>
-          <div className="mb-sm flex flex-wrap items-center gap-sm">
-            <ResultBadge result={displayReview?.match_result} />
-            <span className="rounded-full bg-primary-fixed px-sm py-xs font-label-small text-label-small text-on-primary-fixed">
-              {team.game_title}
-            </span>
-            <span className="font-label-small text-label-small text-on-surface-variant">{formatDate(displayReview?.played_at)}</span>
-          </div>
-          <h1 className={`${isCompactSix ? "font-headline-1 text-headline-1" : "font-editorial-large text-editorial-large"} text-on-surface`}>
-            {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
-          </h1>
-          <p className={`${isCompactSix ? "mt-xs font-body-sub text-body-sub" : "mt-sm font-body-main text-body-main"} text-on-surface-variant`}>
-            {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"} · {displayReview?.map_or_mode || config.defaultMap}
-          </p>
-          <div className={`mt-md grid gap-sm ${isCompactSix ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
-            {config.highlightStats.map((stat) => (
-              <div className={`rounded-2xl bg-surface-container-low ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
-                <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
+      <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "overview" && (
+        <>
+          <section className={`grid ${isCompactSix ? "gap-md lg:grid-cols-[1fr_380px]" : "gap-lg lg:grid-cols-[1fr_440px]"}`}>
+            <div className={`rounded-3xl border border-outline-variant/25 bg-surface-container-lowest ${isCompactSix ? "p-md" : "p-lg"}`}>
+              <div className="mb-sm flex flex-wrap items-center gap-sm">
+                <ResultBadge result={displayReview?.match_result} />
+                <span className="rounded-full bg-primary-fixed px-sm py-xs font-label-small text-label-small text-on-primary-fixed">
+                  {team.game_title}
+                </span>
+                <span className="font-label-small text-label-small text-on-surface-variant">{formatDate(displayReview?.played_at)}</span>
               </div>
-            ))}
-          </div>
-        </div>
-        {config.screenshotUpload === false ? (
-          <ManualEntryCard gameTitle={team.game_title} selectedGameNumber={props.selectedGameNumber} />
-        ) : (
-          <UploadCard
-            extracting={props.extracting}
-            handleScreenshotChange={props.handleScreenshotChange}
-            screenshotPreview={props.screenshotPreview}
-            title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
-          />
-        )}
-      </section>
+              <h1 className={`${isCompactSix ? "font-headline-1 text-headline-1" : "font-editorial-large text-editorial-large"} text-on-surface`}>
+                {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
+              </h1>
+              <p className={`${isCompactSix ? "mt-xs font-body-sub text-body-sub" : "mt-sm font-body-main text-body-main"} text-on-surface-variant`}>
+                {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"} · {displayReview?.map_or_mode || config.defaultMap}
+              </p>
+              <div className={`mt-md grid gap-sm ${isCompactSix ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
+                {config.highlightStats.slice(0, 4).map((stat) => (
+                  <div className={`rounded-2xl bg-surface-container-low ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
+                    <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
+                    <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {config.screenshotUpload === false ? (
+              <ManualEntryCard gameTitle={team.game_title} selectedGameNumber={props.selectedGameNumber} />
+            ) : (
+              <UploadCard
+                extracting={props.extracting}
+                handleScreenshotChange={props.handleScreenshotChange}
+                screenshotPreview={props.screenshotPreview}
+                title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
+              />
+            )}
+          </section>
 
-      {(isMarvelRivals || isDeadlock) && (groupingNeedsReview || heroReviewNeeded) && (
-        <div className="rounded-xl border border-[#b26a00]/25 bg-[#fff4d6] px-md py-sm font-body-sub text-body-sub text-[#755400]">
-          {heroReviewNeeded
-            ? "Some hero names need review because duplicate or low-confidence portraits were detected."
-            : "Team grouping needs review. Use Swap Teams if the sides are reversed, then check player rows before saving."}
-        </div>
-      )}
+          {(isMarvelRivals || isDeadlock) && (groupingNeedsReview || heroReviewNeeded) && (
+            <div className="rounded-xl border border-[#b26a00]/25 bg-[#fff4d6] px-md py-sm font-body-sub text-body-sub text-[#755400]">
+              {heroReviewNeeded
+                ? "Some hero names need review because duplicate or low-confidence portraits were detected."
+                : "Team grouping needs review. Use Swap Teams if the sides are reversed, then check player rows before saving."}
+            </div>
+          )}
 
-      <section className={isCompactSix ? "grid gap-md" : "grid gap-lg lg:grid-cols-[1fr_360px]"}>
-        <div className={isCompactSix ? "space-y-md" : "space-y-lg"}>
-          <CompositionSection game={team.game_title} rows={displayReview?.team_comp || []} title={`Our ${config.compositionLabel}`} />
-          <CompositionSection
-            accent="bg-[#d12b2b]"
-            game={team.game_title}
-            opponentName={displayReview?.opponent_name}
-            rows={displayReview?.opponent_comp || []}
-            title={`Opponent ${config.compositionLabel}`}
-          />
-          <PerformanceTable game={team.game_title} rows={performanceRows} />
-        </div>
-
-        {!isCompactSix && (
-          <aside className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
-            <h2 className="font-headline-2 text-headline-2 text-on-surface">Screenshot Stats</h2>
-            <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
-              Matchmake stores only stats visible in each post-game screenshot, so this can become a clean database of scrim history without manual spreadsheets.
-            </p>
-            <div className="mt-md grid gap-sm">
-              {visibleStats.map((stat) => (
-                <div className="rounded-2xl bg-surface-container-low p-md" key={stat}>
-                  <p className="font-body-sub text-body-sub text-on-surface">{stat}</p>
+          <section className="grid gap-md">
+            <CompositionSection game={team.game_title} rows={displayReview?.team_comp || []} title={`Our ${config.compositionLabel}`} />
+            <CompositionSection
+              accent="bg-[#d12b2b]"
+              game={team.game_title}
+              opponentName={displayReview?.opponent_name}
+              rows={displayReview?.opponent_comp || []}
+              title={`Opponent ${config.compositionLabel}`}
+            />
+            <div className={`grid gap-sm ${isCompactSix ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
+              {config.highlightStats.map((stat) => (
+                <div className={`rounded-2xl bg-surface-container-lowest border border-outline-variant/25 ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
+                  <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
+                  <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
                 </div>
               ))}
             </div>
-          </aside>
-        )}
-      </section>
+            <PerformanceTable game={team.game_title} rows={performanceRows} />
 
-      {isMarvelRivals && <MarvelRivalsComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
-      {isDeadlock && <DeadlockComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
+            {!isCompactSix && (
+              <aside className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
+                <h2 className="font-headline-2 text-headline-2 text-on-surface">Screenshot Stats</h2>
+                <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
+                  Matchmake stores only stats visible in each post-game screenshot, so this can become a clean database of scrim history without manual spreadsheets.
+                </p>
+                <div className="mt-md grid gap-sm">
+                  {visibleStats.map((stat) => (
+                    <div className="rounded-2xl bg-surface-container-low p-md" key={stat}>
+                      <p className="font-body-sub text-body-sub text-on-surface">{stat}</p>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            )}
+            <ReviewEditor {...props} game={team.game_title} />
+          </section>
+        </>
+      )}
 
-      <ReviewEditor {...props} game={team.game_title} />
-      <RecentReviewsList reviews={reviews} />
+      {activeTab === "compare" && (
+        <>
+          {isMarvelRivals && <MarvelRivalsComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
+          {isDeadlock && <DeadlockComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
+          {!isMarvelRivals && !isDeadlock && (
+            <CurrentOpponentComparisonPanel
+              metrics={config.highlightStats}
+              opponentName={displayReview?.opponent_name || "Opponent"}
+              opponentStats={displayReview?.opponent_stats || {}}
+              teamName={team.name}
+              teamStats={displayReview?.team_stats || {}}
+              title="Opponent Comparison"
+            />
+          )}
+          <CompareTab currentReview={displayReview} gameTitle={team.game_title} historicalReviews={historicalReviews} />
+        </>
+      )}
     </div>
+  );
+}
+
+function CurrentOpponentComparisonPanel({ metrics, opponentName, opponentStats, teamName, teamStats, title }) {
+  const comparableMetrics = metrics.filter((metric) => {
+    const ours = teamStats?.[metric.key] ?? teamStats?.[metric.fallback];
+    const theirs = opponentStats?.[metric.key] ?? opponentStats?.[metric.fallback];
+    return ours !== undefined || theirs !== undefined;
+  });
+
+  if (!comparableMetrics.length) return null;
+
+  return (
+    <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md">
+      <div className="flex flex-col gap-xs md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="font-headline-3 text-headline-3 text-on-surface">{title}</h2>
+          <p className="font-label-small text-label-small text-on-surface-variant">
+            {teamName} vs. {opponentName}
+          </p>
+        </div>
+      </div>
+      <div className="mt-md grid grid-cols-1 gap-sm md:grid-cols-2 xl:grid-cols-3">
+        {comparableMetrics.map((metric) => (
+          <MiniComparisonBar
+            key={metric.key}
+            label={metric.label}
+            ours={teamStats?.[metric.key] ?? teamStats?.[metric.fallback]}
+            theirs={opponentStats?.[metric.key] ?? opponentStats?.[metric.fallback]}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
