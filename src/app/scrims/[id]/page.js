@@ -1143,13 +1143,22 @@ export default function ScrimDetailPage() {
                     </div>
                   </div>
                 </div>
-                <Link
-                  className="w-full bg-primary text-on-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
-                  href={`/requests?scrim=${scrim.id}`}
-                >
-                  <MaterialSymbol fill>pending_actions</MaterialSymbol>
-                  Respond in Requests
-                </Link>
+                <div className="grid gap-sm md:grid-cols-2">
+                  <Link
+                    className="w-full bg-primary text-on-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
+                    href={`/scrims/${scrim.id}/chat`}
+                  >
+                    <MaterialSymbol fill>chat_bubble</MaterialSymbol>
+                    Open Chat
+                  </Link>
+                  <Link
+                    className="w-full bg-surface-container-lowest text-primary border border-primary rounded-xl py-4 flex items-center justify-center gap-sm transition-all active:scale-[0.98] shadow-sm font-headline-3 text-headline-3"
+                    href={`/requests?scrim=${scrim.id}`}
+                  >
+                    <MaterialSymbol fill>pending_actions</MaterialSymbol>
+                    Respond in Requests
+                  </Link>
+                </div>
               </>
             ) : (
               <>
@@ -1204,13 +1213,20 @@ export default function ScrimDetailPage() {
                 </div>
 
                 {requested || userHasRequested ? (
-              <div className="grid gap-sm md:grid-cols-[1fr_auto]">
+              <div className="grid gap-sm md:grid-cols-[1fr_auto_auto]">
                 <div className="w-full bg-[#E3F9E5] text-[#1B5E20] rounded-xl py-4 flex items-center justify-center gap-sm">
                   <MaterialSymbol fill>check_circle</MaterialSymbol>
                   <span className="font-headline-3 text-headline-3">
                     Request Sent{selectedRequestingTeam ? ` from ${selectedRequestingTeam.name}` : ""}
                   </span>
                 </div>
+                <Link
+                  className="rounded-xl bg-primary px-lg py-4 font-headline-3 text-headline-3 text-on-primary transition-colors hover:opacity-90 flex items-center justify-center gap-sm"
+                  href={`/scrims/${scrim.id}/chat`}
+                >
+                  <MaterialSymbol fill>chat_bubble</MaterialSymbol>
+                  Chat
+                </Link>
                 <button
                   className="rounded-xl border border-outline-variant bg-surface-container-lowest px-lg py-4 font-headline-3 text-headline-3 text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={requestLoading}

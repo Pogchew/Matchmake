@@ -1,4 +1,4 @@
--- Matchmake confirmed-scrim chat schema and RLS policies.
+-- Matchmake pending/confirmed scrim chat schema and RLS policies.
 -- Run this in the Supabase SQL Editor after the core schema.
 
 create table if not exists public.scrim_messages (
@@ -18,8 +18,10 @@ alter table public.scrim_messages enable row level security;
 
 drop policy if exists "Confirmed scrim participants can read messages" on public.scrim_messages;
 drop policy if exists "Confirmed scrim participants can insert messages" on public.scrim_messages;
+drop policy if exists "Active scrim participants can read messages" on public.scrim_messages;
+drop policy if exists "Active scrim participants can insert messages" on public.scrim_messages;
 
-create policy "Confirmed scrim participants can read messages"
+create policy "Active scrim participants can read messages"
   on public.scrim_messages
   for select
   to authenticated
@@ -32,7 +34,7 @@ create policy "Confirmed scrim participants can read messages"
       join public.teams participant_team
         on participant_team.org_id = viewer.org_id
       where sr.id = public.scrim_messages.scrim_request_id
-        and sr.status = 'confirmed'
+        and sr.status in ('pending', 'confirmed')
         and viewer.org_id is not null
         and (
           participant_team.id = sr.posting_team_id
@@ -41,7 +43,7 @@ create policy "Confirmed scrim participants can read messages"
     )
   );
 
-create policy "Confirmed scrim participants can insert messages"
+create policy "Active scrim participants can insert messages"
   on public.scrim_messages
   for insert
   to authenticated
@@ -57,7 +59,7 @@ create policy "Confirmed scrim participants can insert messages"
       join public.teams participant_team
         on participant_team.org_id = sender.org_id
       where sr.id = public.scrim_messages.scrim_request_id
-        and sr.status = 'confirmed'
+        and sr.status in ('pending', 'confirmed')
         and sender.org_id is not null
         and (
           participant_team.id = sr.posting_team_id

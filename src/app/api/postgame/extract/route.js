@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { getDeadlockExtractionPrompt, getLeagueExtractionPrompt, getMarvelRivalsExtractionPrompt, getValorantExtractionPrompt, normalizeMarvelRivalsExtraction } from "@/lib/postgame-extraction";
+import { getCounterStrikeExtractionPrompt, getDeadlockExtractionPrompt, getHonorOfKingsExtractionPrompt, getLeagueExtractionPrompt, getMarvelRivalsExtractionPrompt, getOverwatchExtractionPrompt, getRocketLeagueExtractionPrompt, getValorantExtractionPrompt, normalizeMarvelRivalsExtraction } from "@/lib/postgame-extraction";
 import { matchMarvelRivalsCostumeIcons } from "@/lib/server/marvel-rivals-costume-matcher";
 
 export const runtime = "nodejs";
@@ -283,15 +283,21 @@ export async function POST(request) {
     const image = formData.get("image");
 
     const extractionPrompts = {
+      "Counter-Strike 2": getCounterStrikeExtractionPrompt,
       Deadlock: getDeadlockExtractionPrompt,
+      "Honor of Kings": getHonorOfKingsExtractionPrompt,
+      HOK: getHonorOfKingsExtractionPrompt,
       "League of Legends": getLeagueExtractionPrompt,
       "Marvel Rivals": getMarvelRivalsExtractionPrompt,
+      Overwatch: getOverwatchExtractionPrompt,
+      "Overwatch 2": getOverwatchExtractionPrompt,
+      "Rocket League": getRocketLeagueExtractionPrompt,
       Valorant: getValorantExtractionPrompt,
     };
     const getPrompt = extractionPrompts[gameTitle];
 
     if (!getPrompt) {
-      return errorResponse("Gemini extraction is only enabled for League of Legends, Valorant, Marvel Rivals, and Deadlock right now.");
+      return errorResponse("Gemini extraction is only enabled for supported post-game screenshot games. SSBU is manual-entry only.");
     }
 
     if (!image || typeof image === "string") {

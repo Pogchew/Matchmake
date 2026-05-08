@@ -440,33 +440,29 @@ export default function OrgPage() {
                       Create Team
                     </Link>
                   </div>
-                  <div className="flex flex-wrap gap-xs">
-                    <button
-                      className={`rounded-full px-md py-sm font-label-bold text-label-bold transition-colors ${
-                        selectedGame === "All"
-                          ? "bg-primary text-on-primary"
-                          : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
-                      }`}
-                      onClick={() => setSelectedGame("All")}
-                      type="button"
-                    >
-                      All active programs
-                    </button>
-                    {activeGames.map((game) => (
-                      <button
-                        className={`rounded-full px-md py-sm font-label-bold text-label-bold transition-colors ${
-                          selectedGame === game
-                            ? "bg-primary text-on-primary"
-                            : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
-                        }`}
-                        key={game}
-                        onClick={() => setSelectedGame(game)}
-                        type="button"
+                  <label className="flex w-full flex-col gap-xs rounded-xl border border-outline-variant/25 bg-surface-container-lowest p-sm md:max-w-[320px]">
+                    <span className="font-label-small text-[10px] uppercase tracking-wide text-outline">
+                      Filter programs
+                    </span>
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none rounded-lg border-none bg-surface-container-low px-md py-sm pr-xl font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary disabled:opacity-60"
+                        disabled={activeGames.length === 0}
+                        onChange={(event) => setSelectedGame(event.target.value)}
+                        value={selectedGame}
                       >
-                        {game} <span className="opacity-70">({teamsByGame[game]?.length || 0})</span>
-                      </button>
-                    ))}
-                  </div>
+                        <option value="All">All active programs ({teams.length})</option>
+                        {activeGames.map((game) => (
+                          <option key={game} value={game}>
+                            {game} ({teamsByGame[game]?.length || 0})
+                          </option>
+                        ))}
+                      </select>
+                      <MaterialSymbol className="pointer-events-none absolute right-sm top-1/2 -translate-y-1/2 text-on-surface-variant">
+                        expand_more
+                      </MaterialSymbol>
+                    </div>
+                  </label>
                 </div>
                 {teams.length === 0 ? (
                   <EmptyState

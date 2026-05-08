@@ -1,4 +1,4 @@
-const LOWER_IS_BETTER = new Set(["deaths", "team_deaths", "total_deaths"]);
+const LOWER_IS_BETTER = new Set(["damage_taken", "deaths", "team_deaths", "total_deaths"]);
 
 const STAT_SPECS = {
   "League of Legends": [
@@ -47,16 +47,21 @@ const STAT_SPECS = {
     { key: "team_deaths", group: "Efficiency", label: "Deaths", statKeys: ["total_deaths", "team_deaths"], rowKeys: ["deaths", "d"], positive: "lower", explanation: ["Fewer deaths than usual.", "More deaths than usual."] },
     { key: "team_assists", group: "Output", label: "Assists", statKeys: ["total_assists", "team_assists"], rowKeys: ["assists", "a"], positive: "higher", explanation: ["More teamfight participation than usual.", "Less teamfight participation than usual."] },
     { key: "gold", group: "Efficiency", label: "Gold", statKeys: "total_gold", rowKeys: "gold", positive: "higher", explanation: ["More resource control than usual.", "Less resource control than usual."] },
-    { key: "damage", group: "Output", label: "Damage", statKeys: "damage", rowKeys: "damage", positive: "higher", explanation: ["More damage pressure than usual.", "Less damage pressure than usual."] },
+    { key: "damage", group: "Output", label: "Damage", statKeys: ["total_damage", "damage"], rowKeys: "damage", positive: "higher", explanation: ["More damage pressure than usual.", "Less damage pressure than usual."] },
+    { key: "damage_taken", group: "Efficiency", label: "Damage Taken", statKeys: "damage_taken", rowKeys: "damage_taken", positive: "lower", explanation: ["Less incoming pressure than usual.", "More incoming pressure than usual."] },
+    { key: "healing", group: "Efficiency", label: "Healing", statKeys: "healing", rowKeys: "healing", positive: "higher", explanation: ["More sustain than usual.", "Less sustain than usual."] },
+    { key: "score_diff", group: "Map/Score", label: "Kill Differential", scoreDiff: true, positive: "higher", explanation: ["This scoreline was stronger than your usual match.", "This scoreline was weaker than your usual match."] },
   ],
   HOK: [],
   "Overwatch 2": [
-    { key: "eliminations", group: "Output", label: "Eliminations", statKeys: "eliminations", rowKeys: ["eliminations", "kills"], positive: "higher", explanation: ["More fight pressure than usual.", "Less fight pressure than usual."] },
-    { key: "deaths", group: "Efficiency", label: "Deaths", statKeys: "deaths", rowKeys: "deaths", positive: "lower", explanation: ["Fewer deaths than usual.", "More deaths than usual."] },
-    { key: "assists", group: "Output", label: "Assists", statKeys: "assists", rowKeys: "assists", positive: "higher", explanation: ["More teamfight participation than usual.", "Less teamfight participation than usual."] },
-    { key: "damage", group: "Output", label: "Damage", statKeys: "damage", rowKeys: "damage", positive: "higher", explanation: ["More damage pressure than usual.", "Less damage pressure than usual."] },
-    { key: "healing", group: "Efficiency", label: "Healing", statKeys: "healing", rowKeys: "healing", positive: "higher", explanation: ["More sustain than usual.", "Less sustain than usual."] },
-    { key: "mitigation", group: "Efficiency", label: "Mitigation", statKeys: "mitigation", rowKeys: ["mitigation", "damage_blocked"], positive: "higher", explanation: ["More pressure absorbed than usual.", "Less pressure absorbed than usual."] },
+    { key: "eliminations", group: "Output", label: "Eliminations", statKeys: ["total_eliminations", "eliminations", "team_kills"], rowKeys: ["eliminations", "kills"], positive: "higher", explanation: ["More fight pressure than usual.", "Less fight pressure than usual."] },
+    { key: "deaths", group: "Efficiency", label: "Deaths", statKeys: ["total_deaths", "deaths", "team_deaths"], rowKeys: "deaths", positive: "lower", explanation: ["Fewer deaths than usual.", "More deaths than usual."] },
+    { key: "assists", group: "Output", label: "Assists", statKeys: ["total_assists", "assists", "team_assists"], rowKeys: "assists", positive: "higher", explanation: ["More teamfight participation than usual.", "Less teamfight participation than usual."] },
+    { key: "damage", group: "Output", label: "Damage", statKeys: ["total_damage", "damage"], rowKeys: "damage", positive: "higher", explanation: ["More damage pressure than usual.", "Less damage pressure than usual."] },
+    { key: "healing", group: "Efficiency", label: "Healing", statKeys: ["total_healing", "healing"], rowKeys: "healing", positive: "higher", explanation: ["More sustain than usual.", "Less sustain than usual."] },
+    { key: "mitigation", group: "Efficiency", label: "Mitigation", statKeys: ["total_mitigation", "mitigation"], rowKeys: ["mitigation", "damage_blocked"], positive: "higher", explanation: ["More pressure absorbed than usual.", "Less pressure absorbed than usual."] },
+    { key: "final_blows", group: "Output", label: "Final Blows", statKeys: "final_blows", rowKeys: "final_blows", positive: "higher", explanation: ["More confirmed fight closers than usual.", "Fewer fight closers than usual."] },
+    { key: "score_diff", group: "Map/Score", label: "Score Differential", scoreDiff: true, positive: "higher", explanation: ["This scoreline was stronger than your usual scrim.", "This scoreline was weaker than your usual scrim."] },
   ],
   "Counter-Strike 2": [
     { key: "team_kills", group: "Output", label: "Kills", statKeys: ["total_kills", "team_kills"], rowKeys: ["kills", "k"], positive: "higher", explanation: ["More fight pressure than usual.", "Less fight pressure than usual."] },

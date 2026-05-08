@@ -7,6 +7,7 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 import { supabase } from "@/lib/supabase";
 
 const MAX_MESSAGE_LENGTH = 1000;
+const CHAT_ENABLED_STATUSES = new Set(["pending", "confirmed"]);
 
 function getInitials(name = "") {
   return name
@@ -29,7 +30,7 @@ function formatMessageTime(value) {
 
 function getScrimTitle(scrim) {
   const postingTeam = scrim?.posting_team?.name || "Posting Team";
-  const matchedTeam = scrim?.matched_team?.name || "Matched Team";
+  const matchedTeam = scrim?.matched_team?.name || "Requesting Team";
   return `${postingTeam} vs ${matchedTeam}`;
 }
 
@@ -159,8 +160,8 @@ export default function ScrimChatPage() {
       setTeamIds(myTeamIds);
       setScrim(scrimData);
 
-      if (scrimData.status !== "confirmed") {
-        setAccessMessage("Chat opens after the scrim is confirmed.");
+      if (!CHAT_ENABLED_STATUSES.has(scrimData.status)) {
+        setAccessMessage("Chat opens after a team requests this scrim.");
         setIsLoading(false);
         return;
       }
@@ -185,7 +186,7 @@ export default function ScrimChatPage() {
   async function sendMessage() {
     const body = input.trim();
 
-    if (!body || !authUser || !scrim || scrim.status !== "confirmed") return;
+    if (!body || !authUser || !scrim || !CHAT_ENABLED_STATUSES.has(scrim.status)) return;
 
     setIsSending(true);
     setErrorMessage("");
@@ -274,7 +275,7 @@ export default function ScrimChatPage() {
           <>
             <div className="flex items-center justify-center w-full mt-sm">
               <div className="bg-surface-container-highest text-on-surface-variant font-label-small text-label-small px-3 py-1 rounded-full">
-                Confirmed Scrim
+                {scrim?.status === "confirmed" ? "Confirmed Scrim" : "Pending Request Chat"}
               </div>
             </div>
 
@@ -283,7 +284,7 @@ export default function ScrimChatPage() {
                 <MaterialSymbol className="mx-auto mb-sm block text-[36px] text-outline">chat_bubble</MaterialSymbol>
                 <h2 className="font-headline-3 text-headline-3 text-on-surface">No messages yet.</h2>
                 <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
-                  Coordinate lobby details here.
+                  Coordinate request details here.
                 </p>
               </div>
             ) : (

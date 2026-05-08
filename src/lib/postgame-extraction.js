@@ -346,7 +346,7 @@ export const POSTGAME_SCREENSHOT_STATS = {
     mapLabel: "Mode",
     visibleStats: [
       "Result, final kill score, mode, match length, played time if visible",
-      "Hero, role, player name, K/D/A, gold, damage, damage taken, healing, participation/rating/MVP when visible",
+      "Hero portrait or hero name identity, role, player name, K/D/A, gold, damage, damage taken, healing, participation/rating/MVP when visible",
       "Team totals for kills, deaths, assists, gold, damage, damage taken, healing, and clearly visible objectives",
     ],
   },
@@ -633,6 +633,349 @@ Specific extraction instructions:
    - Set row confidence based on readability.
    - Set parser_confidence overall.
    - Add low-confidence fields to fields_needing_manual_review.
+  `.trim();
+}
+
+export function getOverwatchExtractionPrompt() {
+  return `
+Analyze this Overwatch 2 post-game scoreboard screenshot and extract only visible scoreboard data into valid JSON.
+
+Rules:
+- Return JSON only.
+- Do not explain.
+- Do not guess hidden stats.
+- Do not use external game APIs or hero knowledge beyond visible UI text/portraits.
+- If a value is not visible, return null.
+- Preserve both teams separately.
+- Extract all visible player rows.
+- Convert numbers like "12,234" into integers.
+- Keep the response compact. Do not include fields that are not in the schema below.
+
+The screenshot may show:
+- match result such as Victory or Defeat
+- final score, round score, objective progress, map, mode, and match duration when visible
+- two teams, usually 5 or 6 players per team depending on the ruleset
+- hero, role, player name, eliminations, assists, deaths, damage, healing, mitigation, final blows, and objective kills when visible
+
+OVERWATCH SCOREBOARD RULES:
+- The visible scoreboard columns are often abbreviated. Map E or ELIMS to eliminations, A to assists, D to deaths, DMG to damage, H to healing, and MIT to mitigation.
+- Do not treat damage, healing, or mitigation as the final match score.
+- If teams are not labeled, use team_1 for the left/top/first visible team and team_2 for the other side.
+- If only one team is clearly visible, return that team and leave the other team empty, with manual_review_required=true.
+- If the user team side is unclear, keep the visible order and set manual_review_required=true.
+
+Return this JSON shape:
+{
+  "game_title": "Overwatch 2",
+  "match": {
+    "result": "victory | defeat | null",
+    "final_score": "2 - 1 | Victory | null",
+    "team_1_score": 2,
+    "team_2_score": 1,
+    "team_1_name": "Team 1 | null",
+    "team_2_name": "Team 2 | null",
+    "map": "King's Row | null",
+    "mode": "Hybrid | Push | Control | Flashpoint | Escort | Clash | null",
+    "duration": "12:34 | null",
+    "played_at": null
+  },
+  "teams": [
+    {
+      "team_key": "team_1",
+      "team_name": null,
+      "is_winning_team": true,
+      "team_score": 2,
+      "team_totals": {
+        "eliminations": 124,
+        "assists": 85,
+        "deaths": 43,
+        "damage": 50900,
+        "healing": 27900,
+        "mitigation": 21150,
+        "final_blows": null,
+        "objective_kills": null
+      },
+      "players": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "hero": "Reinhardt | null",
+          "role": "Tank | Damage | Support | Flex | null",
+          "player_name": "Player | null",
+          "eliminations": 23,
+          "assists": 11,
+          "deaths": 6,
+          "damage": 9100,
+          "healing": 0,
+          "mitigation": 18400,
+          "final_blows": null,
+          "objective_kills": null,
+          "confidence": 0.8
+        }
+      ]
+    }
+  ],
+  "rows": [],
+  "fields_needing_manual_review": [],
+  "manual_review_required": false,
+  "parser_confidence": 0.8
+}
+
+After extraction:
+- Fill rows[] with every visible player row from both teams in visual order.
+- Compute team_totals from visible player rows when explicit totals are not shown.
+- Make sure no hidden stats are included.
+  `.trim();
+}
+
+export function getCounterStrikeExtractionPrompt() {
+  return `
+Analyze this Counter-Strike 2 post-game scoreboard screenshot and extract only visible scoreboard data into valid JSON.
+
+Rules:
+- Return JSON only.
+- Do not explain.
+- Do not guess hidden stats.
+- If a value is not visible, return null.
+- Preserve both teams separately.
+- Convert numbers like "12,234" into integers.
+- Split K/A/D or K-D-A text into kills, assists, and deaths when visible.
+
+Extract only visible CS2 stats Matchmake stores:
+- match result, final round score, map, side halves, and match duration when visible
+- player name, role/position only if visibly labeled, kills, assists, deaths, ADR, HS%, MVPs/stars, score/rating
+- team totals for kills, deaths, assists, average ADR, average HS%, MVPs, and score
+
+Return this JSON shape:
+{
+  "game_title": "Counter-Strike 2",
+  "match": {
+    "result": "victory | defeat | null",
+    "final_score": "13 - 9 | null",
+    "team_1_score": 13,
+    "team_2_score": 9,
+    "team_1_name": null,
+    "team_2_name": null,
+    "map": "Mirage | null",
+    "duration": "38:12 | null",
+    "side_halves": "8-4 / 5-5 | null",
+    "played_at": null
+  },
+  "teams": [
+    {
+      "team_key": "team_1",
+      "team_name": null,
+      "team_score": 13,
+      "is_winning_team": true,
+      "team_totals": {
+        "kills": 91,
+        "assists": 34,
+        "deaths": 79,
+        "average_adr": 76,
+        "average_hs_percent": 39,
+        "mvps": 11,
+        "score": null
+      },
+      "players": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "player_name": "Player | null",
+          "role": null,
+          "kills": 20,
+          "assists": 6,
+          "deaths": 15,
+          "adr": 82,
+          "hs_percent": 44,
+          "mvps": 3,
+          "score": null,
+          "rating": null,
+          "confidence": 0.8
+        }
+      ]
+    }
+  ],
+  "rows": [],
+  "fields_needing_manual_review": [],
+  "manual_review_required": false,
+  "parser_confidence": 0.8
+}
+
+After extraction:
+- Fill rows[] with every visible player row from both teams in visual order.
+- Compute team_totals from visible player rows when explicit totals are not shown.
+- Do not include hidden economy, utility, or weapon data unless explicitly visible.
+  `.trim();
+}
+
+export function getRocketLeagueExtractionPrompt() {
+  return `
+Analyze this Rocket League post-game scoreboard screenshot and extract only visible scoreboard data into valid JSON.
+
+Rules:
+- Return JSON only.
+- Do not explain.
+- Do not guess hidden stats.
+- If a value is not visible, return null.
+- Preserve both teams separately.
+- Convert numbers like "1,591" into integers.
+
+Extract only visible Rocket League stats Matchmake stores:
+- match result, final goal score, arena, playlist/mode, and match length when visible
+- player name, car/role only if visible, score, goals, assists, saves, shots, demos, ping
+- team totals for goals, assists, saves, shots, demos, and scoreboard score
+
+Return this JSON shape:
+{
+  "game_title": "Rocket League",
+  "match": {
+    "result": "victory | defeat | null",
+    "final_score": "4 - 2 | null",
+    "team_1_score": 4,
+    "team_2_score": 2,
+    "team_1_name": null,
+    "team_2_name": null,
+    "arena": "DFH Stadium | null",
+    "mode": "3v3 | null",
+    "duration": "5:00 | null",
+    "played_at": null
+  },
+  "teams": [
+    {
+      "team_key": "team_1",
+      "team_name": null,
+      "team_score": 4,
+      "is_winning_team": true,
+      "team_totals": {
+        "goals": 4,
+        "assists": 4,
+        "saves": 7,
+        "shots": 10,
+        "demos": 1,
+        "scoreboard_score": 1591
+      },
+      "players": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "player_name": "Player | null",
+          "car": null,
+          "score": 642,
+          "goals": 2,
+          "assists": 1,
+          "saves": 1,
+          "shots": 5,
+          "demos": 0,
+          "ping": null,
+          "confidence": 0.8
+        }
+      ]
+    }
+  ],
+  "rows": [],
+  "fields_needing_manual_review": [],
+  "manual_review_required": false,
+  "parser_confidence": 0.8
+}
+
+After extraction:
+- Fill rows[] with every visible player row from both teams in visual order.
+- Compute team_totals from visible player rows when explicit totals are not shown.
+- Do not include hidden boost, speed, possession, or replay stats.
+  `.trim();
+}
+
+export function getHonorOfKingsExtractionPrompt() {
+  return `
+Analyze this Honor of Kings post-game scoreboard screenshot and extract only visible scoreboard data into valid JSON.
+
+Rules:
+- Return JSON only.
+- Do not explain.
+- Do not guess hidden stats.
+- Do not use external game APIs or hero knowledge beyond visible UI text/portraits.
+- If a value is not visible, return null.
+- Preserve both teams separately.
+- Convert numbers like "56,500" into integers.
+- Split K/D/A text into kills, deaths, and assists.
+
+Extract only visible Honor of Kings stats Matchmake stores:
+- match result, final kill score, mode/map, match length, and played time when visible
+- hero, role/lane, player name, kills, deaths, assists, gold, damage, damage taken, healing, participation/rating/MVP when visible
+- team totals for kills, deaths, assists, gold, damage, damage taken, healing, and objectives when clearly visible
+
+HERO IDENTIFICATION:
+- Honor of Kings is a hero-based game. Every visible player row should try to identify the hero from the row portrait or visible hero name.
+- Use the visible scoreboard only. Do not use external APIs, skins, rank badges, role icons, or player avatars as hero identity.
+- Return hero as the best visible hero name only when reasonably confident.
+- Also return hero_guess with the best guess, hero_confidence from 0 to 1, and needs_hero_review=true when the portrait/name is unclear or low confidence.
+- Do not output placeholders such as Hero 1, Unknown, or Player TBD. Use null when uncertain.
+
+Return this JSON shape:
+{
+  "game_title": "Honor of Kings",
+  "match": {
+    "result": "victory | defeat | null",
+    "final_score": "18 - 11 | null",
+    "team_1_score": 18,
+    "team_2_score": 11,
+    "team_1_name": null,
+    "team_2_name": null,
+    "mode": "Ranked 5v5 | null",
+    "duration": "18:42 | null",
+    "played_at": null
+  },
+  "teams": [
+    {
+      "team_key": "team_1",
+      "team_name": null,
+      "team_score": 18,
+      "is_winning_team": true,
+      "team_totals": {
+        "kills": 18,
+        "deaths": 11,
+        "assists": 41,
+        "gold": 56500,
+        "damage": 125800,
+        "damage_taken": 110100,
+        "healing": 9200,
+        "objectives": null
+      },
+      "players": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "hero": "Hero | null",
+          "hero_guess": "Hero | null",
+          "hero_confidence": 0.8,
+          "needs_hero_review": false,
+          "role": "Clash Lane | Jungle | Mid | Farm Lane | Roam | null",
+          "player_name": "Player | null",
+          "kills": 4,
+          "deaths": 2,
+          "assists": 7,
+          "gold": 11800,
+          "damage": 24500,
+          "damage_taken": 30100,
+          "healing": 1200,
+          "participation_percent": null,
+          "rating": null,
+          "is_mvp": false,
+          "confidence": 0.8
+        }
+      ]
+    }
+  ],
+  "rows": [],
+  "fields_needing_manual_review": [],
+  "manual_review_required": false,
+  "parser_confidence": 0.8
+}
+
+After extraction:
+- Fill rows[] with every visible player row from both teams in visual order.
+- Compute team_totals from visible player rows when explicit totals are not shown.
+- Make sure no hidden item/build/rank data is included.
   `.trim();
 }
 
@@ -1106,6 +1449,10 @@ Before returning JSON:
 export function getPostGameExtractionPrompt(gameTitle) {
   if (gameTitle === "Marvel Rivals") return getMarvelRivalsExtractionPrompt();
   if (gameTitle === "Deadlock") return getDeadlockExtractionPrompt();
+  if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2") return getOverwatchExtractionPrompt();
+  if (gameTitle === "Counter-Strike 2") return getCounterStrikeExtractionPrompt();
+  if (gameTitle === "Rocket League") return getRocketLeagueExtractionPrompt();
+  if (gameTitle === "Honor of Kings" || gameTitle === "HOK") return getHonorOfKingsExtractionPrompt();
   return createPrompt(gameTitle);
 }
 

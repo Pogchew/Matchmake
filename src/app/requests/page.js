@@ -151,6 +151,15 @@ function RequestCard({
           </button>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-sm">
+          {!isConfirmed && (
+            <Link
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
+              href={`/scrims/${request.id}/chat`}
+            >
+              <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
+              Open Chat
+            </Link>
+          )}
           {isConfirmed && (
             <>
               <button

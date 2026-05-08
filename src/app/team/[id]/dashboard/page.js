@@ -79,7 +79,7 @@ const GAME_DASHBOARD_CONFIGS = {
     compositionLabel: "Lineup",
     defaultMap: "Competitive Map",
     roles: ["Entry", "AWPer", "Rifler", "IGL", "Support"],
-    editFields: ["k", "a", "d", "adr", "hs_percent", "mvps"],
+    editFields: ["k", "a", "d", "adr", "hs_percent", "mvps", "score"],
     cardStats: [
       { key: "kda", label: "K/A/D" },
       { key: "adr", label: "ADR" },
@@ -130,7 +130,7 @@ const GAME_DASHBOARD_CONFIGS = {
     compositionLabel: "Hero Composition",
     defaultMap: "Hybrid",
     roles: ["Tank", "Damage", "Damage", "Support", "Support", "Flex"],
-    editFields: ["eliminations", "assists", "deaths", "damage", "healing", "mitigation"],
+    editFields: ["eliminations", "assists", "deaths", "damage", "healing", "mitigation", "final_blows", "objective_kills"],
     cardStats: [
       { key: "eliminations", label: "Elims" },
       { key: "deaths", label: "Deaths" },
@@ -142,11 +142,14 @@ const GAME_DASHBOARD_CONFIGS = {
       { key: "damage", label: "Damage" },
       { key: "healing", label: "Healing" },
       { key: "mitigation", label: "Mitigation" },
+      { key: "final_blows", label: "Final Blows" },
+      { key: "objective_kills", label: "Obj Kills" },
     ],
     highlightStats: [
-      { key: "eliminations", label: "Eliminations" },
-      { key: "damage", label: "Damage" },
-      { key: "healing", label: "Healing" },
+      { key: "total_eliminations", fallback: "eliminations", label: "Eliminations" },
+      { key: "total_damage", fallback: "damage", label: "Damage" },
+      { key: "total_healing", fallback: "healing", label: "Healing" },
+      { key: "total_mitigation", fallback: "mitigation", label: "Mitigation" },
     ],
   },
   "Marvel Rivals": {
@@ -236,7 +239,7 @@ const GAME_DASHBOARD_CONFIGS = {
     compositionLabel: "Hero Composition",
     defaultMap: "Ranked 5v5",
     roles: ["Clash Lane", "Jungle", "Mid", "Farm Lane", "Roam"],
-    editFields: ["k", "d", "a", "gold", "damage", "damage_taken"],
+    editFields: ["k", "d", "a", "gold", "damage", "damage_taken", "healing", "rating"],
     cardStats: [
       { key: "kda", label: "K/D/A" },
       { key: "gold", label: "Gold" },
@@ -251,7 +254,8 @@ const GAME_DASHBOARD_CONFIGS = {
     highlightStats: [
       { key: "team_kills", label: "Team Kills" },
       { key: "total_gold", label: "Total Gold" },
-      { key: "damage", label: "Damage" },
+      { key: "total_damage", fallback: "damage", label: "Damage" },
+      { key: "healing", label: "Healing" },
     ],
   },
 };
@@ -259,6 +263,18 @@ const GAME_DASHBOARD_CONFIGS = {
 GAME_DASHBOARD_CONFIGS.Overwatch = GAME_DASHBOARD_CONFIGS["Overwatch 2"];
 
 const SUPPORTED_GAMES = Object.keys(POSTGAME_SCREENSHOT_STATS);
+const SERVER_EXTRACTOR_GAMES = new Set([
+  "Counter-Strike 2",
+  "Deadlock",
+  "Honor of Kings",
+  "HOK",
+  "League of Legends",
+  "Marvel Rivals",
+  "Overwatch",
+  "Overwatch 2",
+  "Rocket League",
+  "Valorant",
+]);
 
 const MARVEL_RIVALS_HERO_OPTIONS = [
   "Adam Warlock",
@@ -381,6 +397,16 @@ function normalizeReviewForForm(review, gameTitle) {
 }
 
 function normalizeRowsForSave(rows = [], gameTitle) {
+  if (gameTitle === "Honor of Kings" || gameTitle === "HOK") {
+    return rows.map((row) => ({
+      ...row,
+      hero: row.hero_confirmed || row.hero || "",
+      hero_confirmed: row.hero_confirmed || row.hero || "",
+      needs_hero_review: Boolean(row.needs_hero_review || row.needs_manual_review),
+      needs_manual_review: Boolean(row.needs_manual_review || row.needs_hero_review),
+    }));
+  }
+
   if (gameTitle !== "Marvel Rivals") return rows;
   return rows.map((row) => ({
     ...row,
@@ -944,6 +970,374 @@ function mapDeadlockExtractionToReview(extraction) {
   };
 }
 
+function mapOverwatchPlayerRow(row = {}) {
+  return {
+    team_key: row.team_key || null,
+    hero: row.hero || "",
+    player_name: row.player_name || "",
+    role: row.role || "",
+    eliminations: normalizeExtractedNumber(row.eliminations ?? row.kills) ?? "",
+    assists: normalizeExtractedNumber(row.assists) ?? "",
+    deaths: normalizeExtractedNumber(row.deaths) ?? "",
+    damage: normalizeExtractedNumber(row.damage) ?? "",
+    healing: normalizeExtractedNumber(row.healing) ?? "",
+    mitigation: normalizeExtractedNumber(row.mitigation ?? row.damage_blocked) ?? "",
+    final_blows: normalizeExtractedNumber(row.final_blows) ?? "",
+    objective_kills: normalizeExtractedNumber(row.objective_kills) ?? "",
+    confidence: normalizeExtractedNumber(row.confidence),
+  };
+}
+
+function mapOverwatchTeamStats(team = {}, rows = []) {
+  const totals = team.team_totals || {};
+  const eliminations = normalizeExtractedNumber(totals.eliminations ?? totals.kills) ?? sumRows(rows, "eliminations");
+  const assists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "assists");
+  const deaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "deaths");
+  const damage = normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage");
+  const healing = normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing");
+  const mitigation = normalizeExtractedNumber(totals.mitigation ?? totals.damage_blocked) ?? sumRows(rows, "mitigation");
+  const finalBlows = normalizeExtractedNumber(totals.final_blows) ?? sumRows(rows, "final_blows");
+  const objectiveKills = normalizeExtractedNumber(totals.objective_kills) ?? sumRows(rows, "objective_kills");
+
+  return {
+    eliminations,
+    assists,
+    deaths,
+    damage,
+    healing,
+    mitigation,
+    final_blows: finalBlows,
+    objective_kills: objectiveKills,
+    total_eliminations: eliminations,
+    total_assists: assists,
+    total_deaths: deaths,
+    total_damage: damage,
+    total_healing: healing,
+    total_mitigation: mitigation,
+    team_kills: eliminations,
+    team_deaths: deaths,
+    team_assists: assists,
+  };
+}
+
+function groupOverwatchRows(extraction) {
+  const teams = Array.isArray(extraction?.teams) ? extraction.teams : [];
+  const flatRows = Array.isArray(extraction?.rows) ? extraction.rows : [];
+  const teamOne = teams.find((team) => team?.team_key === "team_1") || teams[0] || {};
+  const teamTwo = teams.find((team) => team?.team_key === "team_2") || teams[1] || {};
+  const teamOneRows = (teamOne.players?.length ? teamOne.players : flatRows.filter((row) => row.team_key === "team_1"))
+    .map((row) => mapOverwatchPlayerRow({ ...row, team_key: "team_1" }));
+  const teamTwoRows = (teamTwo.players?.length ? teamTwo.players : flatRows.filter((row) => row.team_key === "team_2"))
+    .map((row) => mapOverwatchPlayerRow({ ...row, team_key: "team_2" }));
+
+  if (teamOneRows.length || teamTwoRows.length) {
+    return {
+      teamRows: teamOneRows,
+      opponentRows: teamTwoRows,
+      teamOne,
+      teamTwo,
+      groupingNeedsReview: teamOneRows.length < 5 || teamTwoRows.length < 5,
+    };
+  }
+
+  return {
+    teamRows: flatRows.slice(0, 6).map((row) => mapOverwatchPlayerRow({ ...row, team_key: "team_1" })),
+    opponentRows: flatRows.slice(6, 12).map((row) => mapOverwatchPlayerRow({ ...row, team_key: "team_2" })),
+    teamOne,
+    teamTwo,
+    groupingNeedsReview: true,
+  };
+}
+
+function mapOverwatchExtractionToReview(extraction) {
+  const match = extraction?.match || {};
+  const {
+    teamRows,
+    opponentRows,
+    teamOne,
+    teamTwo,
+    groupingNeedsReview,
+  } = groupOverwatchRows(extraction);
+  const normalizedResult = match.result?.toLowerCase?.();
+  const mapMode = [match.map, match.mode].filter(Boolean).join(" · ");
+  const teamOneScore = normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score);
+  const teamTwoScore = normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score);
+
+  return {
+    match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
+    final_score: formatScore(teamOneScore, teamTwoScore) || match.final_score || "",
+    team_score: teamOneScore ?? "",
+    opponent_score: teamTwoScore ?? "",
+    opponent_name: match.team_2_name || teamTwo.team_name || "",
+    map_or_mode: mapMode || "",
+    played_at: match.played_at || new Date().toISOString(),
+    team_comp: teamRows,
+    opponent_comp: opponentRows,
+    team_stats: {
+      ...mapOverwatchTeamStats(teamOne, teamRows),
+      duration: match.duration || null,
+      team_name: match.team_1_name || teamOne.team_name || null,
+      team_grouping_needs_review: groupingNeedsReview,
+      fields_needing_manual_review: extraction?.fields_needing_manual_review || [],
+    },
+    opponent_stats: {
+      ...mapOverwatchTeamStats(teamTwo, opponentRows),
+      team_name: match.team_2_name || teamTwo.team_name || null,
+    },
+    notes: groupingNeedsReview
+      ? "Overwatch team grouping needs review. Use Swap Teams if the sides are reversed, then check each player row before saving."
+      : "Overwatch extraction. Review each field before saving.",
+    parser_status: "extracted",
+    parser_confidence: normalizeExtractedNumber(extraction?.parser_confidence),
+    manual_edit_required: Boolean(extraction?.manual_review_required || groupingNeedsReview),
+  };
+}
+
+function groupRowsByTeam(extraction, mapper, expectedRows) {
+  const teams = Array.isArray(extraction?.teams) ? extraction.teams : [];
+  const flatRows = Array.isArray(extraction?.rows) ? extraction.rows : [];
+  const teamOne = teams.find((team) => team?.team_key === "team_1") || teams[0] || {};
+  const teamTwo = teams.find((team) => team?.team_key === "team_2") || teams[1] || {};
+  const teamOneRows = (teamOne.players?.length ? teamOne.players : flatRows.filter((row) => row.team_key === "team_1"))
+    .map((row) => mapper({ ...row, team_key: "team_1" }));
+  const teamTwoRows = (teamTwo.players?.length ? teamTwo.players : flatRows.filter((row) => row.team_key === "team_2"))
+    .map((row) => mapper({ ...row, team_key: "team_2" }));
+
+  if (teamOneRows.length || teamTwoRows.length) {
+    return {
+      teamRows: teamOneRows,
+      opponentRows: teamTwoRows,
+      teamOne,
+      teamTwo,
+      groupingNeedsReview: teamOneRows.length !== expectedRows || teamTwoRows.length !== expectedRows,
+    };
+  }
+
+  const sortedRows = flatRows
+    .slice()
+    .sort((first, second) => Number(first?.row_index || 0) - Number(second?.row_index || 0));
+
+  return {
+    teamRows: sortedRows.slice(0, expectedRows).map((row) => mapper({ ...row, team_key: "team_1" })),
+    opponentRows: sortedRows.slice(expectedRows, expectedRows * 2).map((row) => mapper({ ...row, team_key: "team_2" })),
+    teamOne,
+    teamTwo,
+    groupingNeedsReview: true,
+  };
+}
+
+function mapCounterStrikePlayerRow(row = {}) {
+  const parsedKad = String(row.kda_text || "")
+    .split(/[\/-]/)
+    .map((part) => normalizeExtractedNumber(part));
+  return {
+    team_key: row.team_key || null,
+    role: row.role || "",
+    player_name: row.player_name || "",
+    k: normalizeExtractedNumber(row.kills) ?? parsedKad[0] ?? "",
+    a: normalizeExtractedNumber(row.assists) ?? parsedKad[1] ?? "",
+    d: normalizeExtractedNumber(row.deaths) ?? parsedKad[2] ?? "",
+    adr: normalizeExtractedNumber(row.adr) ?? "",
+    hs_percent: normalizeExtractedNumber(row.hs_percent ?? row.headshot_percent) ?? "",
+    mvps: normalizeExtractedNumber(row.mvps ?? row.stars) ?? "",
+    score: normalizeExtractedNumber(row.score) ?? normalizeExtractedNumber(row.rating) ?? "",
+    rating: normalizeExtractedNumber(row.rating) ?? "",
+    confidence: normalizeExtractedNumber(row.confidence),
+  };
+}
+
+function mapCounterStrikeTeamStats(team = {}, rows = []) {
+  const totals = team.team_totals || {};
+  return {
+    team_kills: normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k"),
+    team_deaths: normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d"),
+    team_assists: normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a"),
+    average_adr: normalizeExtractedNumber(totals.average_adr) ?? averageRows(rows, "adr"),
+    average_hs_percent: normalizeExtractedNumber(totals.average_hs_percent ?? totals.hs_percent) ?? averageRows(rows, "hs_percent"),
+    total_mvps: normalizeExtractedNumber(totals.mvps ?? totals.total_mvps) ?? sumRows(rows, "mvps"),
+    score: normalizeExtractedNumber(totals.score) ?? sumRows(rows, "score"),
+  };
+}
+
+function mapCounterStrikeExtractionToReview(extraction) {
+  const match = extraction?.match || {};
+  const { teamRows, opponentRows, teamOne, teamTwo, groupingNeedsReview } = groupRowsByTeam(extraction, mapCounterStrikePlayerRow, 5);
+  const normalizedResult = match.result?.toLowerCase?.();
+
+  return {
+    match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
+    team_score: normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score) ?? "",
+    opponent_score: normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score) ?? "",
+    opponent_name: match.team_2_name || teamTwo.team_name || "",
+    map_or_mode: match.map || "",
+    played_at: match.played_at || new Date().toISOString(),
+    team_comp: teamRows,
+    opponent_comp: opponentRows,
+    team_stats: {
+      ...mapCounterStrikeTeamStats(teamOne, teamRows),
+      duration: match.duration || null,
+      side_halves: match.side_halves || null,
+      team_grouping_needs_review: groupingNeedsReview,
+      fields_needing_manual_review: extraction?.fields_needing_manual_review || [],
+    },
+    opponent_stats: mapCounterStrikeTeamStats(teamTwo, opponentRows),
+    notes: groupingNeedsReview
+      ? "Counter-Strike team grouping needs review. Use Swap Teams if the sides are reversed, then check each row before saving."
+      : "Counter-Strike extraction. Review each field before saving.",
+    parser_status: "extracted",
+    parser_confidence: normalizeExtractedNumber(extraction?.parser_confidence),
+    manual_edit_required: Boolean(extraction?.manual_review_required || groupingNeedsReview),
+  };
+}
+
+function mapRocketLeaguePlayerRow(row = {}) {
+  return {
+    team_key: row.team_key || null,
+    car: row.car || row.role || "",
+    player_name: row.player_name || "",
+    score: normalizeExtractedNumber(row.score) ?? "",
+    goals: normalizeExtractedNumber(row.goals) ?? "",
+    assists: normalizeExtractedNumber(row.assists) ?? "",
+    saves: normalizeExtractedNumber(row.saves) ?? "",
+    shots: normalizeExtractedNumber(row.shots) ?? "",
+    demos: normalizeExtractedNumber(row.demos) ?? "",
+    ping: normalizeExtractedNumber(row.ping) ?? "",
+    confidence: normalizeExtractedNumber(row.confidence),
+  };
+}
+
+function mapRocketLeagueTeamStats(team = {}, rows = []) {
+  const totals = team.team_totals || {};
+  return {
+    goals: normalizeExtractedNumber(totals.goals) ?? sumRows(rows, "goals"),
+    assists: normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "assists"),
+    saves: normalizeExtractedNumber(totals.saves) ?? sumRows(rows, "saves"),
+    shots: normalizeExtractedNumber(totals.shots) ?? sumRows(rows, "shots"),
+    demos: normalizeExtractedNumber(totals.demos) ?? sumRows(rows, "demos"),
+    scoreboard_score: normalizeExtractedNumber(totals.scoreboard_score ?? totals.score) ?? sumRows(rows, "score"),
+  };
+}
+
+function mapRocketLeagueExtractionToReview(extraction) {
+  const match = extraction?.match || {};
+  const { teamRows, opponentRows, teamOne, teamTwo, groupingNeedsReview } = groupRowsByTeam(extraction, mapRocketLeaguePlayerRow, 3);
+  const normalizedResult = match.result?.toLowerCase?.();
+  const mapMode = [match.arena, match.mode].filter(Boolean).join(" · ");
+
+  return {
+    match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
+    team_score: normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score) ?? "",
+    opponent_score: normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score) ?? "",
+    opponent_name: match.team_2_name || teamTwo.team_name || "",
+    map_or_mode: mapMode || "",
+    played_at: match.played_at || new Date().toISOString(),
+    team_comp: teamRows,
+    opponent_comp: opponentRows,
+    team_stats: {
+      ...mapRocketLeagueTeamStats(teamOne, teamRows),
+      duration: match.duration || null,
+      team_grouping_needs_review: groupingNeedsReview,
+      fields_needing_manual_review: extraction?.fields_needing_manual_review || [],
+    },
+    opponent_stats: mapRocketLeagueTeamStats(teamTwo, opponentRows),
+    notes: groupingNeedsReview
+      ? "Rocket League team grouping needs review. Use Swap Teams if the sides are reversed, then check each row before saving."
+      : "Rocket League extraction. Review each field before saving.",
+    parser_status: "extracted",
+    parser_confidence: normalizeExtractedNumber(extraction?.parser_confidence),
+    manual_edit_required: Boolean(extraction?.manual_review_required || groupingNeedsReview),
+  };
+}
+
+function mapHonorOfKingsPlayerRow(row = {}) {
+  const parsedKda = parseKdaText(row.kda_text);
+  const heroGuess = row.hero_guess || row.hero || "";
+  const heroConfidence = normalizeExtractedNumber(row.hero_confidence ?? row.confidence) ?? "";
+  const needsHeroReview = Boolean(row.needs_hero_review || row.needs_manual_review || (heroGuess && heroConfidence !== "" && Number(heroConfidence) < 0.6));
+  const heroConfirmed = needsHeroReview ? "" : (row.hero_confirmed || row.hero || heroGuess || "");
+
+  return {
+    team_key: row.team_key || null,
+    hero: heroConfirmed,
+    hero_confirmed: heroConfirmed,
+    hero_guess: heroGuess,
+    hero_confidence: heroConfidence,
+    needs_hero_review: needsHeroReview,
+    needs_manual_review: needsHeroReview,
+    player_name: row.player_name || "",
+    role: row.role || "",
+    k: normalizeExtractedNumber(row.kills) ?? parsedKda.k,
+    d: normalizeExtractedNumber(row.deaths) ?? parsedKda.d,
+    a: normalizeExtractedNumber(row.assists) ?? parsedKda.a,
+    gold: normalizeExtractedNumber(row.gold) ?? "",
+    damage: normalizeExtractedNumber(row.damage) ?? "",
+    damage_taken: normalizeExtractedNumber(row.damage_taken) ?? "",
+    healing: normalizeExtractedNumber(row.healing) ?? "",
+    participation_percent: normalizeExtractedNumber(row.participation_percent) ?? "",
+    rating: normalizeExtractedNumber(row.rating) ?? "",
+    is_mvp: Boolean(row.is_mvp),
+    confidence: normalizeExtractedNumber(row.confidence),
+  };
+}
+
+function mapHonorOfKingsTeamStats(team = {}, rows = []) {
+  const totals = team.team_totals || {};
+  const totalKills = normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k");
+  const totalDeaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d");
+  const totalAssists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a");
+
+  return {
+    team_kills: totalKills,
+    team_deaths: totalDeaths,
+    team_assists: totalAssists,
+    total_kills: totalKills,
+    total_deaths: totalDeaths,
+    total_assists: totalAssists,
+    total_gold: normalizeExtractedNumber(totals.gold ?? totals.total_gold) ?? sumRows(rows, "gold"),
+    damage: normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage"),
+    total_damage: normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage"),
+    damage_taken: normalizeExtractedNumber(totals.damage_taken) ?? sumRows(rows, "damage_taken"),
+    healing: normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing"),
+    objectives: totals.objectives ?? null,
+  };
+}
+
+function mapHonorOfKingsExtractionToReview(extraction) {
+  const match = extraction?.match || {};
+  const { teamRows, opponentRows, teamOne, teamTwo, groupingNeedsReview } = groupRowsByTeam(extraction, mapHonorOfKingsPlayerRow, 5);
+  const normalizedResult = match.result?.toLowerCase?.();
+  const heroReviewNeeded = [...teamRows, ...opponentRows].some((row) => row.needs_hero_review);
+
+  return {
+    match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
+    team_score: normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score) ?? "",
+    opponent_score: normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score) ?? "",
+    opponent_name: match.team_2_name || teamTwo.team_name || "",
+    map_or_mode: match.mode || "",
+    played_at: match.played_at || new Date().toISOString(),
+    team_comp: teamRows,
+    opponent_comp: opponentRows,
+    team_stats: {
+      ...mapHonorOfKingsTeamStats(teamOne, teamRows),
+      duration: match.duration || null,
+      team_grouping_needs_review: groupingNeedsReview,
+      fields_needing_manual_review: extraction?.fields_needing_manual_review || [],
+    },
+    opponent_stats: mapHonorOfKingsTeamStats(teamTwo, opponentRows),
+    notes: groupingNeedsReview
+      ? "Honor of Kings team grouping needs review. Use Swap Teams if the sides are reversed, then check each row before saving."
+      : heroReviewNeeded
+        ? "Some Honor of Kings hero names need review because the portrait or text was unclear."
+      : "Honor of Kings extraction. Review each field before saving.",
+    parser_status: "extracted",
+    parser_confidence: normalizeExtractedNumber(extraction?.parser_confidence),
+    manual_edit_required: Boolean(extraction?.manual_review_required || groupingNeedsReview || heroReviewNeeded),
+  };
+}
+
 function resizeImageForExtraction(file) {
   const maxSide = 1600;
   const quality = 0.78;
@@ -1281,7 +1675,7 @@ export default function TeamDashboardPage() {
     try {
       let extracted;
 
-      if (team.game_title === "League of Legends" || team.game_title === "Valorant" || team.game_title === "Marvel Rivals" || team.game_title === "Deadlock") {
+      if (SERVER_EXTRACTOR_GAMES.has(team.game_title)) {
         const extractionFile = await resizeImageForExtraction(file);
         const formData = new FormData();
         formData.append("gameTitle", team.game_title);
@@ -1316,6 +1710,8 @@ export default function TeamDashboardPage() {
 
         if (team.game_title === "League of Legends") {
           extracted = mapLeagueExtractionToReview(payload.data, team.name);
+        } else if (team.game_title === "Counter-Strike 2") {
+          extracted = mapCounterStrikeExtractionToReview(payload.data);
         } else if (team.game_title === "Marvel Rivals") {
           extracted = mapMarvelRivalsExtractionToReview(payload.data);
           if (process.env.NODE_ENV === "development") {
@@ -1327,6 +1723,12 @@ export default function TeamDashboardPage() {
           }
         } else if (team.game_title === "Deadlock") {
           extracted = mapDeadlockExtractionToReview(payload.data);
+        } else if (team.game_title === "Honor of Kings" || team.game_title === "HOK") {
+          extracted = mapHonorOfKingsExtractionToReview(payload.data);
+        } else if (team.game_title === "Overwatch" || team.game_title === "Overwatch 2") {
+          extracted = mapOverwatchExtractionToReview(payload.data);
+        } else if (team.game_title === "Rocket League") {
+          extracted = mapRocketLeagueExtractionToReview(payload.data);
         } else {
           extracted = mapValorantExtractionToReview(payload.data);
         }
@@ -1783,6 +2185,10 @@ const REVIEW_DASHBOARD_TABS = [
   { label: "Compare", value: "compare" },
 ];
 
+function getMetricValue(stats = {}, metric = {}) {
+  return stats?.[metric.key] ?? stats?.[metric.fallback];
+}
+
 function ReviewDashboardTabs({ activeTab, onChange }) {
   return (
     <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1 md:inline-grid">
@@ -2091,11 +2497,17 @@ function UniversalGameDashboard(props) {
   const config = getDashboardConfig(team.game_title);
   const visibleStats = POSTGAME_SCREENSHOT_STATS[team.game_title]?.visibleStats || [];
   const displayReview = form || selectedReview;
+  const hasTeamGroupingReview = SERVER_EXTRACTOR_GAMES.has(team.game_title) && team.game_title !== "League of Legends" && team.game_title !== "Valorant";
   const isMarvelRivals = team.game_title === "Marvel Rivals";
+  const isHonorOfKings = team.game_title === "Honor of Kings" || team.game_title === "HOK";
   const isDeadlock = team.game_title === "Deadlock";
   const isCompactSix = isMarvelRivals || isDeadlock;
-  const heroReviewNeeded = isMarvelRivals && (displayReview?.team_stats?.hero_fields_nulled || []).length > 0;
-  const groupingNeedsReview = (isMarvelRivals || isDeadlock) && (displayReview?.team_stats?.team_grouping_needs_review || displayReview?.manual_edit_required);
+  const heroReviewNeeded = isMarvelRivals
+    ? (displayReview?.team_stats?.hero_fields_nulled || []).length > 0
+    : isHonorOfKings
+      ? [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])].some((row) => row.needs_hero_review || row.needs_manual_review)
+      : false;
+  const groupingNeedsReview = hasTeamGroupingReview && (displayReview?.team_stats?.team_grouping_needs_review || displayReview?.manual_edit_required);
   const performanceRows = isCompactSix
     ? [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])]
     : displayReview?.team_comp || [];
@@ -2126,7 +2538,7 @@ function UniversalGameDashboard(props) {
                 {config.highlightStats.slice(0, 4).map((stat) => (
                   <div className={`rounded-2xl bg-surface-container-low ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
                     <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                    <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
+                    <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{getMetricValue(displayReview?.team_stats, stat) ?? "—"}</p>
                   </div>
                 ))}
               </div>
@@ -2143,7 +2555,7 @@ function UniversalGameDashboard(props) {
             )}
           </section>
 
-          {(isMarvelRivals || isDeadlock) && (groupingNeedsReview || heroReviewNeeded) && (
+          {hasTeamGroupingReview && (groupingNeedsReview || heroReviewNeeded) && (
             <div className="rounded-xl border border-[#b26a00]/25 bg-[#fff4d6] px-md py-sm font-body-sub text-body-sub text-[#755400]">
               {heroReviewNeeded
                 ? "Some hero names need review because duplicate or low-confidence portraits were detected."
@@ -2164,7 +2576,7 @@ function UniversalGameDashboard(props) {
               {config.highlightStats.map((stat) => (
                 <div className={`rounded-2xl bg-surface-container-lowest border border-outline-variant/25 ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
                   <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                  <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{displayReview?.team_stats?.[stat.key] ?? "—"}</p>
+                  <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{getMetricValue(displayReview?.team_stats, stat) ?? "—"}</p>
                 </div>
               ))}
             </div>
@@ -2739,7 +3151,7 @@ function PerformanceTable({ game = "Valorant", rows }) {
               return (
                 <tr className={`border-t border-outline-variant/15 transition-colors ${rowTone}`} key={`${row.player_name}-${index}`}>
                   <td className="p-md font-label-bold text-label-bold">{row.player_name || "Player TBD"}</td>
-                  <td>{(game === "Marvel Rivals" || game === "Deadlock") ? row.hero_confirmed || row[config.pickField] || "—" : row[config.pickField] || row.role || "—"}</td>
+                  <td>{(game === "Marvel Rivals" || game === "Deadlock" || game === "Honor of Kings" || game === "HOK") ? row.hero_confirmed || row[config.pickField] || row.hero_guess || "—" : row[config.pickField] || row.role || "—"}</td>
                   {config.tableFields.map((field, fieldIndex) => (
                     <td className={fieldIndex === 0 ? `font-label-bold ${statTone}` : ""} key={field.key}>
                       {formatStatValue(row, field.key)}
@@ -2794,7 +3206,7 @@ function ReviewEditor({
                 : `No review saved for Game ${selectedGameNumber} yet. Upload a screenshot or enter stats manually for this game.`}
             </p>
           </div>
-          {(game === "League of Legends" || game === "Valorant" || game === "Marvel Rivals") && (
+          {SERVER_EXTRACTOR_GAMES.has(game) && (
             <button
               className="inline-flex items-center justify-center gap-xs rounded-xl bg-surface-container px-md py-sm font-label-bold text-label-bold text-primary hover:bg-primary-fixed"
               onClick={handleSwapTeams}
@@ -2822,7 +3234,7 @@ function ReviewEditor({
             value={form.team_stats?.objective_or_mode || ""}
           />
         )}
-        {(game === "Valorant" || game === "Marvel Rivals") && (
+        {SERVER_EXTRACTOR_GAMES.has(game) && game !== "League of Legends" && (
           <TextInput
             label="Duration"
             onChange={(value) => updateStat("team_stats", "duration", value)}
@@ -2834,7 +3246,7 @@ function ReviewEditor({
         <TextInput
           label={primaryHighlight?.label || "Primary Stat"}
           onChange={(value) => updateStat("team_stats", primaryHighlight?.key || "primary_stat", value)}
-          value={form.team_stats?.[primaryHighlight?.key] || ""}
+          value={getMetricValue(form.team_stats, primaryHighlight) || ""}
         />
       </div>
 
@@ -2863,6 +3275,7 @@ function EditableRows({ game, rows, side, title, updateComp }) {
   const statFields = config.editFields;
   const canEditRole = game === "League of Legends";
   const usesHeroDropdown = game === "Marvel Rivals" || game === "Deadlock";
+  const showsHeroReviewHint = game === "Honor of Kings" || game === "HOK";
   const heroOptions = game === "Deadlock"
     ? DEADLOCK_HERO_OPTIONS
     : game === "Marvel Rivals"
@@ -2937,7 +3350,28 @@ function EditableRows({ game, rows, side, title, updateComp }) {
                 )}
               </div>
             ) : (
-              <input className={smallInputClass()} onChange={(event) => updateComp(side, index, pickField, event.target.value)} placeholder={config.pickLabel} value={row[pickField] || ""} />
+              <div className="grid gap-1">
+                <input
+                  className={smallInputClass()}
+                  onChange={(event) => {
+                    updateComp(side, index, pickField, event.target.value);
+                    if (showsHeroReviewHint) {
+                      updateComp(side, index, "hero_confirmed", event.target.value);
+                      updateComp(side, index, "needs_hero_review", false);
+                      updateComp(side, index, "needs_manual_review", false);
+                    }
+                  }}
+                  placeholder={config.pickLabel}
+                  value={row[pickField] || ""}
+                />
+                {showsHeroReviewHint && (row.hero_guess || row.hero_confidence !== "" || row.needs_hero_review) && (
+                  <span className={`truncate font-label-small text-[10px] ${row.needs_hero_review ? "text-[#b26a00]" : "text-on-surface-variant"}`}>
+                    {row.needs_hero_review ? "Review hero" : "Hero extracted"}
+                    {row.hero_guess ? `: ${row.hero_guess}` : ""}
+                    {row.hero_confidence !== "" && row.hero_confidence !== undefined ? ` · ${Math.round(Number(row.hero_confidence || 0) * 100)}%` : ""}
+                  </span>
+                )}
+              </div>
             )}
             {statFields.map((field) => (
               <input
@@ -2970,6 +3404,8 @@ function formatFieldLabel(field) {
     objective_damage: "Obj Dmg",
     damage_blocked: "Blocked",
     final_hits: "Final Hits",
+    final_blows: "Final Blows",
+    objective_kills: "Obj Kills",
     accuracy: "Acc%",
   };
 
@@ -2979,6 +3415,7 @@ function formatFieldLabel(field) {
 function getReviewEditorGridClass(canEditRole, statFieldCount) {
   if (canEditRole) return "md:grid-cols-[1fr_120px_1fr_repeat(6,80px)]";
   if (statFieldCount >= 8) return "md:grid-cols-[1fr_1fr_repeat(8,80px)]";
+  if (statFieldCount >= 7) return "md:grid-cols-[1fr_1fr_repeat(7,80px)]";
   return "md:grid-cols-[1fr_1fr_repeat(6,80px)]";
 }
 
