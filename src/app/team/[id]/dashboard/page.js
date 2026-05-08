@@ -2993,7 +2993,7 @@ function CompositionSection({ accent = "bg-primary", game, opponentName, rows, t
         </h2>
         {opponentName && <span className="font-label-small text-label-small uppercase tracking-wider text-on-surface-variant">{opponentName}</span>}
       </div>
-      <div className={isCompactSix ? "grid grid-cols-2 gap-sm md:grid-cols-3 xl:grid-cols-6" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
+      <div className={isCompactSix ? "grid grid-cols-2 gap-sm md:grid-cols-3" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
         {rows.map((row, index) => <CharacterTile game={game} index={index} key={`${row.player_name}-${index}`} row={row} />)}
       </div>
     </section>
@@ -3193,11 +3193,21 @@ function ReviewEditor({
 }) {
   const config = getDashboardConfig(game);
   const primaryHighlight = config.highlightStats[0];
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <form className="grid gap-lg rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg" onSubmit={handleSaveReview}>
-      <div>
-        <div className="flex flex-col gap-sm sm:flex-row sm:items-start sm:justify-between">
+    <section className="grid gap-md rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
+      <div className="flex flex-col gap-sm sm:flex-row sm:items-start sm:justify-between">
+        <button
+          className="group flex flex-1 items-start gap-sm text-left"
+          onClick={() => setIsExpanded((current) => !current)}
+          type="button"
+        >
+          <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-container text-primary transition-colors group-hover:bg-primary-fixed">
+            <MaterialSymbol className="text-[20px]">
+              {isExpanded ? "keyboard_arrow_up" : "keyboard_arrow_down"}
+            </MaterialSymbol>
+          </span>
           <div>
             <h2 className="font-headline-2 text-headline-2 text-on-surface">Review & Edit Extracted Data</h2>
             <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
@@ -3205,67 +3215,76 @@ function ReviewEditor({
                 ? `Editing saved review for Game ${selectedGameNumber}.`
                 : `No review saved for Game ${selectedGameNumber} yet. Upload a screenshot or enter stats manually for this game.`}
             </p>
+            <p className="mt-xs font-label-small text-label-small text-primary">
+              {isExpanded ? "Hide editable fields" : "Show editable fields"}
+            </p>
           </div>
-          {SERVER_EXTRACTOR_GAMES.has(game) && (
-            <button
-              className="inline-flex items-center justify-center gap-xs rounded-xl bg-surface-container px-md py-sm font-label-bold text-label-bold text-primary hover:bg-primary-fixed"
-              onClick={handleSwapTeams}
-              type="button"
-            >
-              <MaterialSymbol className="text-[18px]">swap_horiz</MaterialSymbol>
-              Swap Teams
-            </button>
-          )}
-        </div>
+        </button>
+        {isExpanded && SERVER_EXTRACTOR_GAMES.has(game) && (
+          <button
+            className="inline-flex items-center justify-center gap-xs rounded-xl bg-surface-container px-md py-sm font-label-bold text-label-bold text-primary hover:bg-primary-fixed"
+            onClick={handleSwapTeams}
+            type="button"
+          >
+            <MaterialSymbol className="text-[18px]">swap_horiz</MaterialSymbol>
+            Swap Teams
+          </button>
+        )}
       </div>
+
       <ReviewMessages errorMessage={errorMessage} successMessage={successMessage} />
-      <div className="grid grid-cols-1 gap-md md:grid-cols-4">
-        <SelectInput label="Review Type" onChange={(value) => updateField("match_type", value)} value={form.match_type || "scrim"} options={["scrim", "match"]} />
-        <SelectInput label="Result" onChange={(value) => updateField("match_result", value)} value={form.match_result} options={["victory", "defeat"]} />
-        <TextInput label={game === "League of Legends" ? "Our Kills" : "Our Score"} onChange={(value) => updateField("team_score", value)} type="number" value={form.team_score} />
-        <TextInput label={game === "League of Legends" ? "Opponent Kills" : "Opponent Score"} onChange={(value) => updateField("opponent_score", value)} type="number" value={form.opponent_score} />
-        {game !== "League of Legends" && (
-          <TextInput label={config.mapLabel} onChange={(value) => updateField("map_or_mode", value)} value={form.map_or_mode || ""} />
-        )}
-        {game === "Marvel Rivals" && (
-          <TextInput
-            label="Objective / Mode"
-            onChange={(value) => updateStat("team_stats", "objective_or_mode", value)}
-            value={form.team_stats?.objective_or_mode || ""}
-          />
-        )}
-        {SERVER_EXTRACTOR_GAMES.has(game) && game !== "League of Legends" && (
-          <TextInput
-            label="Duration"
-            onChange={(value) => updateStat("team_stats", "duration", value)}
-            value={form.team_stats?.duration || ""}
-          />
-        )}
-        <TextInput label="Opponent" onChange={(value) => updateField("opponent_name", value)} value={form.opponent_name || ""} />
-        <TextInput label="Played At" onChange={(value) => updateField("played_at", value)} type="datetime-local" value={form.played_at || ""} />
-        <TextInput
-          label={primaryHighlight?.label || "Primary Stat"}
-          onChange={(value) => updateStat("team_stats", primaryHighlight?.key || "primary_stat", value)}
-          value={getMetricValue(form.team_stats, primaryHighlight) || ""}
-        />
-      </div>
 
-      <EditableRows game={game} rows={form.team_comp} side="team_comp" title="Our Rows" updateComp={updateComp} />
-      <EditableRows game={game} rows={form.opponent_comp} side="opponent_comp" title="Opponent Rows" updateComp={updateComp} />
+      {isExpanded && (
+        <form className="grid gap-lg" onSubmit={handleSaveReview}>
+          <div className="grid grid-cols-1 gap-md md:grid-cols-4">
+            <SelectInput label="Review Type" onChange={(value) => updateField("match_type", value)} value={form.match_type || "scrim"} options={["scrim", "match"]} />
+            <SelectInput label="Result" onChange={(value) => updateField("match_result", value)} value={form.match_result} options={["victory", "defeat"]} />
+            <TextInput label={game === "League of Legends" ? "Our Kills" : "Our Score"} onChange={(value) => updateField("team_score", value)} type="number" value={form.team_score} />
+            <TextInput label={game === "League of Legends" ? "Opponent Kills" : "Opponent Score"} onChange={(value) => updateField("opponent_score", value)} type="number" value={form.opponent_score} />
+            {game !== "League of Legends" && (
+              <TextInput label={config.mapLabel} onChange={(value) => updateField("map_or_mode", value)} value={form.map_or_mode || ""} />
+            )}
+            {game === "Marvel Rivals" && (
+              <TextInput
+                label="Objective / Mode"
+                onChange={(value) => updateStat("team_stats", "objective_or_mode", value)}
+                value={form.team_stats?.objective_or_mode || ""}
+              />
+            )}
+            {SERVER_EXTRACTOR_GAMES.has(game) && game !== "League of Legends" && (
+              <TextInput
+                label="Duration"
+                onChange={(value) => updateStat("team_stats", "duration", value)}
+                value={form.team_stats?.duration || ""}
+              />
+            )}
+            <TextInput label="Opponent" onChange={(value) => updateField("opponent_name", value)} value={form.opponent_name || ""} />
+            <TextInput label="Played At" onChange={(value) => updateField("played_at", value)} type="datetime-local" value={form.played_at || ""} />
+            <TextInput
+              label={primaryHighlight?.label || "Primary Stat"}
+              onChange={(value) => updateStat("team_stats", primaryHighlight?.key || "primary_stat", value)}
+              value={getMetricValue(form.team_stats, primaryHighlight) || ""}
+            />
+          </div>
 
-      <label className="grid gap-xs">
-        <span className="font-label-bold text-label-bold text-on-surface-variant">Notes</span>
-        <textarea
-          className="min-h-[120px] resize-none rounded-xl border-none bg-surface-container-low p-md font-body-main text-body-main text-on-surface focus:ring-2 focus:ring-primary"
-          onChange={(event) => updateField("notes", event.target.value)}
-          value={form.notes || ""}
-        />
-      </label>
+          <EditableRows game={game} rows={form.team_comp} side="team_comp" title="Our Rows" updateComp={updateComp} />
+          <EditableRows game={game} rows={form.opponent_comp} side="opponent_comp" title="Opponent Rows" updateComp={updateComp} />
 
-      <button className="rounded-xl bg-primary px-lg py-md font-headline-3 text-headline-3 text-on-primary disabled:opacity-60" disabled={saving} type="submit">
-        {saving ? "Saving Review..." : selectedReview ? `Update Game ${selectedGameNumber} Review` : `Save Game ${selectedGameNumber} Review`}
-      </button>
-    </form>
+          <label className="grid gap-xs">
+            <span className="font-label-bold text-label-bold text-on-surface-variant">Notes</span>
+            <textarea
+              className="min-h-[120px] resize-none rounded-xl border-none bg-surface-container-low p-md font-body-main text-body-main text-on-surface focus:ring-2 focus:ring-primary"
+              onChange={(event) => updateField("notes", event.target.value)}
+              value={form.notes || ""}
+            />
+          </label>
+
+          <button className="rounded-xl bg-primary px-lg py-md font-headline-3 text-headline-3 text-on-primary disabled:opacity-60" disabled={saving} type="submit">
+            {saving ? "Saving Review..." : selectedReview ? `Update Game ${selectedGameNumber} Review` : `Save Game ${selectedGameNumber} Review`}
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
 
