@@ -183,6 +183,42 @@ export default function ScrimChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!id || !authUser || !scrim || accessMessage || !CHAT_ENABLED_STATUSES.has(scrim.status)) return undefined;
+
+    const channel = supabase
+      .channel(`scrim-chat-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "scrim_messages",
+          filter: `scrim_request_id=eq.${id}`,
+        },
+        (payload) => {
+          setMessages((currentMessages) => {
+            if (currentMessages.some((message) => message.id === payload.new.id)) {
+              return currentMessages;
+            }
+
+            return [...currentMessages, payload.new].sort(
+              (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+          });
+        }
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          setErrorMessage("Realtime chat could not connect. Messages will still load when the page refreshes.");
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [accessMessage, authUser, id, scrim]);
+
   async function sendMessage() {
     const body = input.trim();
 

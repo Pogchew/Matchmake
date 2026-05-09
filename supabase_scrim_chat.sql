@@ -14,6 +14,19 @@ create table if not exists public.scrim_messages (
 create index if not exists scrim_messages_scrim_request_id_created_at_idx
   on public.scrim_messages(scrim_request_id, created_at);
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'scrim_messages'
+  ) then
+    alter publication supabase_realtime add table public.scrim_messages;
+  end if;
+end $$;
+
 alter table public.scrim_messages enable row level security;
 
 drop policy if exists "Confirmed scrim participants can read messages" on public.scrim_messages;

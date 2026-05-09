@@ -2,10 +2,114 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
+import MaterialSymbol from "@/components/MaterialSymbol";
 import { storeAuthSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
+
+const painPoints = [
+  { icon: "groups", title: "Availability is unclear", body: "Who's free?" },
+  { icon: "forum", title: "Requests get lost", body: "Buried in chat" },
+  { icon: "event_busy", title: "Times drift", body: "No shared schedule" },
+  { icon: "rule", title: "Status is fuzzy", body: "Open or confirmed?" },
+  { icon: "image", title: "Stats go missing", body: "No record anywhere" },
+];
+
+const practiceTools = [
+  { icon: "manage_search", title: "Open Listings", body: "Find matches" },
+  { icon: "swap_horiz", title: "Request States", body: "Track replies" },
+  { icon: "event", title: "Shared Calendar", body: "Know times" },
+  { icon: "auto_awesome", title: "Screenshot Parser", body: "Pull stats" },
+  { icon: "query_stats", title: "Form Trends", body: "Spot patterns" },
+  { icon: "notifications", title: "Team Updates", body: "Stay synced" },
+];
+
+function PreviewCard({ children, className = "", icon, title }) {
+  return (
+    <div className={`rounded-[14px] border border-outline-variant/35 bg-white/92 p-md shadow-[0_8px_24px_rgba(15,35,70,0.06)] ${className}`}>
+      <div className="mb-sm flex items-center gap-xs">
+        <MaterialSymbol className="text-[22px] text-primary">{icon}</MaterialSymbol>
+        <h3 className="font-label-bold text-label-bold text-on-surface">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function FeatureTile({ body, icon, title }) {
+  return (
+    <div className="flex min-h-[118px] flex-col items-center justify-center rounded-[12px] border border-outline-variant/35 bg-white px-md py-md text-center shadow-[0_8px_24px_rgba(15,35,70,0.03)]">
+      <MaterialSymbol className="mb-xs text-[32px] text-primary">{icon}</MaterialSymbol>
+      <h3 className="font-label-bold text-label-bold text-on-surface">{title}</h3>
+      {body && <p className="mt-1 max-w-[150px] font-label-small text-[11px] leading-4 text-on-surface-variant">{body}</p>}
+    </div>
+  );
+}
+
+function ProductPreview() {
+  return (
+    <div className="grid gap-sm rounded-[22px] border border-outline-variant/30 bg-white/60 p-sm shadow-[0_18px_50px_rgba(0,48,110,0.10)] backdrop-blur md:grid-cols-2">
+      <PreviewCard icon="hub" title="Scrim Board">
+        <div className="grid gap-xs">
+          <div className="rounded-xl bg-surface-container-low p-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-label-bold text-label-bold text-on-surface">Valorant</span>
+              <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-[10px] text-primary">Open</span>
+            </div>
+            <p className="mt-xs font-label-small text-label-small text-on-surface-variant">Diamond · Today · 3 Games</p>
+          </div>
+          <div className="h-2 rounded-full bg-surface-container-low" />
+          <div className="h-2 w-3/4 rounded-full bg-surface-container-low" />
+        </div>
+      </PreviewCard>
+
+      <PreviewCard icon="calendar_month" title="Calendar">
+        <div className="grid grid-cols-7 gap-xs">
+          {[28, 29, 30, 1, 2, 3, 4].map((day) => (
+            <div className={`flex aspect-square items-center justify-center rounded-lg font-label-small text-[10px] ${
+              day === 1 ? "bg-primary text-on-primary" : "bg-surface-container-low text-on-surface-variant"
+            }`} key={day}>
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="mt-sm rounded-xl bg-surface-container-low p-sm font-label-small text-label-small text-on-surface">
+          7:00 PM · Confirmed scrim
+        </div>
+      </PreviewCard>
+
+      <PreviewCard icon="reviews" title="Post-game dashboard">
+        <div className="flex items-center justify-between rounded-xl bg-surface-container-low p-sm">
+          <div>
+            <p className="font-label-small text-[10px] text-on-surface-variant">Game 1 of 3</p>
+            <p className="font-headline-3 text-headline-3 text-on-surface">13 - 8</p>
+          </div>
+          <span className="rounded-full bg-[#e3f9e5] px-sm py-1 font-label-small text-[10px] text-[#1b5e20]">Victory</span>
+        </div>
+        <div className="mt-sm grid grid-cols-2 gap-xs">
+          <div className="h-2 rounded-full bg-primary-fixed" />
+          <div className="h-2 rounded-full bg-primary-fixed" />
+          <div className="h-2 w-2/3 rounded-full bg-primary" />
+          <div className="h-2 w-1/2 rounded-full bg-primary" />
+        </div>
+      </PreviewCard>
+
+      <PreviewCard icon="query_stats" title="Team stats">
+        <div className="grid grid-cols-3 gap-xs text-center">
+          <div className="rounded-lg bg-surface-container-low p-xs"><p className="font-headline-3 text-headline-3 text-primary">8</p><p className="font-label-small text-[10px]">Reviews</p></div>
+          <div className="rounded-lg bg-surface-container-low p-xs"><p className="font-headline-3 text-headline-3 text-primary">6W</p><p className="font-label-small text-[10px]">Record</p></div>
+          <div className="rounded-lg bg-surface-container-low p-xs"><p className="font-headline-3 text-headline-3 text-primary">75%</p><p className="font-label-small text-[10px]">Rate</p></div>
+        </div>
+        <div className="mt-sm flex h-12 items-end gap-2 rounded-lg bg-primary-fixed/50 px-sm py-xs">
+          {[30, 44, 34, 58, 50, 70].map((height, index) => (
+            <span className="flex-1 rounded-t bg-primary" key={index} style={{ height: `${height}%` }} />
+          ))}
+        </div>
+      </PreviewCard>
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +117,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setIsLoginOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -35,70 +149,142 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  function openLogin() {
+    setErrorMessage("");
+    setIsLoginOpen(true);
+  }
+
   return (
-    <main className="min-h-screen bg-background px-margin-mobile py-xl text-on-background">
-      <section className="mx-auto flex min-h-[calc(100vh-64px)] max-w-[440px] flex-col justify-center">
-        <div className="mb-xl flex items-center">
-          <MatchmakeLogo height={72} />
+    <main className="bg-[linear-gradient(180deg,#ffffff_0%,#f4f9ff_55%,#ffffff_100%)] text-on-background">
+      <header className="border-b border-outline-variant/30 bg-white/90">
+        <div className="mx-auto flex max-w-[1200px] items-center justify-between px-margin-mobile py-md md:px-lg">
+          <Link className="flex items-center gap-sm" href="/login" aria-label="Matchmake login page">
+            <MatchmakeLogo height={42} />
+          </Link>
+          <nav className="hidden items-center gap-lg font-label-bold text-label-bold text-on-surface md:flex">
+            <button className="hover:text-primary" onClick={openLogin} type="button">Login</button>
+            <Link className="rounded-lg bg-primary px-md py-sm text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
+              Get Started
+            </Link>
+          </nav>
+          <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary md:hidden" onClick={openLogin} type="button">
+            Login
+          </button>
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-[1200px] gap-xl px-margin-mobile py-xl md:grid-cols-[1fr_560px] md:px-lg md:py-[72px]">
+        <div className="flex flex-col justify-center">
+          <h1 className="max-w-[650px] font-editorial-large text-[42px] font-black leading-[1.05] text-on-surface md:text-[58px]">
+            Find better scrims.<br />
+            <span className="text-primary">Learn from every game.</span>
+          </h1>
+          <p className="mt-md max-w-[520px] font-body-main text-body-main text-on-surface-variant md:text-[18px] md:leading-7">
+            Schedule scrims, manage requests, and turn post-game screenshots into team performance dashboards.
+          </p>
+          <div className="mt-lg flex flex-col gap-sm sm:flex-row">
+            <Link className="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-xl font-label-bold text-label-bold text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
+              Get Started
+            </Link>
+            <button className="inline-flex h-12 items-center justify-center rounded-lg border border-primary bg-white px-xl font-label-bold text-label-bold text-primary" onClick={openLogin} type="button">
+              Log In
+            </button>
+          </div>
+          <p className="mt-lg flex items-center gap-sm font-label-bold text-label-bold text-on-surface-variant">
+            <MaterialSymbol className="text-[20px] text-outline" fill>shield</MaterialSymbol>
+            Built for high school, college, and amateur teams.
+          </p>
         </div>
 
-        <div className="rounded-[16px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
-          <p className="mb-xs font-label-bold text-label-bold uppercase tracking-wider text-outline">
-            Welcome Back
-          </p>
-          <h1 className="font-editorial-large text-editorial-large text-on-surface">Log in</h1>
-          <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">
-            Access your scrim board, requests, and team workspace.
-          </p>
+        <ProductPreview />
+      </section>
 
-          <form className="mt-xl flex flex-col gap-md" onSubmit={handleSubmit}>
-            <label className="flex flex-col gap-sm">
-              <span className="font-label-bold text-label-bold text-on-surface-variant">Email</span>
-              <input
-                className="h-[48px] rounded-xl border-none bg-surface-container-low px-md font-body-main text-body-main text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                required
-                type="email"
-                value={email}
-              />
-            </label>
-
-            <label className="flex flex-col gap-sm">
-              <span className="font-label-bold text-label-bold text-on-surface-variant">Password</span>
-              <input
-                className="h-[48px] rounded-xl border-none bg-surface-container-low px-md font-body-main text-body-main text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Your password"
-                required
-                type="password"
-                value={password}
-              />
-            </label>
-
-            {errorMessage && (
-              <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
-                {errorMessage}
-              </div>
-            )}
-
-            <button
-              className="mt-sm flex h-[48px] items-center justify-center rounded-xl bg-primary px-lg font-label-bold text-label-bold text-on-primary shadow-[0_4px_14px_rgba(0,88,188,0.3)] transition-colors hover:bg-on-primary-fixed-variant disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isLoading}
-              type="submit"
-            >
-              {isLoading ? "Logging in..." : "Log in"}
-            </button>
-          </form>
-
-          <p className="mt-lg text-center font-body-sub text-body-sub text-on-surface-variant">
-            New to Matchmake?{" "}
-            <Link className="font-label-bold text-primary hover:text-on-primary-fixed-variant" href="/signup">
-              Create an account
-            </Link>
-          </p>
+      <section className="border-y border-outline-variant/25 bg-white/80 px-margin-mobile py-lg md:px-lg" id="features">
+        <div className="mx-auto max-w-[1200px]">
+          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">The usual scrim problems are easy to miss.</h2>
+          <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-5">
+            {painPoints.map((item) => <FeatureTile key={item.title} {...item} />)}
+          </div>
         </div>
       </section>
+
+      <section className="px-margin-mobile pb-xl pt-lg md:px-lg" id="practice">
+        <div className="mx-auto max-w-[1200px]">
+          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">Small tools for the whole practice loop.</h2>
+          <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-6">
+            {practiceTools.map((item) => <FeatureTile key={item.title} {...item} />)}
+          </div>
+        </div>
+      </section>
+
+      {isLoginOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07162f]/45 px-margin-mobile py-lg backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="login-title">
+          <button className="absolute inset-0 cursor-default" aria-label="Close login" onClick={() => setIsLoginOpen(false)} type="button" />
+          <section className="relative w-full max-w-[440px] rounded-[18px] border border-outline-variant/30 bg-white p-lg shadow-[0_22px_70px_rgba(0,20,60,0.28)]">
+            <button
+              className="absolute right-md top-md flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+              onClick={() => setIsLoginOpen(false)}
+              type="button"
+              aria-label="Close"
+            >
+              <MaterialSymbol className="text-[20px]">close</MaterialSymbol>
+            </button>
+
+            <p className="mb-xs font-label-bold text-label-bold uppercase tracking-wider text-outline">Welcome Back</p>
+            <h1 className="font-editorial-large text-editorial-large text-on-surface" id="login-title">Log in</h1>
+            <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">
+              Access your scrim board, requests, and team workspace.
+            </p>
+
+            <form className="mt-xl flex flex-col gap-md" onSubmit={handleSubmit}>
+              <label className="flex flex-col gap-sm">
+                <span className="font-label-bold text-label-bold text-on-surface-variant">Email</span>
+                <input
+                  className="h-[48px] rounded-xl border-none bg-surface-container-low px-md font-body-main text-body-main text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  type="email"
+                  value={email}
+                />
+              </label>
+
+              <label className="flex flex-col gap-sm">
+                <span className="font-label-bold text-label-bold text-on-surface-variant">Password</span>
+                <input
+                  className="h-[48px] rounded-xl border-none bg-surface-container-low px-md font-body-main text-body-main text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Your password"
+                  required
+                  type="password"
+                  value={password}
+                />
+              </label>
+
+              {errorMessage && (
+                <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+                  {errorMessage}
+                </div>
+              )}
+
+              <button
+                className="mt-sm flex h-[48px] items-center justify-center rounded-xl bg-primary px-lg font-label-bold text-label-bold text-on-primary shadow-[0_4px_14px_rgba(0,88,188,0.3)] transition-colors hover:bg-on-primary-fixed-variant disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isLoading}
+                type="submit"
+              >
+                {isLoading ? "Logging in..." : "Log in"}
+              </button>
+            </form>
+
+            <p className="mt-lg text-center font-body-sub text-body-sub text-on-surface-variant">
+              New to Matchmake?{" "}
+              <Link className="font-label-bold text-primary hover:text-on-primary-fixed-variant" href="/signup">
+                Create an account
+              </Link>
+            </p>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

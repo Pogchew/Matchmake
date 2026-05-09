@@ -318,9 +318,6 @@ function ScrimCard({ scrim }) {
         <span className="bg-primary-fixed text-on-primary-fixed font-label-small text-label-small px-2 py-1 rounded-full">
           {scrim.game}
         </span>
-        <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full">
-          {scrim.region}
-        </span>
         <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full flex items-center gap-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: scrim.rankColor }} />
           {scrim.rank}

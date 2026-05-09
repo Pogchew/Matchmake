@@ -236,6 +236,119 @@ function getTopComfortPickRate(entries) {
   return topThreeAppearances / totalAppearances;
 }
 
+function normalizeNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(String(value).replace(/,/g, "").replace("%", ""));
+  return Number.isFinite(number) ? number : null;
+}
+
+function getRowNumber(row, keys) {
+  for (const key of keys) {
+    const value = normalizeNumber(row?.[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function getCharacterMetricSpecs(gameTitle) {
+  const kda = [
+    { key: "kills", label: "K", keys: ["kills", "k"], decimals: 1 },
+    { key: "deaths", label: "D", keys: ["deaths", "d"], decimals: 1 },
+    { key: "assists", label: "A", keys: ["assists", "a"], decimals: 1 },
+  ];
+
+  return {
+    "League of Legends": [
+      ...kda,
+      { key: "gold", label: "Gold", keys: ["gold"], decimals: 0 },
+      { key: "damage", label: "Damage", keys: ["damage_to_champions", "damage"], decimals: 0 },
+    ],
+    Valorant: [
+      ...kda,
+      { key: "combat_score", label: "Combat", keys: ["avg_combat_score", "acs"], decimals: 0 },
+      { key: "econ", label: "Econ", keys: ["econ_rating"], decimals: 0 },
+    ],
+    "Marvel Rivals": [
+      ...kda,
+      { key: "final_hits", label: "Final", keys: ["final_hits"], decimals: 1 },
+      { key: "damage", label: "Damage", keys: ["damage"], decimals: 0 },
+      { key: "healing", label: "Healing", keys: ["healing"], decimals: 0 },
+    ],
+    "Honor of Kings": [
+      ...kda,
+      { key: "gold", label: "Gold", keys: ["gold"], decimals: 0 },
+      { key: "damage", label: "Damage", keys: ["damage"], decimals: 0 },
+    ],
+    HOK: [
+      ...kda,
+      { key: "gold", label: "Gold", keys: ["gold"], decimals: 0 },
+      { key: "damage", label: "Damage", keys: ["damage"], decimals: 0 },
+    ],
+    "Overwatch 2": [
+      { key: "eliminations", label: "Elims", keys: ["eliminations", "kills"], decimals: 1 },
+      { key: "deaths", label: "D", keys: ["deaths"], decimals: 1 },
+      { key: "assists", label: "A", keys: ["assists"], decimals: 1 },
+      { key: "damage", label: "Damage", keys: ["damage"], decimals: 0 },
+      { key: "healing", label: "Healing", keys: ["healing"], decimals: 0 },
+    ],
+  }[gameTitle] || [];
+}
+
+function addCharacterPerformance(map, row, outcome, gameTitle) {
+  const name = extractCharacterName(row, gameTitle);
+  if (!name) return;
+
+  const current = map.get(name) || {
+    name,
+    games: 0,
+    wins: 0,
+    losses: 0,
+    metricTotals: {},
+    metricCounts: {},
+  };
+
+  current.games += 1;
+  if (outcome === "win") current.wins += 1;
+  if (outcome === "loss") current.losses += 1;
+
+  for (const spec of getCharacterMetricSpecs(gameTitle)) {
+    const value = getRowNumber(row, spec.keys);
+    if (value === null) continue;
+    current.metricTotals[spec.key] = (current.metricTotals[spec.key] || 0) + value;
+    current.metricCounts[spec.key] = (current.metricCounts[spec.key] || 0) + 1;
+  }
+
+  map.set(name, current);
+}
+
+function finalizeCharacterPerformance(map, gameTitle) {
+  const specs = getCharacterMetricSpecs(gameTitle);
+
+  return [...map.values()]
+    .map((entry) => ({
+      name: entry.name,
+      games: entry.games,
+      wins: entry.wins,
+      losses: entry.losses,
+      win_rate: getWinRate(entry.wins, entry.losses),
+      small_sample: entry.games < 2,
+      metrics: specs
+        .map((spec) => {
+          const count = entry.metricCounts[spec.key] || 0;
+          return {
+            key: spec.key,
+            label: spec.label,
+            value: count ? entry.metricTotals[spec.key] / count : null,
+            decimals: spec.decimals,
+          };
+        })
+        .filter((metric) => metric.value !== null),
+    }))
+    .filter((entry) => entry.metrics.length > 0)
+    .sort((first, second) => second.games - first.games || first.name.localeCompare(second.name))
+    .slice(0, 6);
+}
+
 export function aggregateCharacterAnalytics(reviews = [], gameTitle = "") {
   const label = getCharacterLabelForGame(gameTitle);
   const comfortTitle = getCharacterComfortTitleForGame(gameTitle);
@@ -254,12 +367,14 @@ export function aggregateCharacterAnalytics(reviews = [], gameTitle = "") {
       mostUsedComp: null,
       bestPerformingComp: null,
       comfortPickRate: null,
+      characterPerformance: [],
     };
   }
 
   const ourCharacters = new Map();
   const enemyCharacters = new Map();
   const comps = new Map();
+  const characterPerformance = new Map();
   let reviewsWithOurPicks = 0;
   let reviewsWithEnemyPicks = 0;
 
@@ -275,6 +390,7 @@ export function aggregateCharacterAnalytics(reviews = [], gameTitle = "") {
 
     ourNames.forEach((name) => addCharacterUse(ourCharacters, name, outcome));
     enemyNames.forEach((name) => addCharacterUse(enemyCharacters, name, outcome));
+    ourRows.forEach((row) => addCharacterPerformance(characterPerformance, row, outcome, gameTitle));
 
     const comp = buildCompKey(ourRows, gameTitle);
     if (comp) addCompUse(comps, comp, outcome);
@@ -299,5 +415,6 @@ export function aggregateCharacterAnalytics(reviews = [], gameTitle = "") {
     mostUsedComp: compStats[0] || null,
     bestPerformingComp,
     comfortPickRate: getTopComfortPickRate(ourTopCharacters),
+    characterPerformance: finalizeCharacterPerformance(characterPerformance, gameTitle),
   };
 }

@@ -2931,9 +2931,47 @@ function CharacterTile({ game, row, index }) {
     setImageFailed(false);
   }, [imagePath]);
 
+  if (isCompactSix) {
+    const compactStats = getCompactSixCardStats(game, row);
+
+    return (
+      <div className="grid w-full grid-cols-[58px_minmax(0,1fr)_minmax(112px,auto)] items-center gap-sm rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-sm shadow-[0_8px_22px_rgba(0,0,0,0.04)]">
+        <div className="relative h-14 w-14 overflow-hidden rounded-xl bg-gradient-to-b from-[#ecf2ff] to-[#dfe7f7]">
+          {showImage ? (
+            <img
+              alt={pick}
+              className="absolute inset-0 h-full w-full object-cover"
+              onError={() => setImageFailed(true)}
+              src={imagePath}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center px-xs text-center font-label-bold text-[10px] text-on-surface">
+              {pick || "—"}
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-label-bold text-label-bold text-on-surface">{row.player_name || "Player TBD"}</p>
+          <p className="truncate font-label-small text-label-small text-on-surface-variant">{pick || `${config.pickLabel} TBD`}</p>
+          {subtitle && subtitle !== config.pickLabel && (
+            <p className="truncate font-label-small text-[10px] text-outline">{subtitle}</p>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-xs">
+          {compactStats.map((item) => (
+            <div className="rounded-lg bg-surface-container-low px-xs py-1 text-right" key={item.label}>
+              <p className="font-label-small text-[9px] uppercase tracking-wide text-outline">{item.label}</p>
+              <p className="font-label-bold text-[11px] text-on-surface">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-lowest shadow-[0_8px_22px_rgba(0,0,0,0.04)]">
-      <div className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-b from-[#ecf2ff] to-[#dfe7f7] px-md text-center ${isCompactSix ? "h-24" : "h-36"}`}>
+      <div className="relative flex h-36 items-center justify-center overflow-hidden bg-gradient-to-b from-[#ecf2ff] to-[#dfe7f7] px-md text-center">
         {showImage && (
           <img
             alt={pick}
@@ -2952,17 +2990,35 @@ function CharacterTile({ game, row, index }) {
           </span>
         ) : (
           <div className="relative z-10 rounded-xl px-sm py-xs">
-            <p className={`${isCompactSix ? "font-label-bold text-label-bold" : "font-headline-2 text-headline-2"} text-on-surface`}>{pick || (isCompactSix ? "—" : `${config.pickLabel} TBD`)}</p>
-            {!isCompactSix && <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{subtitle || "Role TBD"}</p>}
+            <p className="font-headline-2 text-headline-2 text-on-surface">{pick || `${config.pickLabel} TBD`}</p>
+            <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{subtitle || "Role TBD"}</p>
           </div>
         )}
       </div>
-      <div className={isCompactSix ? "p-sm" : "p-md"}>
+      <div className="p-md">
         <p className="font-label-bold text-label-bold text-on-surface">{row.player_name || "Player TBD"}</p>
-        <p className={`mt-xs font-label-small text-label-small text-on-surface-variant ${isCompactSix ? "line-clamp-2" : ""}`}>{stat}</p>
+        <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{stat}</p>
       </div>
     </div>
   );
+}
+
+function getCompactSixCardStats(game, row) {
+  if (game === "Deadlock") {
+    return [
+      { label: "KDA", value: formatStatValue(row, "kda") },
+      { label: "Souls", value: formatLargeStat(row.souls) },
+      { label: "DMG", value: formatLargeStat(row.player_damage) },
+      { label: "Heal", value: formatLargeStat(row.healing) },
+    ];
+  }
+
+  return [
+    { label: "KDA", value: formatStatValue(row, "kda") },
+    { label: "Final", value: formatLargeStat(row.final_hits) },
+    { label: "DMG", value: formatLargeStat(row.damage) },
+    { label: "Heal", value: formatLargeStat(row.healing) },
+  ];
 }
 
 function formatStatValue(row, key) {
@@ -2993,7 +3049,7 @@ function CompositionSection({ accent = "bg-primary", game, opponentName, rows, t
         </h2>
         {opponentName && <span className="font-label-small text-label-small uppercase tracking-wider text-on-surface-variant">{opponentName}</span>}
       </div>
-      <div className={isCompactSix ? "grid grid-cols-2 gap-sm md:grid-cols-3" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
+      <div className={isCompactSix ? "grid grid-cols-1 gap-sm lg:grid-cols-2" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
         {rows.map((row, index) => <CharacterTile game={game} index={index} key={`${row.player_name}-${index}`} row={row} />)}
       </div>
     </section>

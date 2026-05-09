@@ -369,7 +369,7 @@ export default function OrgPage() {
                   <MaterialSymbol className="text-primary">event_upcoming</MaterialSymbol>
                   Upcoming Scrims
                 </h3>
-                <div className="flex flex-col gap-sm">
+                <div className="flex max-h-[560px] flex-col gap-sm overflow-y-auto pr-xs">
                   {upcomingScrims.length === 0 ? (
                     <EmptyState
                       icon="event_busy"

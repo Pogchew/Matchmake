@@ -1967,6 +1967,51 @@ function CharacterTopList({ gameTitle, items = [], label, title }) {
   );
 }
 
+function formatCharacterMetricValue(metric) {
+  if (!Number.isFinite(metric?.value)) return "—";
+  const decimals = metric.decimals ?? 1;
+  return formatDeepStatValue(Number(metric.value.toFixed(decimals)));
+}
+
+function CharacterPerformancePanel({ analytics, gameTitle }) {
+  const items = analytics?.characterPerformance || [];
+  if (!items.length) return null;
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm">
+        <h4 className="font-headline-3 text-headline-3 text-on-surface">{analytics.label} Stats</h4>
+        <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
+          Average screenshot stats by {analytics.label.toLowerCase()} across saved reviews.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
+        {items.map((item) => (
+          <div className="rounded-xl bg-surface-container-lowest p-sm" key={item.name}>
+            <div className="flex items-center gap-sm">
+              <PickAvatar gameTitle={gameTitle} name={item.name} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-label-bold text-label-bold text-on-surface">{item.name}</p>
+                <p className="font-label-small text-label-small text-on-surface-variant">
+                  {item.games} {item.games === 1 ? "review" : "reviews"} · {item.small_sample ? "Small sample" : `${formatRatioPercent(item.win_rate)} win rate`}
+                </p>
+              </div>
+            </div>
+            <div className="mt-sm grid grid-cols-3 gap-xs sm:grid-cols-5">
+              {item.metrics.slice(0, 5).map((metric) => (
+                <div className="rounded-lg bg-surface-container-low px-xs py-1 text-center" key={metric.key}>
+                  <p className="font-label-small text-[9px] uppercase tracking-wide text-outline">{metric.label}</p>
+                  <p className="font-label-bold text-[11px] text-on-surface">{formatCharacterMetricValue(metric)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function pluralCharacterLabel(label = "Character") {
   if (label === "Hero") return "Heroes";
   return `${label}s`;
@@ -1996,6 +2041,7 @@ function CharacterComfortPanel({ analytics, gameTitle }) {
         </div>
       ) : (
         <div className="grid gap-sm">
+          <CharacterPerformancePanel analytics={analytics} gameTitle={gameTitle} />
           <div className="grid grid-cols-1 gap-sm md:grid-cols-2 xl:grid-cols-3">
             <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostUsedCharacter} label={`Most Used ${analytics.label}`} />
             <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.bestPerformingCharacter} label={`Best Performing ${analytics.label}`} />
