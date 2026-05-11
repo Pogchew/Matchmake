@@ -6,7 +6,7 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 export default function ChatPage() {
   return (
     <div className="bg-background text-on-background min-h-screen flex flex-col">
-      <header className="bg-white/80 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] border-b border-slate-200/50 flex justify-between items-center w-full px-5 h-14">
+      <header className="bg-surface/85 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.10)] border-b border-outline-variant/50 flex justify-between items-center w-full px-5 h-14">
         <Link
           href="/requests"
           className="text-primary hover:bg-surface-container transition-colors active:scale-95 p-2 -ml-2 rounded-full flex items-center justify-center"

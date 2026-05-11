@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MaterialSymbol from "@/components/MaterialSymbol";
-import { getRanksForGame } from "@/lib/game-options";
+import { getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
 
 // ─── helpers (mirrored from page.js) ────────────────────────────────────────
 
@@ -364,7 +364,7 @@ export default function ScrimDetailPage() {
     opponentMin && opponentMax
       ? `${opponentMin} – ${opponentMax}`
       : opponentMin ?? opponentMax ?? "Open";
-  const region = postingTeam?.region ?? "Region TBD";
+  const region = normalizeTeamLocation(postingTeam?.region) || "Location TBD";
   const rating = Number(postingTeam?.scrimgg_rating ?? 0).toFixed(1);
   const dateTime = formatDateTime(scrim?.scheduled_at);
   const gamesCount = formatGamesCount(scrim?.games_count);
@@ -857,7 +857,7 @@ export default function ScrimDetailPage() {
   return (
     <div className="bg-background text-on-background min-h-screen">
       {/* TopAppBar */}
-      <header className="bg-white/80 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex justify-between items-center w-full px-5 h-14">
+      <header className="bg-surface/85 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.10)] flex justify-between items-center w-full px-5 h-14">
         <Link
           href="/"
           className="text-primary hover:bg-surface-container transition-colors active:scale-95 w-10 h-10 flex items-center justify-center rounded-full"
@@ -1263,7 +1263,7 @@ export default function ScrimDetailPage() {
               <DetailRow icon="format_list_numbered" label="Games"   value={gamesCount} />
               <DetailRow icon="military_tech"  label="Posting Rank"  value={rank} />
               <DetailRow icon="swap_vert"      label="Opponent Rank" value={rankRange} />
-              <DetailRow icon="public"         label="Region"        value={region} />
+              <DetailRow icon="public"         label="Location"      value={region} />
               <DetailRow
                 icon="star"
                 label="Matchmake Rating"

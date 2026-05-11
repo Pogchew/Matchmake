@@ -27,7 +27,7 @@ const practiceTools = [
 
 function PreviewCard({ children, className = "", icon, title }) {
   return (
-    <div className={`rounded-[14px] border border-outline-variant/35 bg-white/92 p-md shadow-[0_8px_24px_rgba(15,35,70,0.06)] ${className}`}>
+    <div className={`rounded-[14px] border border-outline-variant/35 bg-surface-container-lowest/95 p-md shadow-[0_8px_24px_rgba(15,35,70,0.06)] ${className}`}>
       <div className="mb-sm flex items-center gap-xs">
         <MaterialSymbol className="text-[22px] text-primary">{icon}</MaterialSymbol>
         <h3 className="font-label-bold text-label-bold text-on-surface">{title}</h3>
@@ -39,7 +39,7 @@ function PreviewCard({ children, className = "", icon, title }) {
 
 function FeatureTile({ body, icon, title }) {
   return (
-    <div className="flex min-h-[118px] flex-col items-center justify-center rounded-[12px] border border-outline-variant/35 bg-white px-md py-md text-center shadow-[0_8px_24px_rgba(15,35,70,0.03)]">
+    <div className="flex min-h-[118px] flex-col items-center justify-center rounded-[12px] border border-outline-variant/35 bg-surface-container-lowest px-md py-md text-center shadow-[0_8px_24px_rgba(15,35,70,0.03)]">
       <MaterialSymbol className="mb-xs text-[32px] text-primary">{icon}</MaterialSymbol>
       <h3 className="font-label-bold text-label-bold text-on-surface">{title}</h3>
       {body && <p className="mt-1 max-w-[150px] font-label-small text-[11px] leading-4 text-on-surface-variant">{body}</p>}
@@ -49,7 +49,7 @@ function FeatureTile({ body, icon, title }) {
 
 function ProductPreview() {
   return (
-    <div className="grid gap-sm rounded-[22px] border border-outline-variant/30 bg-white/60 p-sm shadow-[0_18px_50px_rgba(0,48,110,0.10)] backdrop-blur md:grid-cols-2">
+    <div className="grid gap-sm rounded-[22px] border border-outline-variant/30 bg-surface-container-lowest/70 p-sm shadow-[0_18px_50px_rgba(0,48,110,0.10)] backdrop-blur md:grid-cols-2">
       <PreviewCard icon="hub" title="Scrim Board">
         <div className="grid gap-xs">
           <div className="rounded-xl bg-surface-container-low p-sm">
@@ -155,8 +155,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="bg-[linear-gradient(180deg,#ffffff_0%,#f4f9ff_55%,#ffffff_100%)] text-on-background">
-      <header className="border-b border-outline-variant/30 bg-white/90">
+    <main className="bg-background text-on-background">
+      <header className="border-b border-outline-variant/30 bg-surface/90">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-margin-mobile py-md md:px-lg">
           <Link className="flex items-center gap-sm" href="/login" aria-label="Matchmake login page">
             <MatchmakeLogo height={42} />
@@ -186,7 +186,7 @@ export default function LoginPage() {
             <Link className="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-xl font-label-bold text-label-bold text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
               Get Started
             </Link>
-            <button className="inline-flex h-12 items-center justify-center rounded-lg border border-primary bg-white px-xl font-label-bold text-label-bold text-primary" onClick={openLogin} type="button">
+            <button className="inline-flex h-12 items-center justify-center rounded-lg border border-primary bg-surface-container-lowest px-xl font-label-bold text-label-bold text-primary" onClick={openLogin} type="button">
               Log In
             </button>
           </div>
@@ -199,7 +199,7 @@ export default function LoginPage() {
         <ProductPreview />
       </section>
 
-      <section className="border-y border-outline-variant/25 bg-white/80 px-margin-mobile py-lg md:px-lg" id="features">
+      <section className="border-y border-outline-variant/25 bg-surface-container-lowest/80 px-margin-mobile py-lg md:px-lg" id="features">
         <div className="mx-auto max-w-[1200px]">
           <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">The usual scrim problems are easy to miss.</h2>
           <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-5">
@@ -220,7 +220,7 @@ export default function LoginPage() {
       {isLoginOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07162f]/45 px-margin-mobile py-lg backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="login-title">
           <button className="absolute inset-0 cursor-default" aria-label="Close login" onClick={() => setIsLoginOpen(false)} type="button" />
-          <section className="relative w-full max-w-[440px] rounded-[18px] border border-outline-variant/30 bg-white p-lg shadow-[0_22px_70px_rgba(0,20,60,0.28)]">
+          <section className="relative w-full max-w-[440px] rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_22px_70px_rgba(0,20,60,0.28)]">
             <button
               className="absolute right-md top-md flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
               onClick={() => setIsLoginOpen(false)}

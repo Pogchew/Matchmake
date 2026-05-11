@@ -15,7 +15,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="md:hidden bg-white/90 backdrop-blur-lg fixed bottom-0 w-full rounded-t-2xl border-t border-surface-container shadow-[0_-4px_20px_0_rgba(0,0,0,0.04)] z-30 flex justify-around items-center px-4 pt-3 pb-6">
+    <nav className="md:hidden bg-surface/90 backdrop-blur-lg fixed bottom-0 w-full rounded-t-2xl border-t border-surface-container shadow-[0_-4px_20px_0_rgba(0,0,0,0.14)] z-30 flex justify-around items-center px-4 pt-3 pb-6">
       {navItems.map((item) => {
         const isActive =
           item.href === "/"

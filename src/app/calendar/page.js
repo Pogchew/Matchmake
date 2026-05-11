@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { normalizeTeamLocation } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 const MONTHS = [
@@ -78,12 +79,12 @@ function buildCalendarEventSummary(scrim) {
 
 function buildCalendarEventDescription(scrim) {
   const rank = formatRankRange(scrim);
-  const region = scrim.posting_team?.region || scrim.matched_team?.region || "Region TBD";
+  const region = normalizeTeamLocation(scrim.posting_team?.region || scrim.matched_team?.region) || "Location TBD";
   return [
     `Game: ${scrim.game_title || "Game TBD"}`,
     `Status: ${scrim.status || "scheduled"}`,
     `Looking for: ${rank}`,
-    `Region: ${region}`,
+    `Location: ${region}`,
     `Matchmake: ${typeof window !== "undefined" ? `${window.location.origin}/scrims/${scrim.id}` : ""}`,
   ].join("\\n");
 }
@@ -704,7 +705,7 @@ export default function CalendarPage() {
                     const matchedTeam = scrim.matched_team;
                     const statusStyles = getStatusStyles(scrim.status);
                     const opponentLabel = matchedTeam?.name || "Awaiting opponent";
-                    const region = postingTeam?.region || matchedTeam?.region || "Region TBD";
+                    const region = normalizeTeamLocation(postingTeam?.region || matchedTeam?.region) || "Location TBD";
 
                     return (
                       <Link

@@ -12,6 +12,19 @@ export const GAME_OPTIONS = [
 
 export const MODE_OPTIONS = ["6v6", "5v5", "3v3", "2v2", "1v1"];
 
+export const TEAM_LOCATION_OPTIONS = ["West Coast", "Mid-West", "East Coast"];
+
+export function normalizeTeamLocation(value = "") {
+  const normalizedValue = value.toLowerCase().trim();
+
+  if (!normalizedValue) return "";
+  if (normalizedValue.includes("west")) return "West Coast";
+  if (normalizedValue.includes("central") || normalizedValue.includes("mid")) return "Mid-West";
+  if (normalizedValue.includes("east")) return "East Coast";
+
+  return value;
+}
+
 export const GAME_RANKS = {
   Valorant: ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"],
   "Counter-Strike 2": [

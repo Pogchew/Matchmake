@@ -6,11 +6,18 @@ import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import LandingPage from "@/components/LandingPage";
 import MaterialSymbol from "@/components/MaterialSymbol";
-import { GAME_OPTIONS, getDefaultRankForGame, getRanksForGame } from "@/lib/game-options";
+import {
+  GAME_OPTIONS,
+  TEAM_LOCATION_OPTIONS,
+  getDefaultRankForGame,
+  getRanksForGame,
+  normalizeTeamLocation,
+} from "@/lib/game-options";
 
 function createInitialPostForm() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
+  const opponentRanks = getRanksForGame("Valorant");
 
   return {
     teamId: "",
@@ -19,9 +26,9 @@ function createInitialPostForm() {
     startTime: "19:00",
     games: "3 Games",
     rankRange: getDefaultRankForGame("Valorant"),
-    opponentRankMin: getDefaultRankForGame("Valorant"),
-    opponentRankMax: getDefaultRankForGame("Valorant"),
-    server: "NA-East",
+    opponentRankMin: opponentRanks[0],
+    opponentRankMax: opponentRanks[opponentRanks.length - 1],
+    server: "East Coast",
     notes: "Looking for BO3 on Ascent/Haven.",
   };
 }
@@ -100,6 +107,28 @@ function getRankRangeLabel(filters, ranks) {
   const maxRank = ranks[filters.rankMaxIndex] || ranks[ranks.length - 1];
   const isAllRanks = filters.rankMinIndex === 0 && filters.rankMaxIndex === ranks.length - 1;
   return isAllRanks ? "Any rank matchup" : `${minRank} - ${maxRank}`;
+}
+
+function getRankWindowForGame(gameTitle) {
+  const ranks = getRanksForGame(gameTitle);
+  return {
+    min: ranks[0],
+    max: ranks[ranks.length - 1],
+  };
+}
+
+function getPostRankWindowLabel(minRank, maxRank, ranks) {
+  if (!ranks.length) return "Choose a game";
+
+  const minIndex = getRankIndex(minRank, ranks);
+  const maxIndex = getRankIndex(maxRank, ranks);
+  const selectedMin = minIndex === -1 ? 0 : Math.min(minIndex, maxIndex === -1 ? ranks.length - 1 : maxIndex);
+  const selectedMax = maxIndex === -1 ? ranks.length - 1 : Math.max(maxIndex, minIndex === -1 ? 0 : minIndex);
+
+  if (selectedMin === 0 && selectedMax === ranks.length - 1) return "Any rank";
+  if (selectedMin === selectedMax) return ranks[selectedMin];
+
+  return `${ranks[selectedMin]} - ${ranks[selectedMax]}`;
 }
 
 function scrimMatchesRankRange(scrimRequest, filters, ranks) {
@@ -266,7 +295,12 @@ function groupScrimsByDate(scrimRequests) {
 function normalizeScrimRequest(scrimRequest) {
   const postingTeam = scrimRequest.posting_team || scrimRequest.teams;
   const organization = postingTeam?.organization || postingTeam?.organizations;
-  const opponentRank = scrimRequest.opponent_rank_min || scrimRequest.opponent_rank_max || "Open";
+  const gameRanks = getRanksForGame(scrimRequest.game_title);
+  const opponentRank = getPostRankWindowLabel(
+    scrimRequest.opponent_rank_min,
+    scrimRequest.opponent_rank_max,
+    gameRanks
+  ) || "Open";
 
   return {
     id: scrimRequest.id,
@@ -274,7 +308,7 @@ function normalizeScrimRequest(scrimRequest) {
     team: postingTeam?.name || "Unknown Team",
     org: organization?.name || "Independent",
     game: scrimRequest.game_title,
-    region: postingTeam?.region || "Region TBD",
+    region: normalizeTeamLocation(postingTeam?.region) || "Location TBD",
     rank: scrimRequest.team_rank || postingTeam?.rank_tier || "Rank TBD",
     rankColor: getRankColor(scrimRequest.team_rank || postingTeam?.rank_tier),
     opponentRank,
@@ -602,6 +636,124 @@ function RankRangeFilter({ filters, onChange, ranks }) {
   );
 }
 
+function OpponentRankRangePicker({ gameTitle, maxRank, minRank, onChange }) {
+  const ranks = getRanksForGame(gameTitle);
+  const sliderMax = Math.max(ranks.length - 1, 0);
+  const minIndex = getRankIndex(minRank, ranks);
+  const maxIndex = getRankIndex(maxRank, ranks);
+  const selectedMin = minIndex === -1 ? 0 : Math.min(minIndex, maxIndex === -1 ? sliderMax : maxIndex);
+  const selectedMax = maxIndex === -1 ? sliderMax : Math.max(maxIndex, minIndex === -1 ? 0 : minIndex);
+  const sliderMinPercent = sliderMax ? (selectedMin / sliderMax) * 100 : 0;
+  const sliderMaxPercent = sliderMax ? (selectedMax / sliderMax) * 100 : 100;
+
+  function updateRange(nextMinIndex, nextMaxIndex) {
+    const nextMin = Math.min(nextMinIndex, nextMaxIndex);
+    const nextMax = Math.max(nextMinIndex, nextMaxIndex);
+
+    onChange({
+      opponentRankMin: ranks[nextMin] || ranks[0],
+      opponentRankMax: ranks[nextMax] || ranks[sliderMax],
+    });
+  }
+
+  function handleMinChange(event) {
+    updateRange(Math.min(Number(event.target.value), selectedMax), selectedMax);
+  }
+
+  function handleMaxChange(event) {
+    updateRange(selectedMin, Math.max(Number(event.target.value), selectedMin));
+  }
+
+  return (
+    <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-md py-md shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+      <div className="flex flex-col gap-xs sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
+            Opponent Rank Window
+          </p>
+          <h3 className="mt-1 font-headline-3 text-headline-3 text-on-surface">
+            {getPostRankWindowLabel(ranks[selectedMin], ranks[selectedMax], ranks)}
+          </h3>
+          <p className="mt-1 font-label-small text-label-small text-outline">
+            Set the rank range you are willing to play against.
+          </p>
+        </div>
+
+        <button
+          className="self-start rounded-full px-sm py-xs font-label-small text-label-small text-primary hover:bg-primary-fixed"
+          onClick={() => updateRange(0, sliderMax)}
+          type="button"
+        >
+          Any rank
+        </button>
+      </div>
+
+      <div className="mt-md rounded-xl bg-surface-container-low px-md py-sm">
+        <div className="relative pb-lg pt-md">
+          <div className="absolute left-0 right-0 top-[22px] h-2 rounded-full bg-surface-container-high" />
+          <div
+            className="absolute top-[22px] h-2 rounded-full bg-primary"
+            style={{
+              left: `${sliderMinPercent}%`,
+              right: `${100 - sliderMaxPercent}%`,
+            }}
+          />
+          <input
+            aria-label="Minimum opponent rank"
+            className="rank-range-slider absolute left-0 top-0 w-full"
+            max={sliderMax}
+            min={0}
+            onChange={handleMinChange}
+            type="range"
+            value={selectedMin}
+          />
+          <input
+            aria-label="Maximum opponent rank"
+            className="rank-range-slider absolute left-0 top-0 w-full"
+            max={sliderMax}
+            min={0}
+            onChange={handleMaxChange}
+            type="range"
+            value={selectedMax}
+          />
+        </div>
+
+        <div className="mt-xs flex items-start justify-between gap-xs overflow-x-auto pb-xs scrollbar-hide">
+          {ranks.map((rank, index) => {
+            const selected = index >= selectedMin && index <= selectedMax;
+
+            return (
+              <button
+                className={`flex min-w-[56px] flex-col items-center gap-1 rounded-lg px-1.5 py-1 text-center font-label-small text-[11px] leading-tight transition-colors ${
+                  selected ? "bg-primary-fixed text-on-primary-fixed" : "text-outline hover:bg-surface-container"
+                }`}
+                key={rank}
+                onClick={() => updateRange(index, index)}
+                type="button"
+              >
+                <span className={`h-2 w-2 rounded-full ${selected ? "bg-primary" : "bg-outline-variant"}`} />
+                <span className="max-w-[70px] whitespace-normal break-words">{rank}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between gap-sm font-label-small text-label-small text-on-surface">
+          <div className="min-w-0">
+            <span className="text-outline">Lowest</span>
+            <strong className="ml-xs">{ranks[selectedMin]}</strong>
+          </div>
+          <div className="h-px flex-1 bg-outline-variant" />
+          <div className="min-w-0 text-right">
+            <span className="text-outline">Highest</span>
+            <strong className="ml-xs">{ranks[selectedMax]}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function parseScheduledAt(dateValue, timeValue) {
   const timeMatch = timeValue.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
   const scheduledAt = new Date(`${dateValue}T00:00:00`);
@@ -628,6 +780,7 @@ function PostScrimModal({
   isLoadingTeams,
   onChange,
   onClose,
+  onRankWindowChange,
   onSubmit,
   postError,
   teams,
@@ -728,30 +881,19 @@ function PostScrimModal({
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <Field label="Opponent Rank Min">
-                <SelectField icon="military_tech" name="opponentRankMin" onChange={onChange} value={form.opponentRankMin}>
-                  {getRanksForGame(form.gameTitle).map((rank) => (
-                    <option key={rank}>{rank}</option>
-                  ))}
-                </SelectField>
-              </Field>
-              <Field label="Opponent Rank Max">
-                <SelectField icon="military_tech" name="opponentRankMax" onChange={onChange} value={form.opponentRankMax}>
-                  {getRanksForGame(form.gameTitle).map((rank) => (
-                    <option key={rank}>{rank}</option>
-                  ))}
-                </SelectField>
-              </Field>
-            </div>
+            <OpponentRankRangePicker
+              gameTitle={form.gameTitle}
+              maxRank={form.opponentRankMax}
+              minRank={form.opponentRankMin}
+              onChange={onRankWindowChange}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <Field label="Server">
+              <Field label="Team Location">
                 <SelectField icon="public" name="server" onChange={onChange} value={form.server}>
-                  <option>NA-East</option>
-                  <option>NA-West</option>
-                  <option>NA-Central</option>
-                  <option>EU-West</option>
+                  {TEAM_LOCATION_OPTIONS.map((location) => (
+                    <option key={location}>{location}</option>
+                  ))}
                 </SelectField>
               </Field>
             </div>
@@ -1120,18 +1262,21 @@ function ScrimBoardPage() {
           ...(() => {
             const preferredTeam = teams.find((team) => team.game_title === currentForm.gameTitle) || teams[0];
             const selectedTeam = teams.find((team) => team.id === currentForm.teamId) || preferredTeam;
+            const rankWindow = getRankWindowForGame(selectedTeam.game_title);
+            const ranks = getRanksForGame(selectedTeam.game_title);
+            const currentMinIndex = getRankIndex(currentForm.opponentRankMin, ranks);
+            const currentMaxIndex = getRankIndex(currentForm.opponentRankMax, ranks);
+            const hasCurrentWindow = currentMinIndex !== -1 && currentMaxIndex !== -1;
+            const normalizedMinIndex = hasCurrentWindow ? Math.min(currentMinIndex, currentMaxIndex) : 0;
+            const normalizedMaxIndex = hasCurrentWindow ? Math.max(currentMinIndex, currentMaxIndex) : ranks.length - 1;
 
             return {
               teamId: selectedTeam.id,
               gameTitle: selectedTeam.game_title,
               rankRange: selectedTeam.rank_tier || getDefaultRankForGame(selectedTeam.game_title),
-              opponentRankMin: getRanksForGame(selectedTeam.game_title).includes(currentForm.opponentRankMin)
-                ? currentForm.opponentRankMin
-                : getDefaultRankForGame(selectedTeam.game_title),
-              opponentRankMax: getRanksForGame(selectedTeam.game_title).includes(currentForm.opponentRankMax)
-                ? currentForm.opponentRankMax
-                : getDefaultRankForGame(selectedTeam.game_title),
-              server: selectedTeam.region || currentForm.server,
+              opponentRankMin: hasCurrentWindow ? ranks[normalizedMinIndex] : rankWindow.min,
+              opponentRankMax: hasCurrentWindow ? ranks[normalizedMaxIndex] : rankWindow.max,
+              server: normalizeTeamLocation(selectedTeam.region) || currentForm.server,
             };
           })(),
         }));
@@ -1151,6 +1296,8 @@ function ScrimBoardPage() {
   function handlePostFormChange(event) {
     const { name, value } = event.target;
     const selectedTeam = name === "teamId" ? postingTeams.find((team) => team.id === value) : null;
+    const gameRankWindow = name === "gameTitle" ? getRankWindowForGame(value) : null;
+    const selectedTeamRankWindow = selectedTeam ? getRankWindowForGame(selectedTeam.game_title) : null;
 
     setPostForm((currentForm) => ({
       ...currentForm,
@@ -1158,17 +1305,17 @@ function ScrimBoardPage() {
       ...(name === "gameTitle"
         ? {
             rankRange: getDefaultRankForGame(value),
-            opponentRankMin: getDefaultRankForGame(value),
-            opponentRankMax: getDefaultRankForGame(value),
+            opponentRankMin: gameRankWindow.min,
+            opponentRankMax: gameRankWindow.max,
           }
         : {}),
       ...(selectedTeam
         ? {
             gameTitle: selectedTeam.game_title,
             rankRange: selectedTeam.rank_tier || getDefaultRankForGame(selectedTeam.game_title),
-            opponentRankMin: getDefaultRankForGame(selectedTeam.game_title),
-            opponentRankMax: getDefaultRankForGame(selectedTeam.game_title),
-            server: selectedTeam.region || currentForm.server,
+            opponentRankMin: selectedTeamRankWindow.min,
+            opponentRankMax: selectedTeamRankWindow.max,
+            server: normalizeTeamLocation(selectedTeam.region) || currentForm.server,
           }
         : {}),
     }));
@@ -1197,6 +1344,13 @@ function ScrimBoardPage() {
   function handleRankRangeChange(nextRange) {
     setBoardFilters((currentFilters) => ({
       ...currentFilters,
+      ...nextRange,
+    }));
+  }
+
+  function handlePostRankWindowChange(nextRange) {
+    setPostForm((currentForm) => ({
+      ...currentForm,
       ...nextRange,
     }));
   }
@@ -1260,8 +1414,14 @@ function ScrimBoardPage() {
         return;
       }
 
-      const opponentRankMin = postForm.opponentRankMin || postForm.rankRange;
-      const opponentRankMax = postForm.opponentRankMax || postForm.opponentRankMin || postForm.rankRange;
+      const postRanks = getRanksForGame(gameTitle);
+      const fallbackWindow = getRankWindowForGame(gameTitle);
+      const minRankIndex = getRankIndex(postForm.opponentRankMin, postRanks);
+      const maxRankIndex = getRankIndex(postForm.opponentRankMax, postRanks);
+      const selectedMinIndex = minRankIndex === -1 ? 0 : Math.min(minRankIndex, maxRankIndex === -1 ? postRanks.length - 1 : maxRankIndex);
+      const selectedMaxIndex = maxRankIndex === -1 ? postRanks.length - 1 : Math.max(maxRankIndex, minRankIndex === -1 ? 0 : minRankIndex);
+      const opponentRankMin = postRanks[selectedMinIndex] || fallbackWindow.min || postForm.rankRange;
+      const opponentRankMax = postRanks[selectedMaxIndex] || fallbackWindow.max || opponentRankMin;
       const expiresAt = getScrimEndAt(scheduledAt).toISOString();
 
       const payload = {
@@ -1332,7 +1492,7 @@ function ScrimBoardPage() {
             <input
               className="w-full bg-surface-container-high border-none rounded-lg py-sm pl-xl pr-sm font-body-sub text-body-sub text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-colors h-[44px]"
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search teams, orgs, or regions..."
+              placeholder="Search teams, orgs, or locations..."
               type="text"
               value={searchQuery}
             />
@@ -1428,6 +1588,7 @@ function ScrimBoardPage() {
         isLoadingTeams={isLoadingTeams}
         onChange={handlePostFormChange}
         onClose={() => setIsPostModalOpen(false)}
+        onRankWindowChange={handlePostRankWindowChange}
         onSubmit={submitPost}
         postError={postError}
         teams={postingTeams}

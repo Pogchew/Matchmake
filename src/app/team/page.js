@@ -7,9 +7,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import ThemeToggle from "@/components/ThemeToggle";
 import { aggregateCharacterAnalytics } from "@/lib/dashboard/character-analytics";
 import { supabase } from "@/lib/supabase";
-import { getDefaultRankForGame, getDisplayModeForTeam, getRanksForGame } from "@/lib/game-options";
+import { getDefaultRankForGame, getDisplayModeForTeam, getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
 
 const SCRIM_DURATION_HOURS = 3;
 const STATS_TIMELINE_OPTIONS = [
@@ -127,7 +128,7 @@ function EmptyState({ icon, title, body, action }) {
 function StatusBadge({ status }) {
   const styles = {
     open: "bg-primary-fixed text-on-primary-fixed",
-    pending: "bg-[#fff0c2] text-[#755400]",
+    pending: "bg-tertiary-fixed text-on-tertiary-fixed",
     confirmed: "bg-[#E3F9E5] text-[#1B5E20]",
     completed: "bg-surface-container-high text-on-surface-variant",
     cancelled: "bg-error-container text-on-error-container",
@@ -353,11 +354,19 @@ function TeamPageContent() {
       return;
     }
 
-    const { data: orgData, error: orgError } = await supabase
+    let { data: orgData, error: orgError } = await supabase
       .from("organizations")
-      .select("id, name, type, verified_flag, region")
+      .select("id, name, type, verified_flag, region, logo_url")
       .eq("id", profile.org_id)
       .maybeSingle();
+
+    if (orgError?.code === "42703" || orgError?.code === "PGRST204" || orgError?.message?.includes("logo_url")) {
+      ({ data: orgData, error: orgError } = await supabase
+        .from("organizations")
+        .select("id, name, type, verified_flag, region")
+        .eq("id", profile.org_id)
+        .maybeSingle());
+    }
 
     if (orgError) {
       console.error("Failed to load org for team page", orgError);
@@ -613,8 +622,6 @@ function TeamPageContent() {
     router.replace("/org");
   }
 
-  const teamInitials = getInitials(selectedTeam?.name || "Team");
-
   return (
     <TeamPageShell>
         {loading ? (
@@ -647,16 +654,13 @@ function TeamPageContent() {
         ) : (
           <>
             <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-lg mb-lg flex flex-col md:flex-row items-start md:items-center gap-md">
-              <div className="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center shrink-0 border-4 border-surface-container-lowest shadow-sm">
-                <span className="font-editorial-large text-editorial-large text-primary">{teamInitials}</span>
-              </div>
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-sm mb-xs">
                   <h1 className="font-headline-1 text-on-surface">{selectedTeam.name}</h1>
                   {organization?.verified_flag && <MaterialSymbol className="text-primary text-[20px]" fill>verified</MaterialSymbol>}
                 </div>
                 <p className="font-body-sub text-on-surface-variant mb-md">
-                  {organization?.name || "Your organization"} • {selectedTeam.region || "Region not set"}
+                  {organization?.name || "Your organization"} • {normalizeTeamLocation(selectedTeam.region) || "Location not set"}
                 </p>
                 <div className="flex flex-wrap gap-sm">
                   <span className="bg-primary-fixed text-on-primary-fixed font-label-small px-3 py-1 rounded-full">{selectedTeam.game_title}</span>
@@ -852,7 +856,7 @@ function TeamPageContent() {
 function TeamPageShell({ children }) {
   return (
     <>
-      <header className="bg-white/80 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
+      <header className="bg-surface/85 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
         <div className="flex items-center gap-3">
           <Link
             href="/org"
@@ -884,12 +888,15 @@ function TeamPageShell({ children }) {
           ))}
         </nav>
 
-        <Link
-          className="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95"
-          href="/team/new"
-        >
-          <MaterialSymbol>add</MaterialSymbol>
-        </Link>
+        <div className="flex items-center gap-sm">
+          <ThemeToggle />
+          <Link
+            className="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95"
+            href="/team/new"
+          >
+            <MaterialSymbol>add</MaterialSymbol>
+          </Link>
+        </div>
       </header>
 
       <main className="pt-6 pb-[100px] md:pb-xl px-margin-mobile md:px-xl max-w-[1200px] mx-auto min-h-screen">

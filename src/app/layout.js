@@ -6,9 +6,24 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
+  const themeScript = `
+    (function() {
+      try {
+        var storedTheme = window.localStorage.getItem("matchmake-theme");
+        var theme = storedTheme === "dark" || storedTheme === "light"
+          ? storedTheme
+          : "light";
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        document.documentElement.classList.toggle("light", theme !== "dark");
+        document.documentElement.style.colorScheme = theme;
+      } catch (error) {}
+    })();
+  `;
+
   return (
-    <html className="light" lang="en">
+    <html className="light" lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"

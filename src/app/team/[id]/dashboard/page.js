@@ -7,9 +7,17 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import ThemeToggle from "@/components/ThemeToggle";
 import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
+import {
+  HONOR_OF_KINGS_HERO_OPTIONS,
+  LEAGUE_CHAMPION_OPTIONS,
+  OVERWATCH_HERO_OPTIONS,
+  SSBU_CHARACTER_OPTIONS,
+  VALORANT_AGENT_OPTIONS,
+} from "@/lib/game-assets/generated-character-options";
 import { supabase } from "@/lib/supabase";
 
 const DEADLOCK_HERO_OPTIONS = Array.from(
@@ -1911,7 +1919,7 @@ export default function TeamDashboardPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-surface-variant bg-white/85 px-5 text-on-surface backdrop-blur-md">
+      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-surface-variant bg-surface/85 px-5 text-on-surface backdrop-blur-md">
         <div className="flex items-center gap-3">
           <Link className="flex h-9 w-9 items-center justify-center rounded-full text-primary hover:bg-surface-container" href={`/team?id=${id}`}>
             <MaterialSymbol>arrow_back</MaterialSymbol>
@@ -1921,12 +1929,15 @@ export default function TeamDashboardPage() {
             <p className="font-label-small text-label-small text-on-surface-variant">Post-game dashboard</p>
           </div>
         </div>
-        <nav className="hidden items-center gap-1 md:flex">
-          <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/">Scrims</Link>
-          <Link className="px-3 py-2 font-label-bold text-label-bold text-primary bg-primary-fixed rounded-lg" href="/org">Org</Link>
-          <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/requests">Requests</Link>
-          <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/calendar">Calendar</Link>
-        </nav>
+        <div className="flex items-center gap-sm">
+          <nav className="hidden items-center gap-1 md:flex">
+            <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/">Scrims</Link>
+            <Link className="px-3 py-2 font-label-bold text-label-bold text-primary bg-primary-fixed rounded-lg" href="/org">Org</Link>
+            <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/requests">Requests</Link>
+            <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/calendar">Calendar</Link>
+          </nav>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="min-h-screen bg-background px-margin-mobile py-lg pb-28 md:px-xl">
@@ -2741,7 +2752,7 @@ function MiniComparisonBar({ label, ours, percent = false, theirs }) {
     : gap > 0
       ? "bg-primary-fixed text-primary"
       : gap < 0
-        ? "bg-[#fde4e4] text-[#b3261e]"
+        ? "bg-error-container text-on-error-container"
         : "bg-surface-container text-on-surface-variant";
   const gapLabel = gap === null
     ? "—"
@@ -2766,7 +2777,7 @@ function MiniComparisonBar({ label, ours, percent = false, theirs }) {
           </p>
         </div>
       </div>
-      <div className="overflow-hidden rounded-full bg-[#f4cccc]">
+      <div className="overflow-hidden rounded-full bg-error-container">
         <div className="h-2 rounded-full bg-primary" style={{ width: ourWidth }} />
       </div>
     </div>
@@ -3163,7 +3174,7 @@ function ComparisonMetricCard({ helper, icon, label, left, leftLabel, right, rig
         </div>
       </div>
 
-      <div className="mt-md overflow-hidden rounded-full bg-[#f4cccc]">
+      <div className="mt-md overflow-hidden rounded-full bg-error-container">
         <div className="h-4 rounded-full bg-primary transition-all" style={{ width: `${Math.max(6, Math.min(94, leftPercent))}%` }} />
       </div>
       <div className="mt-xs flex justify-between font-label-small text-label-small text-on-surface-variant">
@@ -3199,8 +3210,8 @@ function PerformanceTable({ game = "Valorant", rows }) {
               const isOpponent = usesTeamTint && (row.team_key === "team_2" || index >= expectedTeamSize);
               const rowTone = usesTeamTint
                 ? isOpponent
-                  ? "border-l-4 border-l-[#d12b2b] bg-[#fff1f1] hover:bg-[#ffe7e7]"
-                  : "border-l-4 border-l-primary bg-[#eef5ff] hover:bg-[#e4efff]"
+                  ? "border-l-4 border-l-[#d12b2b] bg-error-container/55 hover:bg-error-container/75"
+                  : "border-l-4 border-l-primary bg-primary-fixed/65 hover:bg-primary-fixed/85"
                 : "border-t border-outline-variant/15";
               const statTone = usesTeamTint && isOpponent ? "text-[#b3261e]" : "text-primary";
 
@@ -3344,18 +3355,53 @@ function ReviewEditor({
   );
 }
 
+function getCharacterOptionsForGame(game) {
+  if (game === "League of Legends") return LEAGUE_CHAMPION_OPTIONS;
+  if (game === "Valorant") return VALORANT_AGENT_OPTIONS;
+  if (game === "Marvel Rivals") return MARVEL_RIVALS_HERO_OPTIONS;
+  if (game === "Deadlock") return DEADLOCK_HERO_OPTIONS;
+  if (game === "Overwatch" || game === "Overwatch 2") return OVERWATCH_HERO_OPTIONS;
+  if (game === "SSBU") return SSBU_CHARACTER_OPTIONS;
+  if (game === "Honor of Kings" || game === "HOK") return HONOR_OF_KINGS_HERO_OPTIONS;
+  return [];
+}
+
+function getCurrentCharacterValue(row, pickField, game) {
+  if (game === "Marvel Rivals" || game === "Honor of Kings" || game === "HOK") {
+    return row.hero_confirmed || row[pickField] || row.hero || "";
+  }
+
+  return row[pickField] || "";
+}
+
+function CharacterSelect({ game, onChange, options, pickField, row }) {
+  const value = getCurrentCharacterValue(row, pickField, game);
+  const normalizedOptions = Array.from(new Set([value, ...options].filter(Boolean)))
+    .sort((first, second) => first.localeCompare(second));
+  const config = getDashboardConfig(game);
+
+  return (
+    <select
+      className={smallInputClass()}
+      onChange={(event) => onChange(event.target.value)}
+      value={value}
+    >
+      <option value="">Select {config.pickLabel.toLowerCase()}</option>
+      {normalizedOptions.map((option) => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
+  );
+}
+
 function EditableRows({ game, rows, side, title, updateComp }) {
   const config = getDashboardConfig(game);
   const pickField = config.pickField;
   const statFields = config.editFields;
   const canEditRole = game === "League of Legends";
-  const usesHeroDropdown = game === "Marvel Rivals" || game === "Deadlock";
+  const characterOptions = getCharacterOptionsForGame(game);
+  const usesCharacterDropdown = characterOptions.length > 0;
   const showsHeroReviewHint = game === "Honor of Kings" || game === "HOK";
-  const heroOptions = game === "Deadlock"
-    ? DEADLOCK_HERO_OPTIONS
-    : game === "Marvel Rivals"
-      ? MARVEL_RIVALS_HERO_OPTIONS
-      : [];
   const gridClass = getReviewEditorGridClass(canEditRole, statFields.length);
   const columnLabels = [
     "Player",
@@ -3388,17 +3434,18 @@ function EditableRows({ game, rows, side, title, updateComp }) {
                 ))}
               </select>
             )}
-            {usesHeroDropdown ? (
+            {usesCharacterDropdown ? (
               <div className="grid gap-1">
-                <select
-                  className={smallInputClass()}
-                  onChange={(event) => {
-                    const selectedHero = event.target.value;
-                    updateComp(side, index, pickField, selectedHero);
-                    updateComp(side, index, "hero_confirmed", selectedHero);
-                    updateComp(side, index, "needs_manual_review", false);
-                    updateComp(side, index, "needs_hero_review", false);
-                    if (game === "Marvel Rivals" && selectedHero !== row.hero_asset_match) {
+                <CharacterSelect
+                  game={game}
+                  onChange={(selectedCharacter) => {
+                    updateComp(side, index, pickField, selectedCharacter);
+                    if (pickField === "hero") {
+                      updateComp(side, index, "hero_confirmed", selectedCharacter);
+                      updateComp(side, index, "needs_manual_review", false);
+                      updateComp(side, index, "needs_hero_review", false);
+                    }
+                    if (game === "Marvel Rivals" && selectedCharacter !== row.hero_asset_match) {
                       updateComp(side, index, "hero_id", "");
                       updateComp(side, index, "costume_name", "");
                       updateComp(side, index, "costume_id", "");
@@ -3406,13 +3453,10 @@ function EditableRows({ game, rows, side, title, updateComp }) {
                       updateComp(side, index, "matched_asset_src", "");
                     }
                   }}
-                  value={row.hero_confirmed || row[pickField] || ""}
-                >
-                  <option value="">Select hero</option>
-                  {heroOptions.map((hero) => (
-                    <option key={hero} value={hero}>{hero}</option>
-                  ))}
-                </select>
+                  options={characterOptions}
+                  pickField={pickField}
+                  row={row}
+                />
                 {row.hero_asset_match && (
                   <span className="truncate font-label-small text-[10px] text-on-surface-variant">
                     Matched: {row.hero_asset_match}{row.costume_name ? ` / ${row.costume_name}` : ""} · {Math.round(Number(row.asset_confidence || row.hero_asset_confidence || 0) * 100)}%

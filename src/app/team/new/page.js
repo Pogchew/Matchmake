@@ -6,7 +6,7 @@ import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
-import { GAME_OPTIONS, getDefaultModeForGame, getDefaultRankForGame, getModesForGame, getRanksForGame } from "@/lib/game-options";
+import { GAME_OPTIONS, TEAM_LOCATION_OPTIONS, getDefaultModeForGame, getDefaultRankForGame, getModesForGame, getRanksForGame } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 const initialForm = {
@@ -14,7 +14,7 @@ const initialForm = {
   gameTitle: "Valorant",
   mode: "5v5",
   rankTier: getDefaultRankForGame("Valorant"),
-  region: "NA-East",
+  region: "East Coast",
   rosterNames: "",
 };
 
@@ -241,13 +241,11 @@ export default function NewTeamPage() {
               </select>
             </Field>
 
-            <Field label="Region">
+            <Field label="Team location">
               <select className={inputClassName()} name="region" onChange={handleChange} value={form.region}>
-                <option>NA-East</option>
-                <option>NA-West</option>
-                <option>NA-Central</option>
-                <option>EU-West</option>
-                <option>EU-East</option>
+                {TEAM_LOCATION_OPTIONS.map((location) => (
+                  <option key={location}>{location}</option>
+                ))}
               </select>
             </Field>
           </div>

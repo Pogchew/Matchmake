@@ -187,7 +187,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-on-background">
       {/* Top nav */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-white/70 border-b border-outline-variant/30">
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-surface/80 border-b border-outline-variant/30">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between px-margin-mobile md:px-lg h-16">
           <MatchmakeLogo height={48} />
           <nav className="flex items-center gap-2">
@@ -480,7 +480,7 @@ export default function LandingPage() {
           <button
             type="button"
             onClick={() => jumpTo("signup")}
-            className="bg-on-primary text-primary font-label-bold text-label-bold px-6 py-3 rounded-full hover:bg-white/90 active:scale-95 transition-all shadow-[0_8px_24px_rgba(0,0,0,0.12)] whitespace-nowrap"
+            className="bg-on-primary text-primary font-label-bold text-label-bold px-6 py-3 rounded-full hover:bg-on-primary/90 active:scale-95 transition-all shadow-[0_8px_24px_rgba(0,0,0,0.12)] whitespace-nowrap"
           >
             {"Get started — it's free"}
           </button>

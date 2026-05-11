@@ -5,12 +5,13 @@ import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
+import { TEAM_LOCATION_OPTIONS } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 const initialForm = {
   name: "",
   type: "amateur",
-  region: "NA-East",
+  region: "East Coast",
 };
 
 function Field({ label, children }) {
@@ -171,13 +172,11 @@ export default function NewOrgPage() {
               </select>
             </Field>
 
-            <Field label="Region">
+            <Field label="Organization location">
               <select className={inputClassName()} name="region" onChange={handleChange} value={form.region}>
-                <option>NA-East</option>
-                <option>NA-West</option>
-                <option>NA-Central</option>
-                <option>EU-West</option>
-                <option>EU-East</option>
+                {TEAM_LOCATION_OPTIONS.map((location) => (
+                  <option key={location}>{location}</option>
+                ))}
               </select>
             </Field>
           </div>

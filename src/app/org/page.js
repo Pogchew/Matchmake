@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
-import { getDisplayModeForTeam } from "@/lib/game-options";
+import { getDisplayModeForTeam, normalizeTeamLocation } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 function formatOrgType(type) {
@@ -49,6 +49,10 @@ function getScrimCounts(scrims) {
 
 function getTeamScrims(scrims, teamId) {
   return scrims.filter((scrim) => scrim.posting_team_id === teamId);
+}
+
+function isMissingOrgLogoError(error) {
+  return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("logo_url");
 }
 
 function EmptyState({ icon, title, body, action }) {
@@ -122,7 +126,7 @@ function TeamProgramRow({ scrims, team }) {
       </div>
       <ProgramRowPill label="Mode" value={getDisplayModeForTeam(team)} />
       <ProgramRowPill label="Rank" value={team.rank_tier || "TBD"} />
-      <ProgramRowPill label="Region" value={team.region || "Not set"} />
+      <ProgramRowPill label="Location" value={normalizeTeamLocation(team.region) || "Not set"} />
       <ProgramRowPill label="Open" value={counts.open || 0} />
       <ProgramRowPill label="Pending" value={counts.pending || 0} />
       <div className="flex items-center justify-between gap-sm md:justify-end">
@@ -160,6 +164,7 @@ function LoadingState() {
 
 export default function OrgPage() {
   const router = useRouter();
+  const logoInputRef = useRef(null);
   const [organization, setOrganization] = useState(null);
   const [teams, setTeams] = useState([]);
   const [scrims, setScrims] = useState([]);
@@ -167,6 +172,10 @@ export default function OrgPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [setupMessage, setSetupMessage] = useState("");
   const [selectedGame, setSelectedGame] = useState("All");
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [hasLogoColumn, setHasLogoColumn] = useState(true);
+  const [logoUploadError, setLogoUploadError] = useState("");
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   useEffect(() => {
     async function fetchOrgDashboard() {
@@ -180,6 +189,8 @@ export default function OrgPage() {
         router.push("/login");
         return;
       }
+
+      setCurrentUserId(userData.user.id);
 
       const { data: profile, error: profileError } = await supabase
         .from("users")
@@ -200,11 +211,23 @@ export default function OrgPage() {
         return;
       }
 
-      const { data: orgData, error: orgError } = await supabase
+      let { data: orgData, error: orgError } = await supabase
         .from("organizations")
-        .select("id, name, type, verified_flag, region")
+        .select("id, name, type, verified_flag, region, org_admin_id, logo_url")
         .eq("id", profile.org_id)
         .single();
+
+      if (isMissingOrgLogoError(orgError)) {
+        console.warn("logo_url is missing in Supabase. Run supabase_org_logo.sql to enable organization logos.");
+        setHasLogoColumn(false);
+        ({ data: orgData, error: orgError } = await supabase
+          .from("organizations")
+          .select("id, name, type, verified_flag, region, org_admin_id")
+          .eq("id", profile.org_id)
+          .single());
+      } else {
+        setHasLogoColumn(true);
+      }
 
       if (orgError) {
         console.error("Failed to load organization", orgError);
@@ -255,12 +278,92 @@ export default function OrgPage() {
     fetchOrgDashboard();
   }, [router]);
 
+  async function handleLogoUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file || !organization?.id) return;
+
+    setLogoUploadError("");
+
+    if (!hasLogoColumn) {
+      setLogoUploadError("Run supabase_org_logo.sql before uploading organization logos.");
+      return;
+    }
+
+    if (organization.org_admin_id && organization.org_admin_id !== currentUserId) {
+      setLogoUploadError("Only the organization owner can update the organization logo.");
+      return;
+    }
+
+    if (!file.type?.startsWith("image/")) {
+      setLogoUploadError("Upload an image file for your organization logo.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoUploadError("Logo image must be under 2MB.");
+      return;
+    }
+
+    setIsUploadingLogo(true);
+
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "png";
+      const logoPath = `${organization.id}/logo-${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("org-logos")
+        .upload(logoPath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("Failed to upload organization logo", uploadError);
+        setLogoUploadError(uploadError.message || "We could not upload the logo.");
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from("org-logos").getPublicUrl(logoPath);
+      const logoUrl = publicUrlData?.publicUrl;
+
+      if (!logoUrl) {
+        setLogoUploadError("We could not create a public URL for the logo.");
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("organizations")
+        .update({
+          logo_url: logoUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", organization.id);
+
+      if (updateError) {
+        console.error("Failed to save organization logo", updateError);
+        setLogoUploadError(updateError.message || "We could not save the logo.");
+        return;
+      }
+
+      setOrganization((current) => ({
+        ...current,
+        logo_url: logoUrl,
+      }));
+    } catch (error) {
+      console.error("Failed to upload organization logo", error);
+      setLogoUploadError(error.message || "Something went wrong while uploading your logo.");
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  }
+
   const teamsById = useMemo(() => new Map(teams.map((team) => [team.id, team])), [teams]);
   const teamsByGame = useMemo(() => groupTeamsByGame(teams), [teams]);
   const activeGames = useMemo(() => Object.keys(teamsByGame).sort((a, b) => a.localeCompare(b)), [teamsByGame]);
   const visibleProgramGames = selectedGame === "All" ? activeGames : [selectedGame];
   const openScrims = scrims.filter((scrim) => scrim.status === "open").length;
   const upcomingScrims = scrims.filter((scrim) => ["open", "pending", "matched", "confirmed"].includes(scrim.status));
+  const isOrgOwner = organization?.org_admin_id ? organization.org_admin_id === currentUserId : true;
 
   if (isLoading) return <LoadingState />;
 
@@ -293,23 +396,75 @@ export default function OrgPage() {
         ) : (
           <>
             <section className="flex flex-col md:flex-row md:items-end justify-between gap-md">
-              <div>
-                <h2 className="font-label-bold text-label-bold text-outline uppercase tracking-wider mb-xs">My Organization</h2>
-                <h1 className="font-headline-1 text-headline-1 md:font-editorial-large md:text-editorial-large text-on-surface flex items-center gap-sm">
-                  {organization?.name || "Unnamed Organization"}
-                  {organization?.verified_flag && (
-                    <MaterialSymbol className="text-primary text-[22px]" fill>
-                      verified
-                    </MaterialSymbol>
+              <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-high shadow-sm">
+                  {organization?.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt={`${organization?.name || "Organization"} logo`}
+                      className="h-full w-full object-cover"
+                      src={organization.logo_url}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-primary">
+                      <MaterialSymbol className="text-[42px]" fill>
+                        shield
+                      </MaterialSymbol>
+                    </div>
                   )}
-                </h1>
-                <div className="mt-sm flex flex-wrap gap-xs">
-                  <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full">
-                    {formatOrgType(organization?.type)}
-                  </span>
-                  <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full">
-                    {organization?.region || "Region not set"}
-                  </span>
+                </div>
+                <div>
+                  <h2 className="font-label-bold text-label-bold text-outline uppercase tracking-wider mb-xs">My Organization</h2>
+                  <h1 className="font-headline-1 text-headline-1 md:font-editorial-large md:text-editorial-large text-on-surface flex items-center gap-sm">
+                    {organization?.name || "Unnamed Organization"}
+                    {organization?.verified_flag && (
+                      <MaterialSymbol className="text-primary text-[22px]" fill>
+                        verified
+                      </MaterialSymbol>
+                    )}
+                  </h1>
+                  <div className="mt-sm flex flex-wrap gap-xs">
+                    <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full">
+                      {formatOrgType(organization?.type)}
+                    </span>
+                    <span className="bg-surface-container-high text-on-surface-variant font-label-small text-label-small px-2 py-1 rounded-full">
+                      {normalizeTeamLocation(organization?.region) || "Location not set"}
+                    </span>
+                  </div>
+                  <div className="mt-sm flex flex-wrap items-center gap-sm">
+                    <input
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                      ref={logoInputRef}
+                      type="file"
+                    />
+                    {isOrgOwner ? (
+                      <button
+                        className="inline-flex items-center gap-xs rounded-lg bg-surface-variant px-md py-sm font-label-bold text-label-bold text-primary transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isUploadingLogo || !hasLogoColumn}
+                        onClick={() => logoInputRef.current?.click()}
+                        type="button"
+                      >
+                        <MaterialSymbol className="text-[18px]">upload</MaterialSymbol>
+                        {isUploadingLogo ? "Uploading..." : organization?.logo_url ? "Change Logo" : "Upload Logo"}
+                      </button>
+                    ) : (
+                      <span className="font-label-small text-label-small text-outline">
+                        Only the org owner can change the logo.
+                      </span>
+                    )}
+                    {!hasLogoColumn && (
+                      <span className="font-label-small text-label-small text-outline">
+                        Run logo SQL first
+                      </span>
+                    )}
+                  </div>
+                  {logoUploadError && (
+                    <div className="mt-sm rounded-lg bg-error-container px-sm py-xs font-label-small text-label-small text-on-error-container">
+                      {logoUploadError}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-sm">

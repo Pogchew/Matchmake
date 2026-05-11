@@ -21,7 +21,7 @@ export default function DetailPage() {
   return (
     <div className="bg-background text-on-background min-h-screen">
       {/* TopAppBar */}
-      <header className="bg-white/80 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] flex justify-between items-center w-full px-5 h-14">
+      <header className="bg-surface/85 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.10)] flex justify-between items-center w-full px-5 h-14">
         <Link
           href="/"
           className="text-primary hover:bg-surface-container transition-colors active:scale-95 w-10 h-10 flex items-center justify-center rounded-full"
@@ -135,7 +135,7 @@ export default function DetailPage() {
             {[
               { icon: "map",                   label: "Map Selection",  value: "Ascent, Bind (TBD)" },
               { icon: "format_list_numbered",  label: "Format",         value: "Best of 3" },
-              { icon: "dns",                   label: "Server",         value: "NA East" },
+              { icon: "dns",                   label: "Location",       value: "East Coast" },
               { icon: "gavel",                 label: "Ruleset",        value: "Standard VCT", last: true },
             ].map((row) => (
               <div
@@ -180,7 +180,7 @@ export default function DetailPage() {
               {[
                 { label: "Lobby Name", value: "rams_scrim" },
                 { label: "Password",   value: "1234" },
-                { label: "Region",     value: "NA East" },
+                { label: "Location",   value: "East Coast" },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between bg-surface-container-low p-md rounded-lg">
                   <span className="font-body-sub text-on-surface-variant">{row.label}</span>

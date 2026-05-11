@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { normalizeTeamLocation } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 function getInitials(name = "") {
@@ -71,7 +72,7 @@ function RequestCard({
       : request.posting_team;
   const displayOrg = displayTeam?.organization;
   const displayName = displayTeam?.name || "Unknown Team";
-  const region = request.posting_team?.region || request.matched_team?.region || "Region TBD";
+  const region = normalizeTeamLocation(request.posting_team?.region || request.matched_team?.region) || "Location TBD";
   const isAccepting = actionLoading === `accept:${request.id}`;
   const isDeclining = actionLoading === `decline:${request.id}`;
   const isCancelling = actionLoading === `cancel:${request.id}`;
