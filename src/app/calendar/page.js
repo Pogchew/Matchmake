@@ -161,6 +161,7 @@ export default function CalendarPage() {
   const [calendarFeedMessage, setCalendarFeedMessage] = useState("");
   const [calendarFeedError, setCalendarFeedError] = useState("");
   const [isUpdatingFeed, setIsUpdatingFeed] = useState(false);
+  const [isCalendarFeedConfigured, setIsCalendarFeedConfigured] = useState(true);
   const [discordLookaheadDays, setDiscordLookaheadDays] = useState(7);
   const [discordGameFilter, setDiscordGameFilter] = useState("all");
   const [discordStatusFilters, setDiscordStatusFilters] = useState(["confirmed"]);
@@ -207,13 +208,27 @@ export default function CalendarPage() {
         .single();
 
       if (orgError) {
-        console.error("Failed to load organization for calendar", orgError);
-        setErrorMessage("We could not load your organization calendar settings.");
-        setIsLoading(false);
-        return;
-      }
+        console.error("Failed to load organization calendar feed settings", orgError);
 
-      setOrganization(orgData);
+        const { data: fallbackOrgData, error: fallbackOrgError } = await supabase
+          .from("organizations")
+          .select("id, name, org_admin_id")
+          .eq("id", profile.org_id)
+          .single();
+
+        if (fallbackOrgError) {
+          console.error("Failed to load organization for calendar", fallbackOrgError);
+          setErrorMessage("We could not load your organization calendar settings.");
+          setIsLoading(false);
+          return;
+        }
+
+        setIsCalendarFeedConfigured(false);
+        setOrganization({ ...fallbackOrgData, calendar_feed_token: null });
+      } else {
+        setIsCalendarFeedConfigured(true);
+        setOrganization(orgData);
+      }
 
       const { data: teamData, error: teamsError } = await supabase
         .from("teams")
@@ -401,6 +416,10 @@ export default function CalendarPage() {
 
   const updateCalendarFeedToken = async (nextToken, successMessage) => {
     if (!organization?.id || !isOrgOwner) return;
+    if (!isCalendarFeedConfigured) {
+      setCalendarFeedError("Run supabase_calendar_feed_tokens.sql in Supabase before creating a live calendar subscription link.");
+      return;
+    }
 
     setIsUpdatingFeed(true);
     setCalendarFeedError("");
@@ -624,7 +643,7 @@ export default function CalendarPage() {
                   {!organization?.calendar_feed_token ? (
                     <button
                       className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:opacity-60"
-                      disabled={isUpdatingFeed || !isOrgOwner}
+                      disabled={isUpdatingFeed || !isOrgOwner || !isCalendarFeedConfigured}
                       onClick={enableCalendarSubscription}
                       type="button"
                     >
@@ -644,7 +663,7 @@ export default function CalendarPage() {
                       </button>
                       <button
                         className="inline-flex items-center gap-xs rounded-lg border border-outline-variant px-md py-sm font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container-high disabled:opacity-60"
-                        disabled={isUpdatingFeed || !isOrgOwner}
+                        disabled={isUpdatingFeed || !isOrgOwner || !isCalendarFeedConfigured}
                         onClick={rotateCalendarSubscription}
                         type="button"
                       >
@@ -652,7 +671,7 @@ export default function CalendarPage() {
                       </button>
                       <button
                         className="inline-flex items-center gap-xs rounded-lg border border-error/40 px-md py-sm font-label-bold text-label-bold text-error hover:bg-error-container disabled:opacity-60"
-                        disabled={isUpdatingFeed || !isOrgOwner}
+                        disabled={isUpdatingFeed || !isOrgOwner || !isCalendarFeedConfigured}
                         onClick={disableCalendarSubscription}
                         type="button"
                       >
@@ -672,6 +691,11 @@ export default function CalendarPage() {
               {!isOrgOwner && (
                 <p className="mt-sm font-label-small text-label-small text-outline">
                   Only the organization owner can create, rotate, or disable the live calendar link.
+                </p>
+              )}
+              {!isCalendarFeedConfigured && (
+                <p className="mt-sm rounded-lg bg-error-container px-sm py-2 font-label-small text-label-small text-on-error-container">
+                  Live calendar subscriptions need the SQL setup first. Run <span className="font-label-bold">supabase_calendar_feed_tokens.sql</span>, then reload this page.
                 </p>
               )}
 
