@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { buildIcsCalendar, formatRankRange } from "@/lib/calendar-ics";
 import { normalizeTeamLocation } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
@@ -16,7 +17,11 @@ const MONTHS = [
 const DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const STATUS_FILTERS = ["all", "open", "pending", "confirmed"];
 const ACTIVE_STATUSES = ["open", "pending", "confirmed"];
-const SCRIM_DURATION_HOURS = 3;
+const DISCORD_LOOKAHEAD_OPTIONS = [
+  { label: "This week", value: 7 },
+  { label: "Next 14 days", value: 14 },
+  { label: "Next 30 days", value: 30 },
+];
 
 function getDateInputValue(date = new Date()) {
   const year = date.getFullYear();
@@ -51,74 +56,14 @@ function formatScrimTime(value) {
   }).format(new Date(value));
 }
 
-function formatIcsDate(value) {
-  return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+function getScrimUrl(scrimId) {
+  if (typeof window === "undefined" || !scrimId) return "";
+  return `${window.location.origin}/scrims/${scrimId}`;
 }
 
-function escapeIcsText(value = "") {
-  return String(value)
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;");
-}
-
-function getScrimEndAt(value) {
-  const start = new Date(value);
-  if (Number.isNaN(start.getTime())) return null;
-  const end = new Date(start);
-  end.setHours(end.getHours() + SCRIM_DURATION_HOURS);
-  return end;
-}
-
-function buildCalendarEventSummary(scrim) {
-  const postingTeam = scrim.posting_team?.name || "Team TBD";
-  const matchedTeam = scrim.matched_team?.name || "Awaiting opponent";
-  return `Matchmake Scrim: ${postingTeam} vs ${matchedTeam}`;
-}
-
-function buildCalendarEventDescription(scrim) {
-  const rank = formatRankRange(scrim);
-  const region = normalizeTeamLocation(scrim.posting_team?.region || scrim.matched_team?.region) || "Location TBD";
-  return [
-    `Game: ${scrim.game_title || "Game TBD"}`,
-    `Status: ${scrim.status || "scheduled"}`,
-    `Looking for: ${rank}`,
-    `Location: ${region}`,
-    `Matchmake: ${typeof window !== "undefined" ? `${window.location.origin}/scrims/${scrim.id}` : ""}`,
-  ].join("\\n");
-}
-
-function buildIcsCalendar(scrims = []) {
-  const now = formatIcsDate(new Date());
-  const events = scrims
-    .filter((scrim) => scrim.scheduled_at)
-    .map((scrim) => {
-      const start = new Date(scrim.scheduled_at);
-      const end = getScrimEndAt(scrim.scheduled_at) || new Date(start.getTime() + SCRIM_DURATION_HOURS * 60 * 60 * 1000);
-      return [
-        "BEGIN:VEVENT",
-        `UID:matchmake-${scrim.id}@matchmake`,
-        `DTSTAMP:${now}`,
-        `DTSTART:${formatIcsDate(start)}`,
-        `DTEND:${formatIcsDate(end)}`,
-        `SUMMARY:${escapeIcsText(buildCalendarEventSummary(scrim))}`,
-        `DESCRIPTION:${escapeIcsText(buildCalendarEventDescription(scrim))}`,
-        `CATEGORIES:${escapeIcsText(scrim.game_title || "Scrim")}`,
-        "END:VEVENT",
-      ].join("\r\n");
-    });
-
-  return [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Matchmake//Scrim Calendar//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    "X-WR-CALNAME:Matchmake Scrims",
-    ...events,
-    "END:VCALENDAR",
-  ].join("\r\n");
+function getScrimChatUrl(scrimId) {
+  if (typeof window === "undefined" || !scrimId) return "";
+  return `${window.location.origin}/scrims/${scrimId}/chat`;
 }
 
 function downloadTextFile(filename, content, type = "text/calendar;charset=utf-8") {
@@ -131,15 +76,6 @@ function downloadTextFile(filename, content, type = "text/calendar;charset=utf-8
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-}
-
-function formatRankRange(scrim) {
-  if (scrim.opponent_rank_min && scrim.opponent_rank_max) {
-    if (scrim.opponent_rank_min === scrim.opponent_rank_max) return scrim.opponent_rank_min;
-    return `${scrim.opponent_rank_min} - ${scrim.opponent_rank_max}`;
-  }
-
-  return scrim.opponent_rank_min || scrim.opponent_rank_max || scrim.team_rank || "Rank TBD";
 }
 
 function getStatusStyles(status) {
@@ -209,15 +145,26 @@ export default function CalendarPage() {
   const [current, setCurrent] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(today));
   const [statusFilter, setStatusFilter] = useState("all");
+  const [organization, setOrganization] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [teams, setTeams] = useState([]);
   const [scrims, setScrims] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [isIntegrationOpen, setIsIntegrationOpen] = useState(false);
+  const [isDiscordBotOpen, setIsDiscordBotOpen] = useState(false);
+  const [isDiscordBotEnabled, setIsDiscordBotEnabled] = useState(false);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
   const [discordMessage, setDiscordMessage] = useState("");
   const [discordError, setDiscordError] = useState("");
   const [isSendingDiscord, setIsSendingDiscord] = useState(false);
+  const [calendarFeedMessage, setCalendarFeedMessage] = useState("");
+  const [calendarFeedError, setCalendarFeedError] = useState("");
+  const [isUpdatingFeed, setIsUpdatingFeed] = useState(false);
+  const [discordLookaheadDays, setDiscordLookaheadDays] = useState(7);
+  const [discordGameFilter, setDiscordGameFilter] = useState("all");
+  const [discordStatusFilters, setDiscordStatusFilters] = useState(["confirmed"]);
+  const [discordNotificationTypes, setDiscordNotificationTypes] = useState(["weekly_schedule", "game_schedule", "chat_reminders"]);
   const localTimeZoneLabel = getLocalTimeZoneLabel();
 
   useEffect(() => {
@@ -251,6 +198,23 @@ export default function CalendarPage() {
         return;
       }
 
+      setCurrentUserId(userData.user.id);
+
+      const { data: orgData, error: orgError } = await supabase
+        .from("organizations")
+        .select("id, name, org_admin_id, calendar_feed_token")
+        .eq("id", profile.org_id)
+        .single();
+
+      if (orgError) {
+        console.error("Failed to load organization for calendar", orgError);
+        setErrorMessage("We could not load your organization calendar settings.");
+        setIsLoading(false);
+        return;
+      }
+
+      setOrganization(orgData);
+
       const { data: teamData, error: teamsError } = await supabase
         .from("teams")
         .select("id, name, game_title")
@@ -279,6 +243,7 @@ export default function CalendarPage() {
         matched_team_id,
         game_title,
         scheduled_at,
+        games_count,
         team_rank,
         opponent_rank_min,
         opponent_rank_max,
@@ -342,6 +307,11 @@ export default function CalendarPage() {
   const total = firstDay + daysInMonth;
   const trailing = total % 7 === 0 ? 0 : 7 - (total % 7);
   const teamIds = useMemo(() => teams.map((team) => team.id), [teams]);
+  const isOrgOwner = Boolean(organization?.org_admin_id && organization.org_admin_id === currentUserId);
+  const calendarFeedUrl = useMemo(() => {
+    if (typeof window === "undefined" || !organization?.calendar_feed_token) return "";
+    return `${window.location.origin}/api/calendar/feed/${organization.calendar_feed_token}`;
+  }, [organization?.calendar_feed_token]);
 
   const filteredScrims = useMemo(() => (
     statusFilter === "all"
@@ -365,12 +335,22 @@ export default function CalendarPage() {
   const pendingCount = monthScrims.filter((scrim) => scrim.status === "pending").length;
   const confirmedCount = monthScrims.filter((scrim) => scrim.status === "confirmed").length;
   const upcomingExportScrims = filteredScrims.filter((scrim) => scrim.scheduled_at && new Date(scrim.scheduled_at) >= new Date());
-  const weekEnd = new Date();
-  weekEnd.setDate(weekEnd.getDate() + 7);
-  const weeklyDiscordScrims = filteredScrims.filter((scrim) => {
+  const availableDiscordGames = useMemo(() => {
+    const games = new Set(scrims.map((scrim) => scrim.game_title).filter(Boolean));
+    return Array.from(games).sort((a, b) => a.localeCompare(b));
+  }, [scrims]);
+  const discordWindowEnd = new Date();
+  discordWindowEnd.setDate(discordWindowEnd.getDate() + Number(discordLookaheadDays || 7));
+  const discordDigestScrims = scrims.filter((scrim) => {
     if (!scrim.scheduled_at) return false;
     const scheduledAt = new Date(scrim.scheduled_at);
-    return scheduledAt >= new Date() && scheduledAt <= weekEnd;
+    const statusMatches = discordStatusFilters.includes(scrim.status);
+    const gameMatches = discordGameFilter === "all" || scrim.game_title === discordGameFilter;
+    return scheduledAt >= new Date() && scheduledAt <= discordWindowEnd && statusMatches && gameMatches;
+  });
+  const discordPreviewLines = discordDigestScrims.slice(0, 4).map((scrim) => {
+    const opponent = scrim.matched_team?.name || "Awaiting opponent";
+    return `${formatScrimTime(scrim.scheduled_at)} · ${scrim.game_title} · ${scrim.posting_team?.name || "Team TBD"} vs ${opponent}`;
   });
 
   const changeMonth = (dir) => {
@@ -384,6 +364,98 @@ export default function CalendarPage() {
     const now = new Date();
     setCurrent(new Date(now.getFullYear(), now.getMonth(), 1));
     setSelectedDate(getDateInputValue(now));
+  };
+
+  const toggleDiscordStatus = (status) => {
+    setDiscordStatusFilters((currentStatuses) => {
+      if (currentStatuses.includes(status)) {
+        const nextStatuses = currentStatuses.filter((item) => item !== status);
+        return nextStatuses.length > 0 ? nextStatuses : currentStatuses;
+      }
+      return [...currentStatuses, status];
+    });
+  };
+
+  const toggleDiscordNotificationType = (type) => {
+    setDiscordNotificationTypes((currentTypes) => {
+      if (currentTypes.includes(type)) {
+        const nextTypes = currentTypes.filter((item) => item !== type);
+        return nextTypes.length > 0 ? nextTypes : currentTypes;
+      }
+      return [...currentTypes, type];
+    });
+  };
+
+  const disableDiscordWebhook = () => {
+    setDiscordWebhookUrl("");
+    setIsDiscordBotEnabled(false);
+    setDiscordError("");
+    setDiscordMessage("Discord webhook disabled for this browser session. Remove DISCORD_SCRIM_WEBHOOK_URL from Supabase secrets to stop the recurring Edge Function.");
+  };
+
+  const createCalendarFeedToken = () => {
+    const random = crypto.getRandomValues(new Uint8Array(24));
+    const token = Array.from(random, (value) => value.toString(16).padStart(2, "0")).join("");
+    return `${crypto.randomUUID()}-${token}`;
+  };
+
+  const updateCalendarFeedToken = async (nextToken, successMessage) => {
+    if (!organization?.id || !isOrgOwner) return;
+
+    setIsUpdatingFeed(true);
+    setCalendarFeedError("");
+    setCalendarFeedMessage("");
+
+    try {
+      const { data, error } = await supabase
+        .from("organizations")
+        .update({
+          calendar_feed_token: nextToken,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", organization.id)
+        .select("id, name, org_admin_id, calendar_feed_token")
+        .single();
+
+      if (error) {
+        console.error("Failed to update calendar feed token", error);
+        setCalendarFeedError(error.message || "Could not update calendar subscription.");
+        return;
+      }
+
+      setOrganization(data);
+      setCalendarFeedMessage(successMessage);
+    } catch (feedError) {
+      console.error("Failed to update calendar feed token", feedError);
+      setCalendarFeedError(feedError.message || "Could not update calendar subscription.");
+    } finally {
+      setIsUpdatingFeed(false);
+    }
+  };
+
+  const enableCalendarSubscription = () => {
+    updateCalendarFeedToken(createCalendarFeedToken(), "Live calendar subscription link created.");
+  };
+
+  const rotateCalendarSubscription = () => {
+    updateCalendarFeedToken(createCalendarFeedToken(), "Calendar subscription link rotated. Old links will stop working.");
+  };
+
+  const disableCalendarSubscription = () => {
+    updateCalendarFeedToken(null, "Calendar subscription disabled. Existing subscribed calendars will stop updating.");
+  };
+
+  const copyCalendarFeedUrl = async () => {
+    if (!calendarFeedUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(calendarFeedUrl);
+      setCalendarFeedError("");
+      setCalendarFeedMessage("Copied live calendar subscription link.");
+    } catch (copyError) {
+      console.error("Failed to copy calendar feed URL", copyError);
+      setCalendarFeedError("Could not copy the link. Select and copy it manually.");
+    }
   };
 
   const selected = new Date(`${selectedDate}T00:00:00`);
@@ -409,13 +481,16 @@ export default function CalendarPage() {
     setDiscordMessage("");
     setIsSendingDiscord(true);
 
-    const digestScrims = weeklyDiscordScrims.map((scrim) => ({
+    const digestScrims = discordDigestScrims.map((scrim) => ({
       id: scrim.id,
       scheduled_at: scrim.scheduled_at,
       game_title: scrim.game_title,
       status: scrim.status,
       postingTeamName: scrim.posting_team?.name,
       opponentName: scrim.matched_team?.name || "Awaiting opponent",
+      gamesCount: scrim.games_count,
+      scrimUrl: getScrimUrl(scrim.id),
+      chatUrl: getScrimChatUrl(scrim.id),
     }));
 
     try {
@@ -425,6 +500,12 @@ export default function CalendarPage() {
         body: JSON.stringify({
           webhookUrl: discordWebhookUrl,
           scrims: digestScrims,
+          options: {
+            lookaheadDays: discordLookaheadDays,
+            gameFilter: discordGameFilter,
+            statusFilters: discordStatusFilters,
+            notificationTypes: discordNotificationTypes,
+          },
         }),
       });
       const payload = await response.json();
@@ -433,6 +514,7 @@ export default function CalendarPage() {
         throw new Error(payload.error || "Could not send Discord digest.");
       }
 
+      setIsDiscordBotEnabled(true);
       setDiscordMessage(`Sent ${digestScrims.length} scrim ${digestScrims.length === 1 ? "event" : "events"} to Discord.`);
     } catch (error) {
       console.error("Failed to send Discord digest", error);
@@ -516,7 +598,7 @@ export default function CalendarPage() {
               <div>
                 <h2 className="font-headline-3 text-headline-3 text-on-surface">Calendar integrations</h2>
                 <p className="font-body-sub text-body-sub text-on-surface-variant">
-                  Export upcoming scrims off-platform or post this week’s schedule into Discord.
+                  Subscribe once so Google Calendar or Outlook keeps pulling your latest scrim schedule.
                 </p>
               </div>
               <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-label-small text-primary">
@@ -524,63 +606,275 @@ export default function CalendarPage() {
               </span>
             </div>
 
-            <div className="grid gap-md lg:grid-cols-3">
-              <button
-                className="flex items-center gap-sm rounded-xl border border-outline-variant/25 bg-surface-container-low p-md text-left transition-colors hover:bg-primary-fixed disabled:opacity-50"
-                disabled={upcomingExportScrims.length === 0}
-                onClick={() => exportIcs("google")}
-                type="button"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-on-primary">
-                  <MaterialSymbol>calendar_add_on</MaterialSymbol>
-                </div>
-                <div>
-                  <p className="font-label-bold text-label-bold text-on-surface">Google Calendar</p>
-                  <p className="font-label-small text-label-small text-on-surface-variant">Download an importable .ics file</p>
-                </div>
-              </button>
-
-              <button
-                className="flex items-center gap-sm rounded-xl border border-outline-variant/25 bg-surface-container-low p-md text-left transition-colors hover:bg-primary-fixed disabled:opacity-50"
-                disabled={upcomingExportScrims.length === 0}
-                onClick={() => exportIcs("outlook")}
-                type="button"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-on-primary">
-                  <MaterialSymbol>event_upcoming</MaterialSymbol>
-                </div>
-                <div>
-                  <p className="font-label-bold text-label-bold text-on-surface">Microsoft Outlook</p>
-                  <p className="font-label-small text-label-small text-on-surface-variant">Download an importable .ics file</p>
-                </div>
-              </button>
-
-              <div className="rounded-xl border border-outline-variant/25 bg-surface-container-low p-md">
-                <div className="mb-sm flex items-center gap-sm">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-tertiary text-on-primary">
-                    <MaterialSymbol>forum</MaterialSymbol>
+            <div className="rounded-xl border border-outline-variant/25 bg-surface-container-low p-md">
+              <div className="flex flex-col gap-md lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex gap-sm">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-on-primary">
+                    <MaterialSymbol>sync</MaterialSymbol>
                   </div>
                   <div>
-                    <p className="font-label-bold text-label-bold text-on-surface">Discord weekly digest</p>
-                    <p className="font-label-small text-label-small text-on-surface-variant">{weeklyDiscordScrims.length} scrims this week</p>
+                    <p className="font-label-bold text-label-bold text-on-surface">Subscribe Calendar</p>
+                    <p className="mt-1 font-label-small text-label-small text-on-surface-variant">
+                      Add this URL to Google Calendar or Outlook as a subscribed calendar. It updates from Matchmake automatically when those apps refresh external calendars.
+                    </p>
                   </div>
                 </div>
-                <input
-                  className="mb-sm w-full rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-body-sub text-body-sub text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
-                  onChange={(event) => setDiscordWebhookUrl(event.target.value)}
-                  placeholder="Discord webhook URL"
-                  type="password"
-                  value={discordWebhookUrl}
-                />
-                <button
-                  className="w-full rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:opacity-60"
-                  disabled={isSendingDiscord || !discordWebhookUrl.trim()}
-                  onClick={sendDiscordDigest}
-                  type="button"
-                >
-                  {isSendingDiscord ? "Sending..." : "Post This Week"}
-                </button>
+
+                <div className="flex shrink-0 flex-wrap gap-sm">
+                  {!organization?.calendar_feed_token ? (
+                    <button
+                      className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:opacity-60"
+                      disabled={isUpdatingFeed || !isOrgOwner}
+                      onClick={enableCalendarSubscription}
+                      type="button"
+                    >
+                      <MaterialSymbol className="text-[18px]">add_link</MaterialSymbol>
+                      {isUpdatingFeed ? "Creating..." : "Create Link"}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:opacity-60"
+                        disabled={isUpdatingFeed}
+                        onClick={copyCalendarFeedUrl}
+                        type="button"
+                      >
+                        <MaterialSymbol className="text-[18px]">content_copy</MaterialSymbol>
+                        Copy Link
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-xs rounded-lg border border-outline-variant px-md py-sm font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container-high disabled:opacity-60"
+                        disabled={isUpdatingFeed || !isOrgOwner}
+                        onClick={rotateCalendarSubscription}
+                        type="button"
+                      >
+                        Rotate
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-xs rounded-lg border border-error/40 px-md py-sm font-label-bold text-label-bold text-error hover:bg-error-container disabled:opacity-60"
+                        disabled={isUpdatingFeed || !isOrgOwner}
+                        onClick={disableCalendarSubscription}
+                        type="button"
+                      >
+                        Disable
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
+
+              {calendarFeedUrl && (
+                <div className="mt-md rounded-lg bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface-variant break-all">
+                  {calendarFeedUrl}
+                </div>
+              )}
+
+              {!isOrgOwner && (
+                <p className="mt-sm font-label-small text-label-small text-outline">
+                  Only the organization owner can create, rotate, or disable the live calendar link.
+                </p>
+              )}
+
+              {(calendarFeedMessage || calendarFeedError) && (
+                <div className={`mt-md rounded-lg px-md py-sm font-body-sub text-body-sub ${calendarFeedError ? "bg-error-container text-on-error-container" : "bg-primary-fixed text-on-primary-fixed"}`}>
+                  {calendarFeedError || calendarFeedMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-md rounded-xl border border-outline-variant/25 bg-surface-container-low overflow-hidden">
+              <button
+                className="flex w-full items-center justify-between gap-md p-md text-left transition-colors hover:bg-surface-container-high"
+                onClick={() => setIsDiscordBotOpen((open) => !open)}
+                type="button"
+              >
+                <div className="flex items-center gap-sm">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-tertiary text-on-primary">
+                    <MaterialSymbol>smart_toy</MaterialSymbol>
+                  </div>
+                  <div>
+                    <p className="font-label-bold text-label-bold text-on-surface">Discord notification bot</p>
+                    <p className="font-label-small text-label-small text-on-surface-variant">
+                      Weekly recurring schedule posts with optional chat links.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-sm">
+                  <span className={`rounded-full px-sm py-1 font-label-small text-label-small ${
+                    isDiscordBotEnabled && discordWebhookUrl.trim()
+                      ? "bg-[#E3F9E5] text-[#1B5E20]"
+                      : "bg-surface-container-high text-on-surface-variant"
+                  }`}>
+                    {isDiscordBotEnabled && discordWebhookUrl.trim() ? "Enabled" : "Disabled"}
+                  </span>
+                  <MaterialSymbol className="text-on-surface-variant">
+                    {isDiscordBotOpen ? "expand_less" : "expand_more"}
+                  </MaterialSymbol>
+                </div>
+              </button>
+
+              {isDiscordBotOpen && (
+                <div className="grid gap-md border-t border-outline-variant/25 p-md lg:grid-cols-[1fr_340px]">
+                  <div className="space-y-md">
+                    <div className="rounded-xl bg-surface-container-lowest p-md">
+                      <div className="mb-md flex items-center justify-between gap-md">
+                        <div>
+                          <p className="font-label-bold text-label-bold text-on-surface">Recurring post</p>
+                          <p className="font-label-small text-label-small text-on-surface-variant">
+                            Keep this simple: pick the schedule window, game scope, and which scrims count.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-label-small text-primary">
+                          Weekly
+                        </span>
+                      </div>
+
+                      <div className="grid gap-md md:grid-cols-3">
+                        <label className="block">
+                          <span className="mb-xs block font-label-small text-label-small text-on-surface-variant">Post window</span>
+                          <select
+                            className="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-sm py-2 font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+                            onChange={(event) => setDiscordLookaheadDays(Number(event.target.value))}
+                            value={discordLookaheadDays}
+                          >
+                            {DISCORD_LOOKAHEAD_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="mb-xs block font-label-small text-label-small text-on-surface-variant">Game</span>
+                          <select
+                            className="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-sm py-2 font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+                            onChange={(event) => setDiscordGameFilter(event.target.value)}
+                            value={discordGameFilter}
+                          >
+                            <option value="all">All games</option>
+                            {availableDiscordGames.map((game) => (
+                              <option key={game} value={game}>{game}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div>
+                          <span className="mb-xs block font-label-small text-label-small text-on-surface-variant">Include</span>
+                          <div className="flex flex-wrap gap-xs">
+                            {["pending", "confirmed"].map((status) => (
+                              <button
+                                className={`rounded-full px-3 py-1 font-label-small text-label-small capitalize transition-colors ${
+                                  discordStatusFilters.includes(status)
+                                    ? "bg-primary text-on-primary"
+                                    : "bg-surface-container-high text-on-surface-variant"
+                                }`}
+                                key={status}
+                                onClick={() => toggleDiscordStatus(status)}
+                                type="button"
+                              >
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        className={`mt-md flex w-full items-center justify-between rounded-xl border p-sm text-left transition-colors ${
+                          discordNotificationTypes.includes("chat_reminders")
+                            ? "border-primary bg-primary-fixed text-on-primary-fixed"
+                            : "border-outline-variant/25 bg-surface-container-low text-on-surface-variant"
+                        }`}
+                        onClick={() => toggleDiscordNotificationType("chat_reminders")}
+                        type="button"
+                      >
+                        <span>
+                          <span className="block font-label-bold text-label-bold">Include scrim chat links</span>
+                          <span className="block font-label-small text-label-small opacity-80">Useful for message reminders and pre-scrim coordination.</span>
+                        </span>
+                        <MaterialSymbol>{discordNotificationTypes.includes("chat_reminders") ? "toggle_on" : "toggle_off"}</MaterialSymbol>
+                      </button>
+                    </div>
+
+                    <div className="rounded-xl bg-surface-container-lowest p-md">
+                      <div className="mb-sm flex items-center justify-between gap-md">
+                        <div>
+                          <p className="font-label-bold text-label-bold text-on-surface">Preview</p>
+                          <p className="font-label-small text-label-small text-on-surface-variant">
+                            {discordDigestScrims.length} scrims match this bot setup.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-label-small text-primary">
+                          {discordDigestScrims.length} items
+                        </span>
+                      </div>
+
+                      {discordPreviewLines.length === 0 ? (
+                        <p className="rounded-lg border border-dashed border-outline-variant/30 bg-surface-container-low px-sm py-2 font-body-sub text-body-sub text-on-surface-variant">
+                          No scrims match this setup yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-sm">
+                          {discordPreviewLines.map((line) => (
+                            <div className="rounded-lg bg-surface-container-low px-sm py-2 font-label-small text-label-small text-on-surface-variant" key={line}>
+                              {line}
+                            </div>
+                          ))}
+                          {discordDigestScrims.length > discordPreviewLines.length && (
+                            <p className="font-label-small text-label-small text-outline">
+                              +{discordDigestScrims.length - discordPreviewLines.length} more in the Discord post
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <aside className="rounded-xl border border-outline-variant/25 bg-surface-container-lowest p-md">
+                    <div className="mb-md flex items-center gap-sm">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-tertiary text-on-primary">
+                        <MaterialSymbol>webhook</MaterialSymbol>
+                      </div>
+                      <div>
+                        <p className="font-label-bold text-label-bold text-on-surface">Webhook</p>
+                        <p className="font-label-small text-label-small text-on-surface-variant">Connect or disable Discord.</p>
+                      </div>
+                    </div>
+
+                    <label className="block">
+                      <span className="mb-xs block font-label-small text-label-small text-on-surface-variant">Discord webhook URL</span>
+                      <input
+                        className="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-sm py-2 font-body-sub text-body-sub text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
+                        onChange={(event) => setDiscordWebhookUrl(event.target.value)}
+                        placeholder="https://discord.com/api/webhooks/..."
+                        type="password"
+                        value={discordWebhookUrl}
+                      />
+                    </label>
+
+                    <button
+                      className="mt-md w-full rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:opacity-60"
+                      disabled={isSendingDiscord || !discordWebhookUrl.trim()}
+                      onClick={sendDiscordDigest}
+                      type="button"
+                    >
+                      {isSendingDiscord ? "Sending..." : "Post now"}
+                    </button>
+
+                    <button
+                      className="mt-sm w-full rounded-lg border border-outline-variant px-md py-sm font-label-bold text-label-bold text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50"
+                      disabled={!discordWebhookUrl.trim() && !isDiscordBotEnabled}
+                      onClick={disableDiscordWebhook}
+                      type="button"
+                    >
+                      Disable webhook
+                    </button>
+
+                    <div className="mt-md rounded-lg bg-surface-container-low px-sm py-2 font-label-small text-label-small text-on-surface-variant">
+                      For recurring posts, set this webhook as the Supabase secret <span className="font-label-bold text-on-surface">DISCORD_SCRIM_WEBHOOK_URL</span>. Removing that secret disables the scheduled bot.
+                    </div>
+                  </aside>
+                </div>
+              )}
             </div>
 
             {(discordMessage || discordError) && (

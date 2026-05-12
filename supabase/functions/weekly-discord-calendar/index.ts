@@ -22,12 +22,27 @@ type ScrimRequest = {
 };
 
 const DISCORD_MAX_DESCRIPTION = 3800;
+const DEFAULT_STATUSES = ["confirmed"];
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function parseCsvEnv(value: string | undefined | null) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getLookaheadDays() {
+  const configured = Number(Deno.env.get("DISCORD_SCRIM_LOOKAHEAD_DAYS") || 7);
+  if (!Number.isFinite(configured) || configured < 1) return 7;
+  return Math.min(configured, 30);
 }
 
 function formatDate(value: Date) {
@@ -110,6 +125,10 @@ Deno.serve(async () => {
   const discordWebhookUrl = Deno.env.get("DISCORD_SCRIM_WEBHOOK_URL");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const statusFilters = parseCsvEnv(Deno.env.get("DISCORD_SCRIM_STATUS_FILTERS"));
+  const gameFilters = parseCsvEnv(Deno.env.get("DISCORD_SCRIM_GAME_FILTERS"));
+  const lookaheadDays = getLookaheadDays();
+  const activeStatusFilters = statusFilters.length > 0 ? statusFilters : DEFAULT_STATUSES;
 
   if (!discordWebhookUrl) {
     return jsonResponse({ error: "DISCORD_SCRIM_WEBHOOK_URL is not configured." }, 500);
@@ -121,13 +140,13 @@ Deno.serve(async () => {
 
   const now = new Date();
   const nextWeek = new Date(now);
-  nextWeek.setDate(nextWeek.getDate() + 7);
+  nextWeek.setDate(nextWeek.getDate() + lookaheadDays);
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("scrim_requests")
     .select(`
       id,
@@ -156,10 +175,16 @@ Deno.serve(async () => {
         )
       )
     `)
-    .eq("status", "confirmed")
+    .in("status", activeStatusFilters)
     .gte("scheduled_at", now.toISOString())
     .lt("scheduled_at", nextWeek.toISOString())
     .order("scheduled_at", { ascending: true });
+
+  if (gameFilters.length > 0) {
+    query = query.in("game_title", gameFilters);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Failed to load weekly scrims", {
@@ -170,13 +195,19 @@ Deno.serve(async () => {
   }
 
   const scrims = (data || []) as ScrimRequest[];
-  console.log("Weekly Discord calendar scrim count", scrims.length);
+  console.log("Weekly Discord calendar scrim count", scrims.length, {
+    lookaheadDays,
+    statusFilters: activeStatusFilters,
+    gameFilters,
+  });
 
   const payload = {
     username: "Matchmake Calendar",
     embeds: [
       {
-        title: "Matchmake Weekly Scrim Schedule",
+        title: gameFilters.length === 1
+          ? `Matchmake ${gameFilters[0]} Scrim Schedule`
+          : "Matchmake Weekly Scrim Schedule",
         description: buildDiscordDescription(scrims),
         color: 0x0058bc,
         fields: [
@@ -186,7 +217,7 @@ Deno.serve(async () => {
             inline: false,
           },
         ],
-        footer: { text: "Confirmed scrims only" },
+        footer: { text: `Statuses: ${activeStatusFilters.join(", ")}${gameFilters.length ? ` · Games: ${gameFilters.join(", ")}` : ""}` },
         timestamp: now.toISOString(),
       },
     ],
@@ -216,5 +247,7 @@ Deno.serve(async () => {
     scrimCount: scrims.length,
     rangeStart: now.toISOString(),
     rangeEnd: nextWeek.toISOString(),
+    statusFilters: activeStatusFilters,
+    gameFilters,
   });
 });

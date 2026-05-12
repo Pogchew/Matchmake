@@ -1,6 +1,11 @@
 -- Matchmake weekly Discord calendar cron setup
 -- Runs the Supabase Edge Function every Monday at 9:00 AM UTC.
 --
+-- The Edge Function can be customized with Supabase secrets:
+--   DISCORD_SCRIM_LOOKAHEAD_DAYS="7"
+--   DISCORD_SCRIM_STATUS_FILTERS="confirmed,pending"
+--   DISCORD_SCRIM_GAME_FILTERS="Valorant,League of Legends"
+--
 -- Replace these placeholders before running:
 --   PROJECT_REF
 --   FUNCTION_AUTH_TOKEN

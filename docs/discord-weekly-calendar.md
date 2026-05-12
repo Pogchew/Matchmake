@@ -1,6 +1,11 @@
 # Matchmake Weekly Discord Calendar
 
-This feature posts the next 7 days of confirmed Matchmake scrims into a Discord channel once per week.
+This feature posts upcoming Matchmake scrims into a Discord channel.
+
+There are two ways to use it:
+
+- **Manual from Schedule:** open `/calendar`, choose **Export**, configure the Discord post, and send it to a webhook.
+- **Automated weekly:** deploy the Supabase Edge Function and schedule it with Supabase Cron.
 
 It uses a Supabase Edge Function:
 
@@ -30,6 +35,17 @@ Set these secrets in Supabase:
 supabase secrets set DISCORD_SCRIM_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 supabase secrets set MATCHMAKE_APP_URL="https://your-vercel-domain.vercel.app"
 ```
+
+Optional customization secrets:
+
+```bash
+supabase secrets set DISCORD_SCRIM_LOOKAHEAD_DAYS="7"
+supabase secrets set DISCORD_SCRIM_STATUS_FILTERS="confirmed,pending"
+supabase secrets set DISCORD_SCRIM_GAME_FILTERS="Valorant,League of Legends"
+```
+
+Leave `DISCORD_SCRIM_GAME_FILTERS` unset to include every game.
+Leave `DISCORD_SCRIM_STATUS_FILTERS` unset to include confirmed scrims only.
 
 Supabase Edge Functions already provide:
 
@@ -103,8 +119,9 @@ The Discord message includes:
 - Scheduled time in UTC
 - Number of games if available
 - Scrim detail link if `MATCHMAKE_APP_URL` is configured
+- Optional game/status filtering through Edge Function secrets
 
-Only scrims with:
+By default, only scrims with:
 
 ```txt
 status = confirmed
@@ -112,4 +129,28 @@ scheduled_at >= now
 scheduled_at < now + 7 days
 ```
 
-are included.
+are included. You can customize status, game, and lookahead window with the optional secrets above.
+
+## Manual Schedule Tab Discord Posts
+
+The in-app Schedule tab can send a customized Discord post without deploying Cron first.
+
+From `/calendar`:
+
+1. Select **Export**.
+2. Open **Discord notification bot**.
+3. Choose a window:
+   - This week
+   - Next 14 days
+   - Next 30 days
+4. Choose all games or one game.
+5. Choose statuses:
+   - pending
+   - confirmed
+6. Toggle scrim chat links on or off.
+7. Paste the Discord webhook URL in the side panel.
+8. Review the preview and click **Post now**.
+
+Use **Disable webhook** to clear the in-app webhook field. To stop the recurring Supabase bot, remove or rotate the `DISCORD_SCRIM_WEBHOOK_URL` secret in Supabase.
+
+The webhook URL is sent to the server route for the Discord POST and is not committed to the codebase.

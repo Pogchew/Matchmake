@@ -16,13 +16,46 @@ function formatDiscordTime(value) {
   }).format(new Date(value));
 }
 
-function buildDigestLines(scrims = []) {
-  if (!scrims.length) return ["No scheduled scrims this week."];
+function formatGamesCount(value) {
+  const count = Number(value || 0);
+  if (!Number.isFinite(count) || count <= 0) return "";
+  return ` · ${count} ${count === 1 ? "game" : "games"}`;
+}
+
+function getDigestTitle(options = {}) {
+  const gameFilter = options.gameFilter && options.gameFilter !== "all" ? `${options.gameFilter} ` : "";
+  const days = Number(options.lookaheadDays || 7);
+  return `${gameFilter}Scrim Schedule · Next ${days} Days`;
+}
+
+function shouldIncludeChat(options = {}) {
+  return Array.isArray(options.notificationTypes) && options.notificationTypes.includes("chat_reminders");
+}
+
+function buildDigestLines(scrims = [], options = {}) {
+  if (!scrims.length) return ["No scheduled scrims match these filters."];
 
   return scrims.slice(0, 20).map((scrim) => {
     const opponent = scrim.opponentName || "Awaiting opponent";
-    return `• **${formatDiscordTime(scrim.scheduled_at)}** — ${scrim.game_title || "Game TBD"}: ${scrim.postingTeamName || "Team TBD"} vs ${opponent} (${scrim.status || "scheduled"})`;
+    const gamesCount = formatGamesCount(scrim.gamesCount);
+    const scrimLink = scrim.scrimUrl ? ` · [View](${scrim.scrimUrl})` : "";
+    const chatLink = shouldIncludeChat(options) && scrim.chatUrl ? ` · [Chat](${scrim.chatUrl})` : "";
+    return `• **${formatDiscordTime(scrim.scheduled_at)}** — ${scrim.game_title || "Game TBD"}: ${scrim.postingTeamName || "Team TBD"} vs ${opponent} (${scrim.status || "scheduled"}${gamesCount})${scrimLink}${chatLink}`;
   });
+}
+
+function buildFilterFooter(options = {}) {
+  const pieces = [];
+  if (Array.isArray(options.statusFilters) && options.statusFilters.length) {
+    pieces.push(`Statuses: ${options.statusFilters.join(", ")}`);
+  }
+  if (options.gameFilter && options.gameFilter !== "all") {
+    pieces.push(`Game: ${options.gameFilter}`);
+  }
+  if (Array.isArray(options.notificationTypes) && options.notificationTypes.length) {
+    pieces.push(`Includes: ${options.notificationTypes.map((type) => type.replace(/_/g, " ")).join(", ")}`);
+  }
+  return pieces.length ? pieces.join(" · ") : "Sent from Matchmake";
 }
 
 export async function POST(request) {
@@ -30,20 +63,21 @@ export async function POST(request) {
     const body = await request.json();
     const webhookUrl = String(body.webhookUrl || "").trim();
     const scrims = Array.isArray(body.scrims) ? body.scrims : [];
+    const options = body.options && typeof body.options === "object" ? body.options : {};
 
     if (!DISCORD_WEBHOOK_PATTERN.test(webhookUrl)) {
       return NextResponse.json({ error: "Enter a valid Discord webhook URL." }, { status: 400 });
     }
 
-    const digestLines = buildDigestLines(scrims);
+    const digestLines = buildDigestLines(scrims, options);
     const payload = {
       username: "Matchmake Calendar",
       embeds: [
         {
-          title: "This Week's Scrims",
+          title: getDigestTitle(options),
           description: digestLines.join("\n"),
           color: 0x0058bc,
-          footer: { text: "Sent from Matchmake" },
+          footer: { text: buildFilterFooter(options) },
           timestamp: new Date().toISOString(),
         },
       ],

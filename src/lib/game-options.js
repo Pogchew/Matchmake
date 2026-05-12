@@ -1,5 +1,6 @@
 export const GAME_OPTIONS = [
   "Valorant",
+  "Call of Duty",
   "Counter-Strike 2",
   "League of Legends",
   "Rocket League",
@@ -10,7 +11,7 @@ export const GAME_OPTIONS = [
   "Honor of Kings",
 ];
 
-export const MODE_OPTIONS = ["6v6", "5v5", "3v3", "2v2", "1v1"];
+export const MODE_OPTIONS = ["6v6", "5v5", "4v4", "3v3", "2v2", "1v1"];
 
 export const TEAM_LOCATION_OPTIONS = ["West Coast", "Mid-West", "East Coast"];
 
@@ -27,6 +28,7 @@ export function normalizeTeamLocation(value = "") {
 
 export const GAME_RANKS = {
   Valorant: ["Iron", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ascendant", "Immortal", "Radiant"],
+  "Call of Duty": ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Crimson", "Iridescent", "Top 250"],
   "Counter-Strike 2": [
     "Silver",
     "Gold Nova",
@@ -98,6 +100,7 @@ export const GAME_RANKS = {
 
 export const DEFAULT_RANK_BY_GAME = {
   Valorant: "Diamond",
+  "Call of Duty": "Diamond",
   "Counter-Strike 2": "Master Guardian",
   "League of Legends": "Emerald",
   "Rocket League": "Champion",
@@ -119,6 +122,7 @@ export function getDefaultRankForGame(gameTitle) {
 }
 
 export function getDefaultModeForGame(gameTitle) {
+  if (gameTitle === "Call of Duty") return "4v4";
   if (gameTitle === "Rocket League") return "3v3";
   if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals" || gameTitle === "Deadlock") return "6v6";
   if (gameTitle === "SSBU") return "1v1";
@@ -126,6 +130,7 @@ export function getDefaultModeForGame(gameTitle) {
 }
 
 export function getModesForGame(gameTitle) {
+  if (gameTitle === "Call of Duty") return ["4v4"];
   if (gameTitle === "Rocket League") return ["3v3", "2v2", "1v1"];
   if (gameTitle === "Overwatch" || gameTitle === "Overwatch 2" || gameTitle === "Marvel Rivals" || gameTitle === "Deadlock") return ["6v6"];
   if (gameTitle === "SSBU") return ["1v1", "2v2", "4v4", "5v5"];

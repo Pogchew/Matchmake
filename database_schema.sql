@@ -25,6 +25,7 @@ create table if not exists public.organizations (
   org_admin_id uuid not null references public.users(id) on delete restrict,
   school_domain text,
   region text,
+  calendar_feed_token text,
   team_ids uuid[] not null default '{}',
   college_outreach_enabled boolean not null default false,
   created_at timestamptz not null default now(),
@@ -118,6 +119,9 @@ create table if not exists public.team_match_reviews (
 
 create index if not exists users_org_id_idx on public.users(org_id);
 create index if not exists organizations_org_admin_id_idx on public.organizations(org_admin_id);
+create unique index if not exists organizations_calendar_feed_token_unique_idx
+  on public.organizations(calendar_feed_token)
+  where calendar_feed_token is not null;
 create index if not exists teams_org_id_idx on public.teams(org_id);
 create index if not exists teams_game_title_region_idx on public.teams(game_title, region);
 create index if not exists scrim_requests_posting_team_id_idx on public.scrim_requests(posting_team_id);

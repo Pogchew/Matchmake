@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import MaterialSymbol from "./MaterialSymbol";
 
-const STORAGE_KEY = "matchmake-theme";
+const STORAGE_KEY = "matchmake-theme-v2";
 
 function getInitialTheme() {
   if (typeof window === "undefined") return "light";

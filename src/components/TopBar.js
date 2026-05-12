@@ -10,10 +10,10 @@ import { clearAuthSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
-  { label: "Scrims",   href: "/" },
-  { label: "Org",      href: "/org" },
-  { label: "Requests", href: "/requests" },
-  { label: "Calendar", href: "/calendar" },
+  { label: "Find Scrims", icon: "sports_esports", href: "/" },
+  { label: "My Org", icon: "corporate_fare", href: "/org" },
+  { label: "Requests", icon: "pending_actions", href: "/requests" },
+  { label: "Schedule", icon: "calendar_month", href: "/calendar" },
 ];
 
 function formatNotificationTime(value) {
@@ -238,14 +238,19 @@ export default function TopBar({ right }) {
   }
 
   return (
-    <header className="bg-surface/85 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
+    <header className="grid h-16 w-full grid-cols-[minmax(170px,1fr)_auto_minmax(170px,1fr)] items-center border-b border-surface-variant bg-surface/85 px-5 text-on-surface backdrop-blur-md sticky top-0 z-50">
       {/* Left: logo */}
-      <Link href="/" className="flex items-center active:scale-95 transition-transform" aria-label="Matchmake home">
+      <Link
+        href="/"
+        className="flex w-fit items-center rounded-xl transition-colors active:scale-95 hover:bg-surface-container"
+        aria-label="Matchmake home"
+        title="Matchmake home"
+      >
         <MatchmakeLogo height={52} />
       </Link>
 
       {/* Centre: desktop nav */}
-      <nav className="hidden md:flex items-center gap-1" aria-label="Primary navigation">
+      <nav className="hidden items-center justify-center gap-xs lg:flex" aria-label="Primary navigation">
         {navItems.map((item) => {
           const isActive =
             item.href === "/"
@@ -255,12 +260,14 @@ export default function TopBar({ right }) {
             <Link
               key={item.label}
               href={item.href}
+              title={item.label}
               className={
                 isActive
-                  ? "text-primary font-label-bold font-bold bg-primary-fixed px-3 py-2 rounded-lg"
-                  : "text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg"
+                  ? "flex h-10 items-center gap-xs rounded-xl bg-primary px-md font-label-bold text-label-bold text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.22)]"
+                  : "flex h-10 items-center gap-xs rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-md font-label-bold text-label-bold text-on-surface-variant transition-colors hover:border-primary/35 hover:bg-surface-container hover:text-primary"
               }
             >
+              <MaterialSymbol className="text-[18px]" fill={isActive}>{item.icon}</MaterialSymbol>
               {item.label}
             </Link>
           );
@@ -268,7 +275,7 @@ export default function TopBar({ right }) {
       </nav>
 
       {/* Right: slot (defaults to notifications bell) */}
-      <div className="flex items-center gap-sm">
+      <div className="flex items-center justify-end gap-sm">
         <ThemeToggle />
         {right ?? (
           <div className="relative" ref={notificationRef}>

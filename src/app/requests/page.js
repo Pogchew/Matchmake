@@ -40,6 +40,19 @@ function formatRankRange(request) {
   return request.opponent_rank_min || request.opponent_rank_max || request.team_rank || "Rank TBD";
 }
 
+const REQUEST_TABS = [
+  { id: "all", label: "All Chats", icon: "forum" },
+  { id: "inbound", label: "Needs Reply", icon: "move_to_inbox" },
+  { id: "outbound", label: "Waiting", icon: "outbox" },
+  { id: "confirmed", label: "Confirmed", icon: "check_circle" },
+];
+
+function sortBySchedule(a, b) {
+  const aTime = a.request?.scheduled_at ? new Date(a.request.scheduled_at).getTime() : Number.MAX_SAFE_INTEGER;
+  const bTime = b.request?.scheduled_at ? new Date(b.request.scheduled_at).getTime() : Number.MAX_SAFE_INTEGER;
+  return aTime - bTime;
+}
+
 function EmptyState({ title, body, action }) {
   return (
     <div className="rounded-[16px] border border-dashed border-outline-variant bg-surface-container-lowest p-lg text-center">
@@ -77,52 +90,74 @@ function RequestCard({
   const isDeclining = actionLoading === `decline:${request.id}`;
   const isCancelling = actionLoading === `cancel:${request.id}`;
   const isCompleting = actionLoading === `complete:${request.id}`;
+  const perspectiveLabel = isConfirmed
+    ? "Confirmed scrim"
+    : isInbound
+      ? "Incoming request"
+      : "Waiting for response";
+  const statusClass = isConfirmed
+    ? "bg-[#E3F9E5] text-[#1B5E20]"
+    : isInbound
+      ? "bg-tertiary-container text-on-tertiary-container"
+      : "bg-primary-fixed text-on-primary-fixed";
 
   return (
     <article className="bg-surface-container-lowest rounded-[16px] p-md border border-surface-variant shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow">
-      <div className="flex items-start gap-md mb-md">
+      <div className="flex flex-col gap-md md:flex-row md:items-start">
         <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 font-headline-3 text-on-surface-variant font-bold">
           {getInitials(displayName)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-sm mb-xs flex-wrap">
-            <h3 className="font-headline-3 text-headline-3 text-on-surface">{displayName}</h3>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-label-small text-label-small ${statusClass}`}>
+              <MaterialSymbol className="mr-1 text-[14px]">
+                {isConfirmed ? "check_circle" : isInbound ? "priority_high" : "schedule"}
+              </MaterialSymbol>
+              {perspectiveLabel}
+            </span>
             <span className="inline-flex items-center bg-primary-fixed text-on-primary-fixed-variant rounded-full px-2 py-0.5 font-label-small text-label-small">
               {request.game_title}
             </span>
           </div>
-          <p className="font-label-small text-label-small text-on-surface-variant mb-xs">
-            {displayOrg?.name || "Independent"}
+          <h3 className="font-headline-3 text-headline-3 text-on-surface">
+            {isInbound ? `${displayName} wants this scrim` : isOutbound ? `Requested ${displayName}` : displayName}
+          </h3>
+          <p className="mt-1 font-label-small text-label-small text-on-surface-variant">
+            {displayOrg?.name || "Independent"} · {formatRankRange(request)} · {region}
           </p>
-          <div className="flex items-center gap-xs text-on-surface-variant font-body-sub text-body-sub">
-            <MaterialSymbol className="text-[16px]">schedule</MaterialSymbol>
-            <span>{formatScrimTime(request.scheduled_at)}</span>
+          <div className="mt-xs flex flex-wrap items-center gap-sm text-on-surface-variant font-body-sub text-body-sub">
+            <span className="inline-flex items-center gap-xs">
+              <MaterialSymbol className="text-[16px]">schedule</MaterialSymbol>
+              {formatScrimTime(request.scheduled_at)}
+            </span>
+            <span className="inline-flex items-center gap-xs">
+              <MaterialSymbol className="text-[16px]">sports_esports</MaterialSymbol>
+              {request.posting_team?.name || "Posting Team"} vs {request.matched_team?.name || "Requesting Team"}
+            </span>
           </div>
-          <p className="mt-xs font-label-small text-label-small text-outline">
-            VS {formatRankRange(request)} · {region}
-          </p>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center gap-sm md:justify-end">
+          <Link
+            className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
+            href={`/scrims/${request.id}/chat`}
+          >
+            <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
+            Open Chat
+          </Link>
+          <Link
+            className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-4 py-2 font-label-bold text-label-bold text-on-surface-variant transition-colors hover:bg-surface-container-high"
+            href={`/scrims/${request.id}`}
+          >
+            View Scrim
+            <MaterialSymbol className="text-[16px]">arrow_forward</MaterialSymbol>
+          </Link>
         </div>
       </div>
 
-      <div className="flex w-full flex-wrap gap-sm pt-md border-t border-surface-variant items-center">
-        <span
-          className={
-            isConfirmed
-              ? "bg-[#E3F9E5] text-[#1B5E20] font-label-bold text-label-bold py-2 px-4 rounded-lg inline-flex items-center gap-xs"
-              : "bg-primary-fixed text-on-primary-fixed font-label-bold text-label-bold py-2 px-4 rounded-lg inline-flex items-center gap-xs"
-          }
-        >
-          <MaterialSymbol className="text-[16px]">
-            {isConfirmed ? "check_circle" : "schedule"}
-          </MaterialSymbol>
-          {isConfirmed
-            ? "Confirmed"
-            : isInbound
-              ? "Needs Response"
-              : "Pending Response"}
-        </span>
+      <div className="mt-md flex w-full flex-wrap gap-sm border-t border-surface-variant pt-md items-center">
         {isInbound && !isConfirmed && (
-          <div className="flex flex-wrap gap-sm">
+          <>
             <button
               className="rounded-lg bg-[#1B5E20] px-4 py-2 font-label-bold text-label-bold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={Boolean(actionLoading)}
@@ -139,7 +174,7 @@ function RequestCard({
             >
               {isDeclining ? "Declining..." : "Decline"}
             </button>
-          </div>
+          </>
         )}
         {isOutbound && !isConfirmed && (
           <button
@@ -151,44 +186,17 @@ function RequestCard({
             {isCancelling ? "Cancelling..." : "Cancel Request"}
           </button>
         )}
-        <div className="ml-auto flex flex-wrap items-center gap-sm">
-          {!isConfirmed && (
-            <Link
-              className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
-              href={`/scrims/${request.id}/chat`}
-            >
-              <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
-              Open Chat
-            </Link>
-          )}
-          {isConfirmed && (
-            <>
-              <button
-                className="inline-flex items-center gap-1 rounded-lg bg-[#1B5E20] px-4 py-2 font-label-bold text-label-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={Boolean(actionLoading)}
-                onClick={() => onComplete?.(request)}
-                type="button"
-              >
-                <MaterialSymbol className="text-[16px]" fill>flag</MaterialSymbol>
-                {isCompleting ? "Ending..." : "Mark Played"}
-              </button>
-              <Link
-                className="inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-label-bold text-label-bold text-on-primary"
-                href={`/scrims/${request.id}/chat`}
-              >
-                <MaterialSymbol className="text-[16px]" fill>chat_bubble</MaterialSymbol>
-                Open Chat
-              </Link>
-            </>
-          )}
-          <Link
-            className="text-primary font-label-bold text-label-bold flex items-center gap-1"
-            href={`/scrims/${request.id}`}
+        {isConfirmed && (
+          <button
+            className="inline-flex items-center gap-1 rounded-lg bg-[#1B5E20] px-4 py-2 font-label-bold text-label-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={Boolean(actionLoading)}
+            onClick={() => onComplete?.(request)}
+            type="button"
           >
-            View Scrim
-            <MaterialSymbol className="text-[16px]">arrow_forward</MaterialSymbol>
-          </Link>
-        </div>
+            <MaterialSymbol className="text-[16px]" fill>flag</MaterialSymbol>
+            {isCompleting ? "Ending..." : "Mark Played"}
+          </button>
+        )}
       </div>
     </article>
   );
@@ -196,7 +204,7 @@ function RequestCard({
 
 export default function RequestsPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("inbound");
+  const [activeTab, setActiveTab] = useState("all");
   const [teams, setTeams] = useState([]);
   const [inboundRequests, setInboundRequests] = useState([]);
   const [outboundRequests, setOutboundRequests] = useState([]);
@@ -348,17 +356,22 @@ export default function RequestsPage() {
   }, [fetchRequests]);
 
   const counts = useMemo(() => ({
+    all: inboundRequests.length + outboundRequests.length + confirmedScrims.length,
     inbound: inboundRequests.length,
     outbound: outboundRequests.length,
     confirmed: confirmedScrims.length,
   }), [confirmedScrims.length, inboundRequests.length, outboundRequests.length]);
 
-  const activeRequests =
-    activeTab === "inbound"
-      ? inboundRequests
-      : activeTab === "outbound"
-        ? outboundRequests
-        : confirmedScrims;
+  const requestItems = useMemo(() => {
+    const allItems = [
+      ...inboundRequests.map((request) => ({ request, perspective: "inbound" })),
+      ...outboundRequests.map((request) => ({ request, perspective: "outbound" })),
+      ...confirmedScrims.map((request) => ({ request, perspective: "confirmed" })),
+    ].sort(sortBySchedule);
+
+    if (activeTab === "all") return allItems;
+    return allItems.filter((item) => item.perspective === activeTab);
+  }, [activeTab, confirmedScrims, inboundRequests, outboundRequests]);
 
   async function updateRequestStatus(request, action) {
     const actionKey = `${action}:${request.id}`;
@@ -467,25 +480,44 @@ export default function RequestsPage() {
         <div className="mb-lg">
           <h2 className="font-headline-1 text-headline-1 text-on-surface mb-sm">Requests</h2>
           <p className="font-body-sub text-body-sub text-on-surface-variant">
-            Manage real scrim requests for your organization.
+            Review prospective scrims, answer requests, and open the chat for any active conversation.
           </p>
         </div>
 
-        <div className="bg-surface-container-low p-1 rounded-lg flex mb-xl max-w-md">
-          {["inbound", "outbound", "confirmed"].map((tab) => (
+        <section className="mb-lg grid gap-md md:grid-cols-3">
+          <div className="rounded-[16px] border border-surface-variant bg-surface-container-lowest p-md">
+            <p className="font-label-small text-label-small uppercase tracking-[0.08em] text-on-surface-variant">Needs Reply</p>
+            <p className="mt-xs font-headline-2 text-headline-2 text-on-surface">{counts.inbound}</p>
+            <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">Incoming requests waiting on your org.</p>
+          </div>
+          <div className="rounded-[16px] border border-surface-variant bg-surface-container-lowest p-md">
+            <p className="font-label-small text-label-small uppercase tracking-[0.08em] text-on-surface-variant">Waiting</p>
+            <p className="mt-xs font-headline-2 text-headline-2 text-on-surface">{counts.outbound}</p>
+            <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">Requests your teams sent to others.</p>
+          </div>
+          <div className="rounded-[16px] border border-surface-variant bg-surface-container-lowest p-md">
+            <p className="font-label-small text-label-small uppercase tracking-[0.08em] text-on-surface-variant">Confirmed</p>
+            <p className="mt-xs font-headline-2 text-headline-2 text-on-surface">{counts.confirmed}</p>
+            <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">Accepted scrims with open team chat.</p>
+          </div>
+        </section>
+
+        <div className="bg-surface-container-low p-1 rounded-lg flex mb-xl max-w-2xl overflow-x-auto">
+          {REQUEST_TABS.map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 px-4 rounded-md font-label-bold text-label-bold text-center capitalize transition-colors ${
-                activeTab === tab
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex min-w-fit flex-1 items-center justify-center gap-xs py-2 px-4 rounded-md font-label-bold text-label-bold text-center transition-colors ${
+                activeTab === tab.id
                   ? "bg-surface-container-lowest text-on-surface shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
                   : "text-on-surface-variant hover:text-on-surface"
               }`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              {counts[tab] > 0 && (
+              <MaterialSymbol className="text-[17px]">{tab.icon}</MaterialSymbol>
+              {tab.label}
+              {counts[tab.id] > 0 && (
                 <span className="ml-xs inline-flex min-w-5 justify-center rounded-full bg-primary px-1.5 text-[11px] leading-5 text-on-primary">
-                  {counts[tab]}
+                  {counts[tab.id]}
                 </span>
               )}
             </button>
@@ -525,24 +557,28 @@ export default function RequestsPage() {
               </Link>
             }
           />
-        ) : activeRequests.length === 0 ? (
+        ) : requestItems.length === 0 ? (
           <EmptyState
             title={
-              activeTab === "inbound"
+              activeTab === "all"
+                ? "No active request chats"
+                : activeTab === "inbound"
                 ? "No inbound requests"
                 : activeTab === "outbound"
                   ? "No outbound requests"
                   : "No confirmed scrims"
             }
             body={
-              activeTab === "inbound"
+              activeTab === "all"
+                ? "Potential scrim chats appear here after your teams request scrims or other teams request yours."
+                : activeTab === "inbound"
                 ? "Requests from other teams will appear here."
                 : activeTab === "outbound"
                   ? "Scrims your teams request will appear here while they wait for a response."
                   : "Confirmed scrims will appear here after they are accepted."
             }
             action={
-              activeTab === "outbound" ? (
+              activeTab === "all" || activeTab === "outbound" ? (
                 <Link
                   href="/"
                   className="inline-flex items-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary"
@@ -555,7 +591,7 @@ export default function RequestsPage() {
           />
         ) : (
           <div className="space-y-md">
-            {activeRequests.map((request) => (
+            {requestItems.map(({ request, perspective }) => (
               <RequestCard
                 actionLoading={actionLoading}
                 key={request.id}
@@ -563,7 +599,7 @@ export default function RequestsPage() {
                 onCancel={(selectedRequest) => updateRequestStatus(selectedRequest, "cancel")}
                 onComplete={(selectedRequest) => updateRequestStatus(selectedRequest, "complete")}
                 onDecline={(selectedRequest) => updateRequestStatus(selectedRequest, "decline")}
-                perspective={activeTab}
+                perspective={perspective}
                 request={request}
                 teamIds={teams.map((team) => team.id)}
               />

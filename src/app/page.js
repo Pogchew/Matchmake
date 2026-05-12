@@ -40,6 +40,7 @@ const TIME_FILTER_OPTIONS = [
 ];
 
 const SCRIM_DURATION_HOURS = 3;
+const COMPACT_BOARD_THRESHOLD = 12;
 
 function getScrimEndAt(value) {
   if (!value) return null;
@@ -406,12 +407,122 @@ function ScrimCard({ scrim }) {
   );
 }
 
+function ScrimRow({ scrim }) {
+  const actionHref = scrim.hasRequested ? `/requests?scrim=${scrim.id}` : `/scrims/${scrim.id}`;
+  const actionLabel = scrim.hasRequested ? "Sent" : scrim.isOwnListing ? "Edit" : "View";
+
+  return (
+    <article className={`grid gap-sm border-t border-outline-variant/20 px-md py-sm transition-colors first:border-t-0 hover:bg-surface-container-low md:grid-cols-[minmax(210px,1.5fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(120px,0.75fr)_auto] md:items-center ${scrim.hasRequested ? "opacity-75" : ""}`}>
+      <div className="flex min-w-0 items-center gap-sm">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-container-high font-label-bold text-label-bold text-on-surface">
+          {scrim.initials}
+        </div>
+        <div className="min-w-0">
+          <h3 className="truncate font-label-bold text-label-bold text-on-surface">
+            {scrim.team}
+            {scrim.verified && (
+              <MaterialSymbol className="ml-1 inline text-[14px] text-primary" fill>
+                verified
+              </MaterialSymbol>
+            )}
+          </h3>
+          <p className="truncate font-label-small text-label-small text-on-surface-variant">{scrim.org}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-xs md:flex-col md:items-start md:gap-0">
+        <span className="font-label-bold text-label-bold text-on-surface">{scrim.game}</span>
+        <span className="font-label-small text-label-small text-on-surface-variant">{scrim.region}</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-xs">
+        <span className="rounded-full bg-surface-container-high px-sm py-1 font-label-small text-label-small text-on-surface-variant">
+          {scrim.rank}
+        </span>
+        <span className="rounded-full bg-primary-fixed px-sm py-1 font-label-small text-label-small text-on-primary-fixed">
+          VS {scrim.opponentRank}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-xs font-label-bold text-label-bold text-on-surface-variant">
+        <MaterialSymbol className="text-[17px]">schedule</MaterialSymbol>
+        <span>{scrim.time}</span>
+        <span className="text-outline">&bull;</span>
+        <span>{scrim.games}</span>
+      </div>
+
+      <a
+        className={`inline-flex h-9 items-center justify-center rounded-full px-md font-label-bold text-label-bold active:scale-95 ${
+          scrim.hasRequested
+            ? "bg-surface-container-highest text-on-surface-variant"
+            : scrim.isOwnListing
+              ? "bg-[#1B5E20] text-white"
+              : "bg-primary text-on-primary"
+        }`}
+        href={actionHref}
+      >
+        {actionLabel}
+      </a>
+    </article>
+  );
+}
+
+function BoardViewToggle({ value, onChange, compactCount }) {
+  const options = [
+    { label: "Auto", value: "auto", icon: "auto_awesome" },
+    { label: "Cards", value: "cards", icon: "dashboard" },
+    { label: "Compact", value: "compact", icon: "view_list" },
+  ];
+
+  return (
+    <div className="flex items-center gap-xs rounded-full bg-surface-container-low p-xs">
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            className={`inline-flex h-9 items-center gap-xs rounded-full px-sm font-label-bold text-label-bold transition-colors ${
+              active
+                ? "bg-primary text-on-primary shadow-[0_4px_14px_rgba(0,88,188,0.22)]"
+                : "text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
+            }`}
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            title={option.value === "auto" ? `Auto switches to compact at ${compactCount}+ listings` : option.label}
+            type="button"
+          >
+            <MaterialSymbol className="text-[17px]" fill={active}>
+              {option.icon}
+            </MaterialSymbol>
+            <span className="hidden sm:inline">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function Field({ label, children }) {
   return (
-    <label className="flex flex-col gap-sm">
-      <span className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">{label}</span>
+    <label className="flex flex-col gap-xs">
+      <span className="font-label-small text-label-small text-on-surface-variant">{label}</span>
       {children}
     </label>
+  );
+}
+
+function FormPanel({ children, icon, title }) {
+  return (
+    <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
+      <div className="mb-sm flex items-center gap-xs">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-fixed text-primary">
+          <MaterialSymbol className="text-[18px]" fill>
+            {icon}
+          </MaterialSymbol>
+        </span>
+        <h3 className="font-label-bold text-label-bold text-on-surface">{title}</h3>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -419,12 +530,12 @@ function SelectField({ icon, children, ...props }) {
   return (
     <div className="relative">
       <select
-        className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md pr-xl appearance-none focus:ring-2 focus:ring-primary"
+        className="h-11 w-full appearance-none rounded-xl border border-transparent bg-surface-container-low px-sm pr-lg font-body-sub text-body-sub text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary"
         {...props}
       >
         {children}
       </select>
-      <MaterialSymbol className="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
+      <MaterialSymbol className="absolute right-sm top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant pointer-events-none">
         {icon}
       </MaterialSymbol>
     </div>
@@ -435,11 +546,11 @@ function TextInput({ icon, ...props }) {
   return (
     <div className="relative">
       <input
-        className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md pr-xl focus:ring-2 focus:ring-primary"
+        className="h-11 w-full rounded-xl border border-transparent bg-surface-container-low px-sm pr-lg font-body-sub text-body-sub text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary"
         type="text"
         {...props}
       />
-      <MaterialSymbol className="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
+      <MaterialSymbol className="absolute right-sm top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant pointer-events-none">
         {icon}
       </MaterialSymbol>
     </div>
@@ -665,22 +776,18 @@ function OpponentRankRangePicker({ gameTitle, maxRank, minRank, onChange }) {
   }
 
   return (
-    <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest px-md py-md shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-      <div className="flex flex-col gap-xs sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-wider">
-            Opponent Rank Window
-          </p>
-          <h3 className="mt-1 font-headline-3 text-headline-3 text-on-surface">
+    <FormPanel icon="swap_vert" title="Opponent level">
+      <div className="flex flex-col gap-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="font-headline-3 text-headline-3 text-on-surface">
             {getPostRankWindowLabel(ranks[selectedMin], ranks[selectedMax], ranks)}
-          </h3>
-          <p className="mt-1 font-label-small text-label-small text-outline">
-            Set the rank range you are willing to play against.
+          </p>
+          <p className="font-label-small text-label-small text-outline">
+            Pick the rank range you want to play against.
           </p>
         </div>
-
         <button
-          className="self-start rounded-full px-sm py-xs font-label-small text-label-small text-primary hover:bg-primary-fixed"
+          className="shrink-0 rounded-full bg-surface-container px-sm py-xs font-label-small text-label-small text-primary hover:bg-primary-fixed"
           onClick={() => updateRange(0, sliderMax)}
           type="button"
         >
@@ -688,11 +795,11 @@ function OpponentRankRangePicker({ gameTitle, maxRank, minRank, onChange }) {
         </button>
       </div>
 
-      <div className="mt-md rounded-xl bg-surface-container-low px-md py-sm">
-        <div className="relative pb-lg pt-md">
-          <div className="absolute left-0 right-0 top-[22px] h-2 rounded-full bg-surface-container-high" />
+      <div className="mt-sm rounded-xl bg-surface-container-low px-md py-xs">
+        <div className="relative h-10">
+          <div className="absolute left-0 right-0 top-[18px] h-2 rounded-full bg-surface-container-high" />
           <div
-            className="absolute top-[22px] h-2 rounded-full bg-primary"
+            className="absolute top-[18px] h-2 rounded-full bg-primary"
             style={{
               left: `${sliderMinPercent}%`,
               right: `${100 - sliderMaxPercent}%`,
@@ -717,27 +824,6 @@ function OpponentRankRangePicker({ gameTitle, maxRank, minRank, onChange }) {
             value={selectedMax}
           />
         </div>
-
-        <div className="mt-xs flex items-start justify-between gap-xs overflow-x-auto pb-xs scrollbar-hide">
-          {ranks.map((rank, index) => {
-            const selected = index >= selectedMin && index <= selectedMax;
-
-            return (
-              <button
-                className={`flex min-w-[56px] flex-col items-center gap-1 rounded-lg px-1.5 py-1 text-center font-label-small text-[11px] leading-tight transition-colors ${
-                  selected ? "bg-primary-fixed text-on-primary-fixed" : "text-outline hover:bg-surface-container"
-                }`}
-                key={rank}
-                onClick={() => updateRange(index, index)}
-                type="button"
-              >
-                <span className={`h-2 w-2 rounded-full ${selected ? "bg-primary" : "bg-outline-variant"}`} />
-                <span className="max-w-[70px] whitespace-normal break-words">{rank}</span>
-              </button>
-            );
-          })}
-        </div>
-
         <div className="flex items-center justify-between gap-sm font-label-small text-label-small text-on-surface">
           <div className="min-w-0">
             <span className="text-outline">Lowest</span>
@@ -750,7 +836,7 @@ function OpponentRankRangePicker({ gameTitle, maxRank, minRank, onChange }) {
           </div>
         </div>
       </div>
-    </section>
+    </FormPanel>
   );
 }
 
@@ -787,6 +873,8 @@ function PostScrimModal({
 }) {
   if (!isOpen) return null;
 
+  const hasNoTeams = !isLoadingTeams && teams.length === 0;
+
   return (
     <>
       <button
@@ -796,8 +884,8 @@ function PostScrimModal({
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-50 md:items-center md:justify-center md:inset-0 md:flex">
-        <div className="w-full md:w-[600px] md:mx-auto bg-surface rounded-t-[32px] md:rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden">
-          <div className="flex items-center justify-between px-margin-mobile pt-lg pb-md border-b border-surface-variant relative">
+        <div className="w-full bg-surface md:w-[780px] md:mx-auto rounded-t-[28px] md:rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.24)] flex max-h-[94vh] flex-col overflow-hidden border border-outline-variant/25">
+          <div className="flex items-center justify-between px-margin-mobile pt-md pb-sm border-b border-surface-variant relative">
             <div className="md:hidden w-12 h-1.5 bg-outline-variant rounded-full absolute top-3 left-1/2 -translate-x-1/2" />
             <button
               className="text-primary hover:text-on-primary-fixed-variant transition-colors p-sm -ml-sm"
@@ -806,125 +894,162 @@ function PostScrimModal({
             >
               <MaterialSymbol className="text-2xl">close</MaterialSymbol>
             </button>
-            <h2 className="font-headline-2 text-headline-2 text-on-surface">New Scrim Listing</h2>
-            <button
-              className="text-primary font-label-bold text-label-bold hover:text-on-primary-fixed-variant transition-colors px-sm py-xs"
-              type="button"
-            >
-              Drafts
-            </button>
+            <div className="text-center">
+              <h2 className="font-headline-2 text-headline-2 text-on-surface">Post Scrim</h2>
+              <p className="font-label-small text-label-small text-on-surface-variant">Create an open listing for another team to request.</p>
+            </div>
+            <div className="w-10" />
           </div>
 
-          <form className="overflow-y-auto px-margin-mobile py-lg flex flex-col gap-lg flex-grow" onSubmit={onSubmit}>
-            <Field label="Posting Team">
-              <SelectField
-                disabled={isLoadingTeams || teams.length === 0}
-                icon="expand_more"
-                name="teamId"
-                onChange={onChange}
-                value={form.teamId}
-              >
-                {isLoadingTeams ? (
-                  <option value="">Loading teams...</option>
-                ) : teams.length === 0 ? (
-                  <option value="">Create a team before posting</option>
-                ) : (
-                  teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name} - {team.game_title}
-                    </option>
-                  ))
-                )}
-              </SelectField>
-            </Field>
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
+            <div className="flex-1 overflow-y-auto px-margin-mobile py-md pb-24">
+              <div className="flex flex-col gap-md">
+                <div className="grid gap-md md:grid-cols-[1fr_1.25fr]">
+                  <FormPanel icon="groups" title="Team">
+                    <div className="grid gap-sm">
+                      {hasNoTeams && (
+                        <div className="rounded-xl border border-primary/20 bg-primary-fixed/70 p-sm">
+                          <div className="flex gap-sm">
+                            <MaterialSymbol className="mt-[2px] text-[20px] text-primary" fill>
+                              info
+                            </MaterialSymbol>
+                            <div className="min-w-0">
+                              <p className="font-label-bold text-label-bold text-on-primary-fixed">Create a team first</p>
+                              <p className="mt-0.5 font-label-small text-label-small text-on-primary-fixed/80">
+                                Scrim listings are posted by teams, so your org needs at least one team before posting.
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            className="mt-sm inline-flex h-10 items-center justify-center gap-xs rounded-xl bg-primary px-md font-label-bold text-label-bold text-on-primary shadow-[0_8px_18px_rgba(0,88,188,0.22)]"
+                            href="/team/new"
+                          >
+                            <MaterialSymbol className="text-[18px]" fill>
+                              group_add
+                            </MaterialSymbol>
+                            Create Team
+                          </a>
+                        </div>
+                      )}
 
-            <Field label="Select Game">
-              <SelectField disabled icon="lock" name="gameTitle" onChange={onChange} value={form.gameTitle}>
-                <option>{form.gameTitle}</option>
-              </SelectField>
-              <p className="font-label-small text-label-small text-outline">
-                Game is locked to the selected team&apos;s registered game.
-              </p>
-            </Field>
+                      <Field label="Posting team">
+                        <SelectField
+                          disabled={isLoadingTeams || teams.length === 0}
+                          icon="expand_more"
+                          name="teamId"
+                          onChange={onChange}
+                          value={form.teamId}
+                        >
+                          {isLoadingTeams ? (
+                            <option value="">Loading teams...</option>
+                          ) : teams.length === 0 ? (
+                            <option value="">Create a team before posting</option>
+                          ) : (
+                            teams.map((team) => (
+                              <option key={team.id} value={team.id}>
+                                {team.name} - {team.game_title}
+                              </option>
+                            ))
+                          )}
+                        </SelectField>
+                      </Field>
 
-            <Field label="Date">
-              <input
-                className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary"
-                name="date"
-                onChange={onChange}
-                type="date"
-                value={form.date}
-              />
-            </Field>
+                      <Field label="Game">
+                        <SelectField disabled icon="lock" name="gameTitle" onChange={onChange} value={form.gameTitle}>
+                          <option>{form.gameTitle}</option>
+                        </SelectField>
+                      </Field>
+                      <p className="font-label-small text-label-small text-outline">
+                        Locked to the selected team&apos;s game.
+                      </p>
+                    </div>
+                  </FormPanel>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <Field label="Start Time">
-                <TextInput
-                  icon="schedule"
-                  name="startTime"
-                  onChange={onChange}
-                  type="time"
-                  value={form.startTime}
+                  <FormPanel icon="event" title="Schedule">
+                    <div className="grid grid-cols-2 gap-sm">
+                      <Field label="Date">
+                        <input
+                          className="h-11 w-full rounded-xl border border-transparent bg-surface-container-low px-sm font-body-sub text-body-sub text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary"
+                          name="date"
+                          onChange={onChange}
+                          type="date"
+                          value={form.date}
+                        />
+                      </Field>
+                      <Field label="Start time">
+                        <TextInput
+                          icon="schedule"
+                          name="startTime"
+                          onChange={onChange}
+                          type="time"
+                          value={form.startTime}
+                        />
+                      </Field>
+                      <Field label="Games">
+                        <SelectField icon="expand_more" name="games" onChange={onChange} value={form.games}>
+                          <option>1 Game</option>
+                          <option>2 Games</option>
+                          <option>3 Games</option>
+                          <option>4 Games</option>
+                          <option>5+ Games</option>
+                        </SelectField>
+                      </Field>
+                      <Field label="Team location">
+                        <SelectField icon="public" name="server" onChange={onChange} value={form.server}>
+                          {TEAM_LOCATION_OPTIONS.map((location) => (
+                            <option key={location}>{location}</option>
+                          ))}
+                        </SelectField>
+                      </Field>
+                    </div>
+                    <p className="mt-sm font-label-small text-label-small text-outline">
+                      Time uses {getUserTimeZoneLabel()}.
+                    </p>
+                  </FormPanel>
+                </div>
+
+                <OpponentRankRangePicker
+                  gameTitle={form.gameTitle}
+                  maxRank={form.opponentRankMax}
+                  minRank={form.opponentRankMin}
+                  onChange={onRankWindowChange}
                 />
-                <p className="font-label-small text-label-small text-outline">
-                  Uses your local time zone: {getUserTimeZoneLabel()}
-                </p>
-              </Field>
-              <Field label="Number of Games">
-                <SelectField icon="expand_more" name="games" onChange={onChange} value={form.games}>
-                  <option>1 Game</option>
-                  <option>2 Games</option>
-                  <option>3 Games</option>
-                  <option>4 Games</option>
-                  <option>5+ Games</option>
-                </SelectField>
-              </Field>
-            </div>
 
-            <OpponentRankRangePicker
-              gameTitle={form.gameTitle}
-              maxRank={form.opponentRankMax}
-              minRank={form.opponentRankMin}
-              onChange={onRankWindowChange}
-            />
+                <FormPanel icon="notes" title="Details">
+                  <Field label="Notes for opponents">
+                    <textarea
+                      className="h-[76px] w-full resize-none rounded-xl border border-transparent bg-surface-container-low px-sm py-sm font-body-sub text-body-sub text-on-surface focus:border-primary/30 focus:ring-2 focus:ring-primary"
+                      name="notes"
+                      onChange={onChange}
+                      placeholder="Maps, BO3/BO5, rules, or lobby notes..."
+                      value={form.notes}
+                    />
+                  </Field>
+                </FormPanel>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-              <Field label="Team Location">
-                <SelectField icon="public" name="server" onChange={onChange} value={form.server}>
-                  {TEAM_LOCATION_OPTIONS.map((location) => (
-                    <option key={location}>{location}</option>
-                  ))}
-                </SelectField>
-              </Field>
-            </div>
-
-            <Field label="Additional Notes">
-              <textarea
-                className="w-full bg-surface-container-low text-on-surface font-body-main text-body-main rounded-xl border-none py-md px-md focus:ring-2 focus:ring-primary resize-none"
-                name="notes"
-                onChange={onChange}
-                placeholder="Any specific map requests, format (BO3, BO5), or rules..."
-                rows={3}
-                value={form.notes}
-              />
-            </Field>
-
-            {postError && (
-              <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
-                {postError}
+                {postError && (
+                  <div className="rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+                    {postError}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            <div className="-mx-margin-mobile -mb-lg px-margin-mobile py-lg border-t border-surface-variant bg-surface">
+            <div className="grid shrink-0 gap-sm border-t border-surface-variant bg-surface/95 px-margin-mobile py-sm shadow-[0_-12px_32px_rgba(0,0,0,0.08)] backdrop-blur sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="min-w-0 font-label-small text-label-small text-on-surface-variant">
+                {hasNoTeams
+                  ? "Create a team first, then come back here to post your listing."
+                  : "Your listing appears on the scrim board as open until another team requests it."}
+              </div>
               <button
-                className="w-full bg-primary hover:bg-on-primary-fixed-variant text-on-primary font-headline-3 text-headline-3 rounded-xl py-md px-lg transition-colors flex items-center justify-center gap-sm active:scale-[0.98]"
-                disabled={isPosting}
+                className="inline-flex h-12 items-center justify-center gap-xs rounded-xl bg-primary px-xl font-headline-3 text-headline-3 text-on-primary shadow-[0_10px_24px_rgba(0,88,188,0.24)] transition-colors hover:bg-on-primary-fixed-variant active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isPosting || hasNoTeams}
                 type="submit"
               >
-                <MaterialSymbol className="text-2xl" fill>
-                  send
+                <MaterialSymbol className="text-[22px]" fill>
+                  add_task
                 </MaterialSymbol>
-                {isPosting ? "Posting..." : "Post to Scrim Board"}
+                {isPosting ? "Posting..." : "Post Listing"}
               </button>
             </div>
           </form>
@@ -971,6 +1096,7 @@ function ScrimBoardPage() {
   const [isLoadingScrims, setIsLoadingScrims] = useState(true);
   const [scrimError, setScrimError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [boardView, setBoardView] = useState("auto");
   const [boardFilters, setBoardFilters] = useState({
     date: "",
     gameTitle: "all",
@@ -1026,6 +1152,7 @@ function ScrimBoardPage() {
   }, [boardFilters, rankFilterOptions, scrimRequests, searchQuery]);
 
   const scrimSections = useMemo(() => groupScrimsByDate(visibleScrimRequests), [visibleScrimRequests]);
+  const isCompactBoard = boardView === "compact" || (boardView === "auto" && visibleScrimRequests.length >= COMPACT_BOARD_THRESHOLD);
 
   const fetchScrimRequests = useCallback(async () => {
     setIsLoadingScrims(true);
@@ -1485,6 +1612,24 @@ function ScrimBoardPage() {
         </div>
 
         <div className="flex flex-col gap-sm mb-xl">
+          <div className="flex flex-col gap-sm rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-sm shadow-[0_8px_28px_rgba(0,0,0,0.04)] md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="font-label-bold text-label-bold text-on-surface">
+                {visibleScrimRequests.length} active {visibleScrimRequests.length === 1 ? "listing" : "listings"}
+              </p>
+              <p className="font-label-small text-label-small text-on-surface-variant">
+                {isCompactBoard
+                  ? "Compact rows are on for faster scanning."
+                  : `Auto switches to compact at ${COMPACT_BOARD_THRESHOLD}+ listings.`}
+              </p>
+            </div>
+            <BoardViewToggle
+              compactCount={COMPACT_BOARD_THRESHOLD}
+              onChange={setBoardView}
+              value={boardView}
+            />
+          </div>
+
           <div className="relative w-full">
             <MaterialSymbol className="absolute left-sm top-1/2 -translate-y-1/2 text-outline">
               search
@@ -1570,11 +1715,26 @@ function ScrimBoardPage() {
                     {section.scrims.length} {section.scrims.length === 1 ? "scrim" : "scrims"}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
-                  {section.scrims.map((scrimRequest) => (
-                    <ScrimCard key={scrimRequest.id} scrim={normalizeScrimRequest(scrimRequest)} />
-                  ))}
-                </div>
+                {isCompactBoard ? (
+                  <div className="overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-lowest shadow-[0_8px_28px_rgba(0,0,0,0.04)]">
+                    <div className="hidden grid-cols-[minmax(210px,1.5fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(120px,0.75fr)_auto] gap-sm border-b border-outline-variant/20 bg-surface-container-low px-md py-xs font-label-small text-label-small uppercase tracking-wide text-outline md:grid">
+                      <span>Team</span>
+                      <span>Game / Location</span>
+                      <span>Ranks</span>
+                      <span>Time</span>
+                      <span className="text-right">Action</span>
+                    </div>
+                    {section.scrims.map((scrimRequest) => (
+                      <ScrimRow key={scrimRequest.id} scrim={normalizeScrimRequest(scrimRequest)} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+                    {section.scrims.map((scrimRequest) => (
+                      <ScrimCard key={scrimRequest.id} scrim={normalizeScrimRequest(scrimRequest)} />
+                    ))}
+                  </div>
+                )}
               </section>
             ))}
           </div>

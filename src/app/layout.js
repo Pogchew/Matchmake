@@ -9,7 +9,7 @@ export default function RootLayout({ children }) {
   const themeScript = `
     (function() {
       try {
-        var storedTheme = window.localStorage.getItem("matchmake-theme");
+        var storedTheme = window.localStorage.getItem("matchmake-theme-v2");
         var theme = storedTheme === "dark" || storedTheme === "light"
           ? storedTheme
           : "light";
