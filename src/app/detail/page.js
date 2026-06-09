@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import TopBar from "@/components/TopBar";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -20,19 +21,19 @@ export default function DetailPage() {
 
   return (
     <div className="bg-background text-on-background min-h-screen">
-      {/* TopAppBar */}
-      <header className="bg-surface/85 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.10)] flex justify-between items-center w-full px-5 h-14">
-        <Link
-          href="/"
-          className="text-primary hover:bg-surface-container transition-colors active:scale-95 w-10 h-10 flex items-center justify-center rounded-full"
-        >
-          <MaterialSymbol>arrow_back</MaterialSymbol>
-        </Link>
-        <h1 className="text-lg font-black tracking-tighter text-on-surface">Scrim Detail</h1>
-        <button className="text-on-surface-variant hover:bg-surface-container transition-colors active:scale-95 w-10 h-10 flex items-center justify-center rounded-full">
-          <MaterialSymbol>more_vert</MaterialSymbol>
-        </button>
-      </header>
+      <TopBar
+        actions={(
+          <Link
+            aria-label="Back to scrim board"
+            className="hidden h-10 items-center justify-center gap-xs rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-md font-label-bold text-label-bold text-on-surface-variant transition-colors hover:border-primary/35 hover:bg-surface-container hover:text-primary active:scale-95 sm:flex"
+            href="/"
+            title="Back to scrim board"
+          >
+            <MaterialSymbol className="text-[18px]">arrow_back</MaterialSymbol>
+            Board
+          </Link>
+        )}
+      />
 
       <main className="max-w-[1200px] mx-auto px-margin-mobile md:px-lg py-lg space-y-lg pb-32">
 

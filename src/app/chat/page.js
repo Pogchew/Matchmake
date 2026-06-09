@@ -2,20 +2,24 @@
 
 import Link from "next/link";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import TopBar from "@/components/TopBar";
 
 export default function ChatPage() {
   return (
     <div className="bg-background text-on-background min-h-screen flex flex-col">
-      <header className="bg-surface/85 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.10)] border-b border-outline-variant/50 flex justify-between items-center w-full px-5 h-14">
-        <Link
-          href="/requests"
-          className="text-primary hover:bg-surface-container transition-colors active:scale-95 p-2 -ml-2 rounded-full flex items-center justify-center"
-        >
-          <MaterialSymbol>arrow_back_ios_new</MaterialSymbol>
-        </Link>
-        <h1 className="text-lg font-black tracking-tighter text-on-surface">Scrim Chat</h1>
-        <div className="w-10" />
-      </header>
+      <TopBar
+        actions={(
+          <Link
+            aria-label="Back to requests"
+            className="hidden h-10 items-center justify-center gap-xs rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-md font-label-bold text-label-bold text-on-surface-variant transition-colors hover:border-primary/35 hover:bg-surface-container hover:text-primary active:scale-95 sm:flex"
+            href="/requests"
+            title="Back to requests"
+          >
+            <MaterialSymbol className="text-[18px]">arrow_back</MaterialSymbol>
+            Requests
+          </Link>
+        )}
+      />
 
       <main className="flex-1 px-margin-mobile py-xl max-w-[720px] w-full mx-auto">
         <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg text-center">

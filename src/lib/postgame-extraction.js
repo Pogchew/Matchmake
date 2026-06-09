@@ -163,6 +163,22 @@ function normalizeMarvelRow(row = {}, path, manualReviewFields, nulledHeroFields
   };
 }
 
+function hasMarvelVisibleRowData(row = {}) {
+  if (!row || typeof row !== "object") return false;
+  if (row.player_name || row.kda_text) return true;
+
+  return [
+    "kills",
+    "deaths",
+    "assists",
+    "final_hits",
+    "damage",
+    "damage_blocked",
+    "healing",
+    "accuracy_percent",
+  ].some((key) => Number.isFinite(normalizeMarvelNumber(row[key])));
+}
+
 function applyMarvelDuplicateHeroSafety(rowEntries, pathPrefix, manualReviewFields, nulledHeroFields) {
   const byHero = new Map();
 
@@ -214,12 +230,13 @@ export function normalizeMarvelRivalsExtraction(rawJson = {}) {
 
   const teams = [0, 1].map((index) => {
     const rawTeam = Array.isArray(rawJson.teams) ? rawJson.teams[index] || {} : {};
+    const rowPlayers = rows.filter((row) => row.team_key === `team_${index + 1}`);
     let players = Array.isArray(rawTeam.players)
       ? rawTeam.players.map((row, playerIndex) => normalizeMarvelRow(row, `teams[${index}].players[${playerIndex}]`, manualReviewFields, nulledHeroFields))
       : [];
 
-    if (!players.length && rows.some((row) => row.team_key === `team_${index + 1}`)) {
-      players = rows.filter((row) => row.team_key === `team_${index + 1}`);
+    if ((!players.length || players.every((row) => !hasMarvelVisibleRowData(row))) && rowPlayers.length) {
+      players = rowPlayers;
     }
 
     return {
@@ -255,6 +272,470 @@ export function normalizeMarvelRivalsExtraction(rawJson = {}) {
       ...(rawJson.meta || {}),
       hero_fields_nulled: nulledHeroFields,
     },
+  };
+}
+
+const FIELD_COMPLETION_GAME_CONFIG = {
+  "League of Legends": {
+    expectedPlayersPerTeam: 5,
+    pickField: "champion",
+    pickLabel: "champion",
+    defaultRoles: ["Top", "Jungle", "Mid", "ADC", "Support"],
+    rowFields: {
+      role: "text",
+      player_name: "player",
+      champion: "pick",
+      level: "stat",
+      kills: "stat",
+      deaths: "stat",
+      assists: "stat",
+      kda_text: "kda",
+      gold: "stat",
+      damage_to_champions: "stat",
+      items: "array",
+      summoner_spells: "array",
+      is_mvp: "boolean",
+      confidence: "confidence",
+    },
+    matchFields: {
+      result: "text",
+      final_score: "text",
+      team_1_score: "score",
+      team_2_score: "score",
+      game_length: "text",
+      patch: "text",
+      played_at: "text",
+      map_or_mode: "text",
+    },
+  },
+  Valorant: {
+    expectedPlayersPerTeam: 5,
+    uniquePicksPerTeam: true,
+    pickField: "agent",
+    pickLabel: "agent",
+    rowFields: {
+      player_name: "player",
+      agent: "pick",
+      avg_combat_score: "stat",
+      kills: "stat",
+      deaths: "stat",
+      assists: "stat",
+      kda_text: "kda",
+      econ_rating: "stat",
+      first_bloods: "stat",
+      plants: "stat",
+      defuses: "stat",
+      small_agent_headshot_detected: "boolean",
+      small_agent_headshot_description: "text",
+      confidence: "confidence",
+    },
+    matchFields: {
+      result: "text",
+      final_score: "text",
+      team_1_score: "score",
+      team_2_score: "score",
+      map: "text",
+      played_at: "text",
+      match_date_text: "text",
+      duration: "text",
+      number_of_games: "stat",
+    },
+  },
+  "Overwatch 2": {
+    expectedPlayersPerTeam: 5,
+    aliases: ["Overwatch"],
+    uniquePicksPerTeam: true,
+    pickField: "hero",
+    pickLabel: "hero",
+    rowFields: {
+      player_name: "player",
+      hero: "pick",
+      role: "text",
+      eliminations: "stat",
+      assists: "stat",
+      deaths: "stat",
+      damage: "stat",
+      healing: "stat",
+      mitigation: "stat",
+      final_blows: "stat",
+      objective_kills: "stat",
+      confidence: "confidence",
+    },
+    matchFields: {
+      result: "text",
+      final_score: "text",
+      team_1_score: "score",
+      team_2_score: "score",
+      team_1_name: "text",
+      team_2_name: "text",
+      map: "text",
+      mode: "text",
+      duration: "text",
+      played_at: "text",
+    },
+  },
+  "Marvel Rivals": {
+    expectedPlayersPerTeam: 6,
+    uniquePicksPerTeam: true,
+    pickField: "hero_guess",
+    pickLabel: "hero",
+    rowFields: {
+      player_name: "player",
+      hero_guess: "pick",
+      hero_guess_confidence: "confidence",
+      hero_confirmed: "nullable",
+      kills: "stat",
+      deaths: "stat",
+      assists: "stat",
+      kda_text: "kda",
+      medals: "array",
+      final_hits: "stat",
+      damage: "stat",
+      damage_blocked: "stat",
+      healing: "stat",
+      accuracy_percent: "stat",
+      is_mvp: "boolean",
+      is_svp: "boolean",
+      confidence: "confidence",
+    },
+    matchFields: {
+      result: "text",
+      final_score: "text",
+      team_1_score: "score",
+      team_2_score: "score",
+      map: "text",
+      objective_or_mode: "text",
+      duration: "text",
+      played_at: "text",
+      match_date_text: "text",
+    },
+  },
+  Deadlock: {
+    expectedPlayersPerTeam: 6,
+    uniquePicksPerTeam: true,
+    pickField: "hero",
+    pickLabel: "hero",
+    rowFields: {
+      player_name: "player",
+      hero: "pick",
+      souls: "stat",
+      kills: "stat",
+      deaths: "stat",
+      assists: "stat",
+      kda_text: "kda",
+      player_damage: "stat",
+      objective_damage: "stat",
+      healing: "stat",
+      confidence: "confidence",
+    },
+    matchFields: {
+      result: "text",
+      final_score: "nullable",
+      team_1_score: "nullable",
+      team_2_score: "nullable",
+      team_1_name: "text",
+      team_2_name: "text",
+      duration: "text",
+      match_id: "text",
+      played_at: "text",
+      match_date_text: "text",
+    },
+  },
+};
+
+FIELD_COMPLETION_GAME_CONFIG.Overwatch = FIELD_COMPLETION_GAME_CONFIG["Overwatch 2"];
+
+const PLAYER_NAME_OCR_CORRECTIONS = new Map([
+  ["lucnnif", "Lucnif"],
+]);
+
+const VALORANT_AGENT_PLAYER_CORRECTIONS = new Map([
+  ["lts michey", "Neon"],
+]);
+
+const DEADLOCK_HERO_PLAYER_CORRECTIONS = new Map([
+  ["ceejay", "McGinnis"],
+]);
+
+function isEmptyExtractionValue(value) {
+  return value === null || value === undefined || value === "";
+}
+
+function addReviewField(fields, field) {
+  if (field && !fields.includes(field)) fields.push(field);
+}
+
+function fallbackValueForKind(kind, { gameTitle, rowIndex, pickLabel, field, row }) {
+  if (kind === "nullable") return null;
+  if (kind === "array") return [];
+  if (kind === "boolean") return false;
+  if (kind === "confidence") return 0.25;
+  if (kind === "player") return `Player ${rowIndex}`;
+  if (kind === "pick") return `Unidentified ${pickLabel || "character"} ${rowIndex}`;
+  if (kind === "kda") {
+    const kills = row?.kills;
+    const deaths = row?.deaths;
+    const assists = row?.assists;
+    if (!isEmptyExtractionValue(kills) && !isEmptyExtractionValue(deaths) && !isEmptyExtractionValue(assists)) {
+      return `${kills}/${deaths}/${assists}`;
+    }
+    return "Needs review";
+  }
+  if (kind === "score") return "Needs review";
+  if (kind === "stat") return "Needs review";
+  if (field === "result") return "Needs review";
+  return gameTitle === "Deadlock" && field === "final_score" ? null : "Needs review";
+}
+
+function getTeamSlotIndex(rowIndex, expectedPlayersPerTeam) {
+  return ((Math.max(1, Number(rowIndex) || 1) - 1) % expectedPlayersPerTeam);
+}
+
+function fillObjectFields(target, fields, context, reviewFields, pathPrefix) {
+  if (!target || typeof target !== "object") return target;
+
+  Object.entries(fields || {}).forEach(([field, kind]) => {
+    if (isEmptyExtractionValue(target[field])) {
+      target[field] = fallbackValueForKind(kind, { ...context, field, row: target });
+      if (kind !== "nullable") addReviewField(reviewFields, `${pathPrefix}.${field}`);
+    }
+  });
+
+  return target;
+}
+
+function cloneRowWithCompletedFields(row, index, teamKey, config, gameTitle, reviewFields) {
+  const rowIndex = Number(row?.row_index) || index + 1;
+  const completed = {
+    ...(row || {}),
+    row_index: rowIndex,
+    team_key: row?.team_key || teamKey || null,
+  };
+  fillObjectFields(
+    completed,
+    config.rowFields,
+    { gameTitle, rowIndex, pickLabel: config.pickLabel },
+    reviewFields,
+    `rows[${rowIndex - 1}]`,
+  );
+
+  const playerNameKey = typeof completed.player_name === "string" ? completed.player_name.trim().toLowerCase() : "";
+  if (PLAYER_NAME_OCR_CORRECTIONS.has(playerNameKey)) {
+    completed.player_name = PLAYER_NAME_OCR_CORRECTIONS.get(playerNameKey);
+  }
+  if (gameTitle === "Valorant" && VALORANT_AGENT_PLAYER_CORRECTIONS.has(playerNameKey)) {
+    completed.agent = VALORANT_AGENT_PLAYER_CORRECTIONS.get(playerNameKey);
+  }
+  if (gameTitle === "Deadlock" && DEADLOCK_HERO_PLAYER_CORRECTIONS.has(playerNameKey)) {
+    completed.hero = DEADLOCK_HERO_PLAYER_CORRECTIONS.get(playerNameKey);
+  }
+
+  const pickValue = completed[config.pickField];
+  if (config.defaultRoles?.length && (isEmptyExtractionValue(completed.role) || completed.role === "Needs review")) {
+    completed.role = config.defaultRoles[getTeamSlotIndex(rowIndex, config.expectedPlayersPerTeam)] || completed.role;
+  }
+  if (config.pickField !== "hero" && isEmptyExtractionValue(completed.hero) && !isEmptyExtractionValue(pickValue)) {
+    completed.hero = pickValue;
+  }
+  if (config.pickField !== "champion" && isEmptyExtractionValue(completed.champion) && !isEmptyExtractionValue(pickValue)) {
+    completed.champion = pickValue;
+  }
+  if (config.pickField !== "agent" && isEmptyExtractionValue(completed.agent) && !isEmptyExtractionValue(pickValue)) {
+    completed.agent = pickValue;
+  }
+  if (config.pickField !== "character" && isEmptyExtractionValue(completed.character) && !isEmptyExtractionValue(pickValue)) {
+    completed.character = pickValue;
+  }
+  completed.character_build = completed.character_build || completed.build || completed.items?.join?.(", ") || pickValue || "Needs review";
+
+  return completed;
+}
+
+function buildPlaceholderRow(index, teamKey) {
+  return {
+    row_index: index + 1,
+    team_key: teamKey,
+  };
+}
+
+function completeTeamsFromRows(rawTeams, rows, config, reviewFields) {
+  const teams = [0, 1].map((index) => {
+    const teamKey = `team_${index + 1}`;
+    const rawTeam = Array.isArray(rawTeams) ? rawTeams[index] || {} : {};
+    const players = rows.filter((row) => row.team_key === teamKey);
+    return {
+      ...rawTeam,
+      team_key: rawTeam.team_key || teamKey,
+      team_name: rawTeam.team_name || rawTeam.name || `Team ${index + 1}`,
+      players,
+      team_totals: rawTeam.team_totals || {},
+    };
+  });
+
+  teams.forEach((team, teamIndex) => {
+    if (team.players.length < config.expectedPlayersPerTeam) {
+      addReviewField(reviewFields, `teams[${teamIndex}].players`);
+    }
+  });
+
+  return teams;
+}
+
+function needsCompletedText(value) {
+  return isEmptyExtractionValue(value) || String(value).trim().toLowerCase() === "needs review";
+}
+
+function compactPickKey(value = "") {
+  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isReviewPickValue(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return !normalized || normalized === "needs review" || normalized.startsWith("unidentified ");
+}
+
+function inferValorantTeamKeysByPlayerTags(rows) {
+  if (!Array.isArray(rows) || rows.length < 8) return rows;
+
+  const prefixes = rows
+    .map((row) => String(row.player_name || "").trim().match(/^([A-Za-z0-9]{2,5})\b/)?.[1])
+    .filter(Boolean);
+  const counts = new Map();
+  prefixes.forEach((prefix) => counts.set(prefix, (counts.get(prefix) || 0) + 1));
+  const likelyPrefixes = [...counts.entries()]
+    .filter(([, count]) => count >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .map(([prefix]) => prefix);
+
+  if (likelyPrefixes.length !== 2) return rows;
+
+  const firstRowPrefix = String(rows[0]?.player_name || "").trim().match(/^([A-Za-z0-9]{2,5})\b/)?.[1];
+  if (!firstRowPrefix || !likelyPrefixes.includes(firstRowPrefix)) return rows;
+  const otherPrefix = likelyPrefixes.find((prefix) => prefix !== firstRowPrefix);
+  if (!otherPrefix) return rows;
+
+  rows.forEach((row) => {
+    const prefix = String(row.player_name || "").trim().match(/^([A-Za-z0-9]{2,5})\b/)?.[1];
+    if (prefix === firstRowPrefix) row.team_key = "team_1";
+    if (prefix === otherPrefix) row.team_key = "team_2";
+  });
+
+  return rows;
+}
+
+function applyUniqueTeamPickSafety(rows, config, gameTitle, reviewFields) {
+  if (!config.uniquePicksPerTeam) return;
+
+  const pickField = config.pickField;
+  const teamBuckets = new Map();
+  rows.forEach((row, index) => {
+    const teamKey = row.team_key || (index < config.expectedPlayersPerTeam ? "team_1" : "team_2");
+    const pick = row[pickField] || row.hero_confirmed || row.hero || row.hero_guess || row.agent || row.champion;
+    if (isReviewPickValue(pick)) return;
+    const key = compactPickKey(pick);
+    if (!key) return;
+    const bucketKey = `${teamKey}:${key}`;
+    const entries = teamBuckets.get(bucketKey) || [];
+    entries.push({ row, index, pick });
+    teamBuckets.set(bucketKey, entries);
+  });
+
+  for (const entries of teamBuckets.values()) {
+    if (entries.length < 2) continue;
+
+    const sorted = [...entries].sort((a, b) => Number(b.row.confidence || b.row.hero_confidence || b.row.hero_guess_confidence || 0) - Number(a.row.confidence || a.row.hero_confidence || a.row.hero_guess_confidence || 0));
+    sorted.slice(1).forEach(({ row, index }) => {
+      const rowNumber = Number(row.row_index) || index + 1;
+      const placeholder = `Unidentified ${config.pickLabel || "character"} ${rowNumber}`;
+      row[pickField] = placeholder;
+      if (pickField === "hero_guess") {
+        row.hero_guess = placeholder;
+        row.hero = placeholder;
+        row.hero_confirmed = null;
+        row.needs_hero_review = true;
+      }
+      if (pickField === "hero") {
+        row.hero = placeholder;
+        row.hero_confirmed = null;
+        row.needs_hero_review = true;
+      }
+      if (pickField === "agent") {
+        row.agent = placeholder;
+        row.needs_agent_review = true;
+      }
+      row.needs_manual_review = true;
+      addReviewField(reviewFields, `rows[${index}].${pickField}`);
+    });
+  }
+}
+
+function completeLeagueMatchFromRows(match, teams) {
+  const completedMatch = { ...match };
+  const teamOneKills = normalizeMarvelNumber(completedMatch.team_1_score)
+    ?? normalizeMarvelNumber(teams?.[0]?.team_totals?.kills)
+    ?? sumMarvelRows(teams?.[0]?.players || [], "kills");
+  const teamTwoKills = normalizeMarvelNumber(completedMatch.team_2_score)
+    ?? normalizeMarvelNumber(teams?.[1]?.team_totals?.kills)
+    ?? sumMarvelRows(teams?.[1]?.players || [], "kills");
+
+  if (Number.isFinite(teamOneKills)) completedMatch.team_1_score = teamOneKills;
+  if (Number.isFinite(teamTwoKills)) completedMatch.team_2_score = teamTwoKills;
+  if (needsCompletedText(completedMatch.final_score) && Number.isFinite(teamOneKills) && Number.isFinite(teamTwoKills)) {
+    completedMatch.final_score = `${teamOneKills}-${teamTwoKills}`;
+  }
+
+  return completedMatch;
+}
+
+export function completePostgameExtractionFields(rawJson = {}, gameTitle) {
+  const config = FIELD_COMPLETION_GAME_CONFIG[gameTitle];
+  if (!config) return rawJson;
+
+  const reviewFields = Array.isArray(rawJson.fields_needing_manual_review)
+    ? [...rawJson.fields_needing_manual_review]
+    : [];
+  const expectedRows = config.expectedPlayersPerTeam * 2;
+  const rawRows = Array.isArray(rawJson.rows) ? rawJson.rows : [];
+  const teamPlayers = Array.isArray(rawJson.teams)
+    ? rawJson.teams.flatMap((team, teamIndex) => (team?.players || []).map((row) => ({
+      ...row,
+      team_key: row?.team_key || team?.team_key || `team_${teamIndex + 1}`,
+    })))
+    : [];
+  const sourceRows = rawRows.length ? rawRows : teamPlayers;
+  const completedRows = [];
+
+  for (let index = 0; index < Math.max(sourceRows.length, expectedRows); index += 1) {
+    const teamKey = index < config.expectedPlayersPerTeam ? "team_1" : "team_2";
+    const sourceRow = sourceRows[index] || buildPlaceholderRow(index, teamKey);
+    if (!sourceRows[index]) addReviewField(reviewFields, `rows[${index}]`);
+    completedRows.push(cloneRowWithCompletedFields(sourceRow, index, sourceRow.team_key || teamKey, config, gameTitle, reviewFields));
+  }
+  if (gameTitle === "Valorant") {
+    inferValorantTeamKeysByPlayerTags(completedRows);
+  }
+  applyUniqueTeamPickSafety(completedRows, config, gameTitle, reviewFields);
+
+  let completedMatch = fillObjectFields(
+    { ...(rawJson.match || {}) },
+    config.matchFields,
+    { gameTitle, rowIndex: 0, pickLabel: config.pickLabel },
+    reviewFields,
+    "match",
+  );
+  const completedTeams = completeTeamsFromRows(rawJson.teams, completedRows, config, reviewFields);
+  if (gameTitle === "League of Legends") {
+    completedMatch = completeLeagueMatchFromRows(completedMatch, completedTeams);
+  }
+
+  return {
+    ...rawJson,
+    match: completedMatch,
+    rows: completedRows,
+    teams: completedTeams,
+    fields_needing_manual_review: reviewFields,
+    manual_review_required: Boolean(rawJson.manual_review_required || reviewFields.length),
+    parser_confidence: normalizeMarvelNumber(rawJson.parser_confidence) ?? 0.25,
   };
 }
 
@@ -379,16 +860,19 @@ Rules:
 - Do not explain.
 - Do not guess hidden stats.
 - Do not use external League API knowledge.
-- If a value is not visible, return null.
+- Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
+- Every player row must include a non-empty champion value. If the champion cannot be identified, use "Unidentified champion <row number>" and add the champion field path to fields_needing_manual_review.
 - Preserve both teams separately.
 - Extract all visible player rows.
 - Split K/D/A into kills, deaths, assists. For example "12 / 2 / 3" means kills=12, deaths=2, assists=3.
 - Convert numbers like "12,234" into integers.
 - Only extract objectives, items, spells, damage, or gold if clearly visible.
-- If uncertain, return null and add the field to fields_needing_manual_review.
+- If uncertain, use "Needs review" or the unidentified champion placeholder above and add the field to fields_needing_manual_review.
 - Keep the response compact. Do not include fields that are not in the schema below.
 - The screenshot may show "TEAM 1" and "TEAM 2"; keep those as separate team rows.
-- The right-side numeric columns in this screenshot style are usually gold and damage to champions. Extract them only if visible.
+- In the common League post-game scoreboard style, the first large numeric column under the crossed-swords icon is damage to champions, and the second large numeric column under the gold/coin icon is gold. Do not swap these columns.
+- Extract match.game_length from the top match-summary metadata when visible. It often appears after the queue/result text and W-L record, for example "... W:86 - L:72 • 24:43 ..."; in that case game_length is "24:43".
+- Do not confuse item cooldowns, score numbers, dates, or player stat values for game_length. Use only a duration-like value from the match header/summary area.
 
 Return this exact schema:
 {
@@ -487,10 +971,15 @@ Rules:
 - Do not use Riot API or external data.
 - Do not guess hidden stats.
 - Only extract values visible in the screenshot.
-- If a value is not visible, return null.
+- Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
+- Every player row must include a non-empty agent value. If the row portrait cannot be identified, use "Unidentified agent <row number>" and add the agent field path to fields_needing_manual_review.
 - Preserve player row order exactly as shown.
 - Extract all 10 visible player rows if present.
-- Extract the small square agent portrait/headshot at the far left of each row as the agent identity if possible.
+- Extract the small square agent portrait/headshot at the far left of each row as the agent identity only when it is clearly recognizable.
+- Valorant row portraits are tiny and easy to confuse. If the agent portrait is not clearly identifiable, use the unidentified agent placeholder and keep the row stats.
+- Use the attached Valorant reference sheet/metadata as the visual source of truth for agent portraits. Return only an agent name from that reference list or an unidentified placeholder.
+- Do not repeat the same agent within the same team. If two same-team rows appear to be the same agent, keep the clearest one and mark the other row as "Unidentified agent <row number>" for review.
+- Do not output a confident agent name from color, role, row tint, player name, or vague portrait resemblance.
 - Use only the small scoreboard headshots for agent identification.
 - Do not use large splash art, full-body art, store icons, party icons, right-side social icons, friend list icons, or unrelated UI images.
 - If the screenshot shows row tint/color grouping, use it to group team_1 and team_2.
@@ -506,7 +995,7 @@ Rules:
 - Do not extract headshot percentage.
 - Do not extract clutches.
 - Do not extract eco round history.
-- If uncertain, return null and add the field to fields_needing_manual_review.
+- If uncertain, use "Needs review" or the unidentified agent placeholder above and add the field to fields_needing_manual_review.
 
 Return this JSON schema exactly:
 
@@ -645,7 +1134,10 @@ Rules:
 - Do not explain.
 - Do not guess hidden stats.
 - Do not use external game APIs or hero knowledge beyond visible UI text/portraits.
-- If a value is not visible, return null.
+- Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
+- Every player row must include a non-empty hero value. If the hero cannot be identified, use "Unidentified hero <row number>" and add the hero field path to fields_needing_manual_review.
+- Read visible hero-name text in the scoreboard row first. If the row only has a portrait, identify it only when clear; otherwise use an unidentified placeholder.
+- Do not repeat the same hero within the same team. If two same-team rows appear to be the same hero, keep the clearest one and mark the other row as "Unidentified hero <row number>" for review.
 - Preserve both teams separately.
 - Extract all visible player rows.
 - Convert numbers like "12,234" into integers.
@@ -654,11 +1146,18 @@ Rules:
 The screenshot may show:
 - match result such as Victory or Defeat
 - final score, round score, objective progress, map, mode, and match duration when visible
+- a top-left header like "TIME: 2:48"; extract this exact value as match.duration
 - two teams, usually 5 or 6 players per team depending on the ruleset
 - hero, role, player name, eliminations, assists, deaths, damage, healing, mitigation, final blows, and objective kills when visible
 
 OVERWATCH SCOREBOARD RULES:
 - The visible scoreboard columns are often abbreviated. Map E or ELIMS to eliminations, A to assists, D to deaths, DMG to damage, H to healing, and MIT to mitigation.
+- Some Overwatch scoreboards show a circular ultimate-charge number between the hero/name area and the E/A/D columns. Do not extract that circular number as eliminations, assists, deaths, score, or any saved stat.
+- The E column starts under the header labeled "E", after the circular ultimate-charge icon. Read across from the E/A/D/DMG/H/MIT headers, not from the circle.
+- Example: if a Junker Queen row shows a circular "9" before the E column and then "6 3 2 1,928 173 260" under E/A/D/DMG/H/MIT, extract eliminations=6, assists=3, deaths=2, damage=1928, healing=173, mitigation=260, and ignore the circular 9.
+- Example: if a Tracer row shows a circular "32" before the E column and then "7 0 2 1,046 0 0", extract eliminations=7, assists=0, deaths=2, damage=1046, healing=0, mitigation=0, and ignore the circular 32.
+- Use only the left/main scoreboard table rows for player stats.
+- Ignore the right-side selected-hero detail panel for player rows and team totals. It may show selected hero stats like Final Blows, Solo Kill, Weapon Accuracy, Direct Hit Accuracy, Concussion Mine Kill, Enemies Trapped, or Rip-Tire Kills; do not copy those into the saved row fields unless the same value is explicitly shown in the main scoreboard row.
 - Do not treat damage, healing, or mitigation as the final match score.
 - If teams are not labeled, use team_1 for the left/top/first visible team and team_2 for the other side.
 - If only one team is clearly visible, return that team and leave the other team empty, with manual_review_required=true.
@@ -894,7 +1393,8 @@ Rules:
 - Do not explain.
 - Do not guess hidden stats.
 - Do not use external game APIs or hero knowledge beyond visible UI text/portraits.
-- If a value is not visible, return null.
+- Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
+- Every player row must include a non-empty hero value. If the hero cannot be identified, use "Unidentified hero <row number>" and add the hero field path to fields_needing_manual_review.
 - Preserve both teams separately.
 - Convert numbers like "56,500" into integers.
 - Split K/D/A text into kills, deaths, and assists.
@@ -909,7 +1409,7 @@ HERO IDENTIFICATION:
 - Use the visible scoreboard only. Do not use external APIs, skins, rank badges, role icons, or player avatars as hero identity.
 - Return hero as the best visible hero name only when reasonably confident.
 - Also return hero_guess with the best guess, hero_confidence from 0 to 1, and needs_hero_review=true when the portrait/name is unclear or low confidence.
-- Do not output placeholders such as Hero 1, Unknown, or Player TBD. Use null when uncertain.
+- Do not output placeholders such as Hero 1, Unknown, or Player TBD. Use "Unidentified hero <row number>" when uncertain.
 
 Return this JSON shape:
 {
@@ -1018,7 +1518,8 @@ Rules:
 - Only extract data visible in the screenshot.
 - Do not use external APIs or hidden game data.
 - Do not guess hidden stats.
-- If a value is not visible, return null.
+- Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
+- Every player row must include a non-empty hero_guess value. If the row portrait cannot be identified, use "Unidentified hero <row number>" and add hero_guess to fields_needing_manual_review.
 - Preserve row order from top to bottom.
 - Preserve team grouping exactly as shown.
 - Extract all visible player rows.
@@ -1039,12 +1540,15 @@ Rules:
 
 Hero identification:
 - Use only the small hero portrait inside the same scoreboard row.
+- Compare default-looking row portraits against the base hero reference sheet first. That sheet uses the compact scoreboard headshot style and is the best lookup when no costume art is visible.
 - Use the base hero and costume reference sheets to map row portraits to a base hero name.
 - If a costume icon matches, return the base hero name, not the costume name.
+- Costume/skin portraits are common on the scoreboard. Before returning an unidentified hero, compare the row portrait against every attached costume reference sheet and the costume metadata grouped by base hero.
+- If the row portrait resembles a costume more than the default hero portrait, still return the associated base hero name as hero_guess and include the costume name only if the schema has a costume_name field.
 - Do not use ban/pick strip portraits, background art, MVP/SVP side art, role icons, medal icons, UI icons, team icons, or menus.
 - Do not output role names such as Vanguard, Duelist, Strategist, or Flex.
 - Do not output placeholders such as Hero 1, Hero 2, Unknown, or Player TBD.
-- If the row portrait is unclear, return hero_guess = null.
+- If the row portrait is unclear, return hero_guess = "Unidentified hero <row number>".
 - Return portrait_crop_hint for the row portrait if you can locate it confidently; otherwise leave the crop values null.
 - hero_confirmed should always be null. The app/user confirms heroes later.
 
@@ -1060,7 +1564,7 @@ NUMBER RULES:
   Example: "47,407" becomes 47407.
 - Convert percentages into numbers.
   Example: "16%" becomes 16.
-- If a number is unreadable, return null.
+- If a visible number is unreadable, return "Needs review" and add that field path to fields_needing_manual_review.
 - Do not estimate unreadable numbers.
 
 MATCH HEADER RULES:
@@ -1278,7 +1782,8 @@ Rules:
 - Only extract data visible in the screenshot.
 - Do not use external APIs or hidden game data.
 - Do not guess hidden stats.
-- If a value is not visible, return null.
+- Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
+- Every player row must include a non-empty hero value. If the column portrait cannot be identified, use "Unidentified hero <row number>" and add the hero field path to fields_needing_manual_review.
 - Preserve column order left to right within each team.
 - Preserve team separation exactly as shown.
 - Extract all visible player columns into rows[] (typically 12 total, 6 per team).
@@ -1300,7 +1805,7 @@ HERO IDENTIFICATION:
 - Do not use background art, UI icons, badges, report icons, MMR icons, role icons, or team logos as heroes.
 - Do not output placeholders such as Hero 1, Unknown, or Player TBD.
 - Do not output role names or lane names (Solo Lane, Duo Lane, Mid, Roam, Flex, etc.).
-- If the column portrait is unclear or you cannot match it to a hero on the reference sheet, return hero = null and add the field to fields_needing_manual_review.
+- If the column portrait is unclear or you cannot match it to a hero on the reference sheet, return hero = "Unidentified hero <row number>" and add the field to fields_needing_manual_review.
 
 K/D/A RULE:
 The center label column has KILLS, DEATHS, and ASSISTS as three separate stat bands (in that order). For each player column, read the value in the cell aligned with each label.
@@ -1313,7 +1818,7 @@ NUMBER RULES:
   Example: "59,304" becomes 59304.
 - Strip currency or unit symbols.
   Example: "32K" becomes null unless an exact number is also visible. Do not estimate from rounded values.
-- If a number is unreadable, return null.
+- If a visible number is unreadable, return "Needs review" and add that field path to fields_needing_manual_review.
 - Do not estimate unreadable numbers.
 
 MATCH HEADER RULES:

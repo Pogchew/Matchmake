@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import TopBar from "@/components/TopBar";
 import { supabase } from "@/lib/supabase";
 
 const MAX_MESSAGE_LENGTH = 1000;
@@ -269,26 +270,19 @@ export default function ScrimChatPage() {
 
   return (
     <div className="bg-background text-on-background min-h-screen flex flex-col">
-      <header className="bg-surface/85 backdrop-blur-md top-0 sticky z-50 shadow-[0_4px_20px_0_rgba(0,0,0,0.10)] border-b border-outline-variant/50 flex justify-between items-center w-full px-5 h-14">
-        <Link
-          href={id ? `/scrims/${id}` : "/requests"}
-          className="text-primary hover:bg-surface-container transition-colors active:scale-95 p-2 -ml-2 rounded-full flex items-center justify-center"
-        >
-          <MaterialSymbol>arrow_back_ios_new</MaterialSymbol>
-        </Link>
-        <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-          <h1 className="text-lg font-black tracking-tighter text-on-surface leading-tight">Scrim Chat</h1>
-          <span className="font-label-small text-label-small text-on-surface-variant truncate max-w-[260px]">
-            {title}
-          </span>
-        </div>
-        <Link
-          href={id ? `/scrims/${id}` : "/requests"}
-          className="text-primary hover:bg-surface-container transition-colors active:scale-95 p-2 -mr-2 rounded-full flex items-center justify-center"
-        >
-          <MaterialSymbol>info</MaterialSymbol>
-        </Link>
-      </header>
+      <TopBar
+        actions={(
+          <Link
+            aria-label="Back to scrim detail"
+            className="hidden h-10 items-center justify-center gap-xs rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-md font-label-bold text-label-bold text-on-surface-variant transition-colors hover:border-primary/35 hover:bg-surface-container hover:text-primary active:scale-95 sm:flex"
+            href={id ? `/scrims/${id}` : "/requests"}
+            title={title}
+          >
+            <MaterialSymbol className="text-[18px]">arrow_back</MaterialSymbol>
+            Scrim
+          </Link>
+        )}
+      />
 
       <main className="flex-1 overflow-y-auto px-margin-mobile pt-lg pb-36 flex flex-col gap-lg max-w-[1200px] w-full mx-auto">
         {isLoading ? (

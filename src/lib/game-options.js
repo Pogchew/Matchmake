@@ -16,7 +16,7 @@ export const MODE_OPTIONS = ["6v6", "5v5", "4v4", "3v3", "2v2", "1v1"];
 export const TEAM_LOCATION_OPTIONS = ["West Coast", "Mid-West", "East Coast"];
 
 export function normalizeTeamLocation(value = "") {
-  const normalizedValue = value.toLowerCase().trim();
+  const normalizedValue = String(value || "").toLowerCase().trim();
 
   if (!normalizedValue) return "";
   if (normalizedValue.includes("west")) return "West Coast";

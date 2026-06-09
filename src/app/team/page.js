@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
-import ThemeToggle from "@/components/ThemeToggle";
+import TopBar from "@/components/TopBar";
 import { aggregateCharacterAnalytics } from "@/lib/dashboard/character-analytics";
 import { supabase } from "@/lib/supabase";
 import { getDefaultRankForGame, getDisplayModeForTeam, getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
@@ -707,130 +707,33 @@ function TeamPageContent() {
               teamId={selectedTeam.id}
             />
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
-              <div className="lg:col-span-1 flex flex-col gap-lg">
-                <section className="bg-surface-container-lowest rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-surface-variant p-md">
-                  <div className="flex justify-between items-center mb-md">
-                    <h2 className="font-headline-3 text-on-surface">Active Roster</h2>
-                    <span className="font-body-sub text-on-surface-variant">{rosterPlayers.filter((player) => player.name.trim()).length}</span>
-                  </div>
+            <div className="grid grid-cols-1 gap-lg xl:grid-cols-2 xl:items-start">
+              <ScrimList
+                title="Upcoming Scrims"
+                scrims={upcomingScrims}
+                empty="No upcoming scrims for this team."
+              />
+              <GameHistoryList
+                empty="Completed scrims and uploaded match reviews will appear here."
+                items={gameHistoryItems}
+                teamId={selectedTeam.id}
+              />
+            </div>
 
-                  <div className="flex flex-col gap-sm">
-                    {rosterPlayers.length === 0 ? (
-                      <div className="rounded-lg bg-surface-container-low p-md font-body-sub text-body-sub text-on-surface-variant">
-                        No players added yet.
-                      </div>
-                    ) : (
-                      rosterPlayers.map((player, index) => (
-                        <div key={`${player.name}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-sm rounded-lg bg-surface-container-low p-sm">
-                          <div className="w-10 h-10 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center font-label-bold mt-1">
-                            {getInitials(player.name || "P")}
-                          </div>
-                          <div className="grid gap-xs min-w-0">
-                            <input
-                              className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary"
-                              onChange={(event) => handleRosterPlayerChange(index, "name", event.target.value)}
-                              placeholder="Player name"
-                              value={player.name}
-                            />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-xs">
-                              <select
-                                className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
-                                onChange={(event) => handleRosterPlayerChange(index, "rank", event.target.value)}
-                                value={player.rank}
-                              >
-                                {getRanksForGame(selectedTeam?.game_title).map((rank) => (
-                                  <option key={rank} value={rank}>{rank}</option>
-                                ))}
-                              </select>
-                              <input
-                                className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
-                                onChange={(event) => handleRosterPlayerChange(index, "profile_url", event.target.value)}
-                                placeholder="Profile link optional"
-                                type="url"
-                                value={player.profile_url}
-                              />
-                            </div>
-                            {player.profile_url && (
-                              <a
-                                className="font-label-small text-label-small text-primary underline"
-                                href={player.profile_url}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                View profile
-                              </a>
-                            )}
-                          </div>
-                          <button
-                            className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-high self-start"
-                            onClick={() => handleRemovePlayer(index)}
-                            type="button"
-                          >
-                            <MaterialSymbol className="text-[18px]">close</MaterialSymbol>
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <form className="mt-md grid gap-sm" onSubmit={handleAddPlayer}>
-                    <input
-                      className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
-                      onChange={(event) => handleNewPlayerChange("name", event.target.value)}
-                      placeholder="Add player name"
-                      value={newPlayer.name}
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-sm">
-                      <select
-                        className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
-                        onChange={(event) => handleNewPlayerChange("rank", event.target.value)}
-                        value={newPlayer.rank}
-                      >
-                        {getRanksForGame(selectedTeam?.game_title).map((rank) => (
-                          <option key={rank} value={rank}>{rank}</option>
-                        ))}
-                      </select>
-                      <input
-                        className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
-                        onChange={(event) => handleNewPlayerChange("profile_url", event.target.value)}
-                        placeholder="Profile link optional"
-                        type="url"
-                        value={newPlayer.profile_url}
-                      />
-                      <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" type="submit">
-                        Add
-                      </button>
-                    </div>
-                  </form>
-
-                  {rosterError && <div className="mt-sm rounded-lg bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">{rosterError}</div>}
-                  {rosterSuccess && <div className="mt-sm rounded-lg bg-[#E3F9E5] px-md py-sm font-body-sub text-body-sub text-[#1B5E20]">{rosterSuccess}</div>}
-
-                  <button
-                    className="mt-md w-full rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={savingRoster}
-                    onClick={handleSaveRoster}
-                    type="button"
-                  >
-                    {savingRoster ? "Saving..." : "Save Roster"}
-                  </button>
-                </section>
-
-              </div>
-
-              <div className="lg:col-span-2 flex flex-col gap-lg">
-                <ScrimList
-                  title="Upcoming Scrims"
-                  scrims={upcomingScrims}
-                  empty="No upcoming scrims for this team."
-                />
-                <GameHistoryList
-                  empty="Completed scrims and uploaded match reviews will appear here."
-                  items={gameHistoryItems}
-                  teamId={selectedTeam.id}
-                />
-              </div>
+            <div className="mt-lg grid grid-cols-1 gap-lg">
+              <RosterManagementSection
+                gameTitle={selectedTeam.game_title}
+                newPlayer={newPlayer}
+                onAddPlayer={handleAddPlayer}
+                onNewPlayerChange={handleNewPlayerChange}
+                onRemovePlayer={handleRemovePlayer}
+                onRosterPlayerChange={handleRosterPlayerChange}
+                onSaveRoster={handleSaveRoster}
+                rosterError={rosterError}
+                rosterPlayers={rosterPlayers}
+                rosterSuccess={rosterSuccess}
+                savingRoster={savingRoster}
+              />
             </div>
             {deleteModalOpen && selectedTeam && (
               <DeleteTeamModal
@@ -856,48 +759,19 @@ function TeamPageContent() {
 function TeamPageShell({ children }) {
   return (
     <>
-      <header className="bg-surface/85 backdrop-blur-md text-on-surface w-full top-0 sticky z-50 border-b border-surface-variant flex items-center justify-between px-5 h-16">
-        <div className="flex items-center gap-3">
+      <TopBar
+        actions={(
           <Link
-            href="/org"
-            className="text-primary hover:bg-surface-container transition-colors active:scale-95 w-9 h-9 flex items-center justify-center rounded-full -ml-1"
-          >
-            <MaterialSymbol>arrow_back</MaterialSymbol>
-          </Link>
-          <span className="font-headline-3 text-on-surface font-bold tracking-tight">Matchmake</span>
-        </div>
-
-        <nav className="hidden md:flex items-center gap-1">
-          {[
-            { label: "Scrims", href: "/" },
-            { label: "Org", href: "/org", active: true },
-            { label: "Requests", href: "/requests" },
-            { label: "Calendar", href: "/calendar" },
-          ].map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={
-                item.active
-                  ? "text-primary font-label-bold font-bold bg-primary-fixed px-3 py-2 rounded-lg"
-                  : "text-on-surface-variant font-label-bold hover:bg-surface-container transition-colors px-3 py-2 rounded-lg"
-              }
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-sm">
-          <ThemeToggle />
-          <Link
-            className="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95"
+            aria-label="Create team"
+            className="hidden h-10 items-center justify-center gap-xs rounded-xl bg-primary px-md font-label-bold text-label-bold text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.22)] transition-colors hover:bg-on-primary-fixed-variant active:scale-95 sm:flex"
             href="/team/new"
+            title="Create team"
           >
-            <MaterialSymbol>add</MaterialSymbol>
+            <MaterialSymbol className="text-[18px]" fill>add</MaterialSymbol>
+            Team
           </Link>
-        </div>
-      </header>
+        )}
+      />
 
       <main className="pt-6 pb-[100px] md:pb-xl px-margin-mobile md:px-xl max-w-[1200px] mx-auto min-h-screen">
         {children}
@@ -908,18 +782,18 @@ function TeamPageShell({ children }) {
   );
 }
 
-function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId }) {
+function TeamReviewStats({ className = "mb-lg", gameTitle, kpis, reviews = [], teamId }) {
   return (
-    <section className="mb-lg rounded-xl border border-surface-variant bg-surface-container-lowest p-md shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
+    <section className={`${className} rounded-xl border border-surface-variant bg-surface-container-lowest p-md shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]`}>
       <div className="mb-md flex flex-col gap-xs sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="font-headline-3 text-on-surface">Post-Game Database</h2>
+          <h2 className="font-headline-3 text-on-surface">Team Stats</h2>
           <p className="font-body-sub text-body-sub text-on-surface-variant">
-            Aggregate stats from every saved post-game review for this team.
+            Performance trends from every saved match review for this team.
           </p>
         </div>
         <div className="flex flex-col gap-xs sm:items-end">
-          <span className="font-label-small text-label-small uppercase tracking-wide text-outline">All reviewed matches</span>
+          <span className="font-label-small text-label-small uppercase tracking-wide text-outline">Saved match reviews</span>
           {teamId && (
             <Link
               className="inline-flex items-center justify-center gap-xs rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary shadow-[0_4px_14px_rgba(0,88,188,0.22)]"
@@ -933,6 +807,149 @@ function TeamReviewStats({ gameTitle, kpis, reviews = [], teamId }) {
       </div>
       <GameStatsTabs fallbackKpis={kpis} gameTitle={gameTitle} reviews={reviews} />
     </section>
+  );
+}
+
+function RosterManagementSection({
+  gameTitle,
+  newPlayer,
+  onAddPlayer,
+  onNewPlayerChange,
+  onRemovePlayer,
+  onRosterPlayerChange,
+  onSaveRoster,
+  rosterError,
+  rosterPlayers,
+  rosterSuccess,
+  savingRoster,
+}) {
+  const activeRosterCount = rosterPlayers.filter((player) => player.name.trim()).length;
+
+  return (
+    <details className="group rounded-xl border border-surface-variant bg-surface-container-lowest shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
+      <summary className="flex cursor-pointer list-none flex-col gap-sm p-md marker:hidden sm:flex-row sm:items-center sm:justify-between [&::-webkit-details-marker]:hidden">
+        <div className="flex items-start gap-sm">
+          <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-surface-container text-primary">
+            <MaterialSymbol className="text-[22px]">groups</MaterialSymbol>
+          </span>
+          <div>
+            <h2 className="font-headline-3 text-on-surface">Roster Management</h2>
+            <p className="font-body-sub text-body-sub text-on-surface-variant">
+              Edit player names, ranks, and profile links when you need to update the team.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-sm">
+          <span className="rounded-full bg-surface-container px-3 py-1 font-label-small text-label-small text-on-surface-variant">
+            {activeRosterCount} players
+          </span>
+          <MaterialSymbol className="text-[22px] text-on-surface-variant transition-transform group-open:rotate-180">expand_more</MaterialSymbol>
+        </div>
+      </summary>
+
+      <div className="border-t border-surface-variant p-md">
+        <div className="grid gap-sm md:grid-cols-2">
+          {rosterPlayers.length === 0 ? (
+            <div className="rounded-lg bg-surface-container-low p-md font-body-sub text-body-sub text-on-surface-variant md:col-span-2">
+              No players added yet.
+            </div>
+          ) : (
+            rosterPlayers.map((player, index) => (
+              <div key={`${player.name}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-sm rounded-lg bg-surface-container-low p-sm">
+                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-primary-fixed font-label-bold text-on-primary-fixed">
+                  {getInitials(player.name || "P")}
+                </div>
+                <div className="grid min-w-0 gap-xs">
+                  <input
+                    className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary"
+                    onChange={(event) => onRosterPlayerChange(index, "name", event.target.value)}
+                    placeholder="Player name"
+                    value={player.name}
+                  />
+                  <div className="grid grid-cols-1 gap-xs sm:grid-cols-2">
+                    <select
+                      className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
+                      onChange={(event) => onRosterPlayerChange(index, "rank", event.target.value)}
+                      value={player.rank}
+                    >
+                      {getRanksForGame(gameTitle).map((rank) => (
+                        <option key={rank} value={rank}>{rank}</option>
+                      ))}
+                    </select>
+                    <input
+                      className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
+                      onChange={(event) => onRosterPlayerChange(index, "profile_url", event.target.value)}
+                      placeholder="Profile link optional"
+                      type="url"
+                      value={player.profile_url}
+                    />
+                  </div>
+                  {player.profile_url && (
+                    <a
+                      className="font-label-small text-label-small text-primary underline"
+                      href={player.profile_url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      View profile
+                    </a>
+                  )}
+                </div>
+                <button
+                  className="self-start rounded-full p-2 text-on-surface-variant hover:bg-surface-container-high"
+                  onClick={() => onRemovePlayer(index)}
+                  type="button"
+                >
+                  <MaterialSymbol className="text-[18px]">close</MaterialSymbol>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <form className="mt-md grid gap-sm" onSubmit={onAddPlayer}>
+          <input
+            className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+            onChange={(event) => onNewPlayerChange("name", event.target.value)}
+            placeholder="Add player name"
+            value={newPlayer.name}
+          />
+          <div className="grid grid-cols-1 gap-sm sm:grid-cols-[1fr_1.4fr_auto]">
+            <select
+              className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+              onChange={(event) => onNewPlayerChange("rank", event.target.value)}
+              value={newPlayer.rank}
+            >
+              {getRanksForGame(gameTitle).map((rank) => (
+                <option key={rank} value={rank}>{rank}</option>
+              ))}
+            </select>
+            <input
+              className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+              onChange={(event) => onNewPlayerChange("profile_url", event.target.value)}
+              placeholder="Profile link optional"
+              type="url"
+              value={newPlayer.profile_url}
+            />
+            <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary" type="submit">
+              Add
+            </button>
+          </div>
+        </form>
+
+        {rosterError && <div className="mt-sm rounded-lg bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">{rosterError}</div>}
+        {rosterSuccess && <div className="mt-sm rounded-lg bg-[#E3F9E5] px-md py-sm font-body-sub text-body-sub text-[#1B5E20]">{rosterSuccess}</div>}
+
+        <button
+          className="mt-md w-full rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={savingRoster}
+          onClick={onSaveRoster}
+          type="button"
+        >
+          {savingRoster ? "Saving..." : "Save Roster"}
+        </button>
+      </div>
+    </details>
   );
 }
 
@@ -992,6 +1009,20 @@ function formatSignedValue(value, decimals = 1) {
   const rounded = Number(value.toFixed(decimals));
   if (rounded > 0) return `+${rounded.toFixed(decimals)}`;
   if (rounded < 0) return rounded.toFixed(decimals);
+  return decimals ? "0.0" : "0";
+}
+
+function formatSignedStat(value, decimals = 1) {
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const formatted = abs >= 10_000
+    ? formatDeepStatValue(value)
+    : new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: decimals,
+      minimumFractionDigits: decimals,
+    }).format(Math.abs(value));
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
   return decimals ? "0.0" : "0";
 }
 
@@ -1131,6 +1162,106 @@ function getWinRate(wins, total) {
   return total ? (wins / total) * 100 : null;
 }
 
+function averageFinite(values, decimals = 1) {
+  const validValues = values.filter((value) => Number.isFinite(value));
+  if (!validValues.length) return null;
+  const average = validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
+  return Number(average.toFixed(decimals));
+}
+
+function getReviewScoreDiff(review) {
+  const teamScore = normalizeExtractedNumber(review.team_score);
+  const opponentScore = normalizeExtractedNumber(review.opponent_score);
+  return teamScore === null || opponentScore === null ? null : teamScore - opponentScore;
+}
+
+function getWeakestStatTrend(stats = {}) {
+  const candidates = [
+    ...(stats.impact || []),
+    ...(stats.differentials || []),
+    ...(stats.teamOutput || []).map((stat) => {
+      const lowerBetter = stats.config?.betterWhenLower?.includes(stat.label);
+      const diff = Number.isFinite(stat.ours) && Number.isFinite(stat.theirs)
+        ? stat.ours - stat.theirs
+        : null;
+      return {
+        ...stat,
+        diff: lowerBetter && diff !== null ? -diff : diff,
+      };
+    }),
+  ]
+    .map((stat) => {
+      if (!Number.isFinite(stat.diff)) return null;
+      const lowerBetter = stats.config?.betterWhenLower?.includes(stat.label);
+      const adjustedDiff = lowerBetter ? -stat.diff : stat.diff;
+      return {
+        label: stat.label,
+        value: adjustedDiff,
+        display: formatSignedStat(stat.diff, stat.decimals ?? 1),
+      };
+    })
+    .filter(Boolean)
+    .sort((first, second) => first.value - second.value);
+
+  const weakest = candidates[0];
+  if (!weakest || weakest.value >= 0) {
+    return {
+      label: "No clear weak trend",
+      detail: "Saved reviews do not show a major negative stat gap yet.",
+      tone: "neutral",
+    };
+  }
+
+  return {
+    label: weakest.label,
+    detail: `${weakest.display} average gap`,
+    tone: "negative",
+  };
+}
+
+function getAverageMarginSummary(reviews = [], config = {}) {
+  const scoreDiffs = reviews
+    .map(getReviewScoreDiff)
+    .filter((value) => value !== null);
+
+  if (scoreDiffs.length) {
+    return {
+      label: config.scoreDiffLabel || "Average Score Differential",
+      value: averageFinite(scoreDiffs, 1),
+      source: "From visible final scores.",
+    };
+  }
+
+  const differentialCandidates = [
+    ...(config.differentials || []),
+    ...(config.impact || []).filter((stat) => stat.differentialOnly),
+  ];
+
+  for (const stat of differentialCandidates) {
+    const diffs = reviews
+      .map((review) => {
+        const ours = getReviewStatValue(review, stat);
+        const theirs = getReviewStatValue(review, stat, "opponent");
+        return ours === null || theirs === null ? null : ours - theirs;
+      })
+      .filter((value) => value !== null);
+
+    if (diffs.length) {
+      return {
+        label: stat.label.startsWith("Average ") ? stat.label : `Average ${stat.label}`,
+        value: averageFinite(diffs, stat.decimals ?? 1),
+        source: "From team vs opponent stat totals.",
+      };
+    }
+  }
+
+  return {
+    label: config.scoreDiffLabel || "Average Margin",
+    value: null,
+    source: "No visible margin data yet.",
+  };
+}
+
 function parseDurationMinutes(value) {
   if (!value) return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -1208,7 +1339,7 @@ function buildLeagueInsights(sortedReviews = []) {
 
 const GAME_ANALYTICS_CONFIG = {
   Valorant: {
-    title: "Valorant Stats Dashboard",
+    title: "Valorant",
     scoreDiffLabel: "Average Round Differential",
     pickField: "agent",
     pickLabel: "Agent",
@@ -1232,7 +1363,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   "League of Legends": {
-    title: "League Stats Dashboard",
+    title: "League of Legends",
     scoreDiffLabel: "Average Kill Differential",
     pickField: "champion",
     pickLabel: "Champion",
@@ -1257,7 +1388,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   "Counter-Strike 2": {
-    title: "Counter-Strike Stats Dashboard",
+    title: "Counter-Strike 2",
     scoreDiffLabel: "Average Round Differential",
     pickField: "role",
     pickLabel: "Role",
@@ -1277,7 +1408,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   "Rocket League": {
-    title: "Rocket League Stats Dashboard",
+    title: "Rocket League",
     scoreDiffLabel: "Average Goal Differential",
     pickField: "car",
     pickLabel: "Car / Role",
@@ -1297,7 +1428,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   "Overwatch 2": {
-    title: "Overwatch 2 Stats Dashboard",
+    title: "Overwatch 2",
     scoreDiffLabel: "Average Score Differential",
     pickField: "hero",
     pickLabel: "Hero",
@@ -1322,7 +1453,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   "Marvel Rivals": {
-    title: "Marvel Rivals Stats Dashboard",
+    title: "Marvel Rivals",
     scoreDiffLabel: "Average Score Differential",
     pickField: "hero",
     pickLabel: "Hero",
@@ -1347,7 +1478,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   Deadlock: {
-    title: "Deadlock Stats Dashboard",
+    title: "Deadlock",
     scoreDiffLabel: "Average Kill Differential",
     pickField: "hero",
     pickLabel: "Hero",
@@ -1369,7 +1500,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   SSBU: {
-    title: "SSBU Stats Dashboard",
+    title: "SSBU",
     scoreDiffLabel: "Average Stock Differential",
     pickField: "character",
     pickLabel: "Character",
@@ -1390,7 +1521,7 @@ const GAME_ANALYTICS_CONFIG = {
     ],
   },
   "Honor of Kings": {
-    title: "Honor of Kings Stats Dashboard",
+    title: "Honor of Kings",
     scoreDiffLabel: "Average Kill Differential",
     pickField: "hero",
     pickLabel: "Hero",
@@ -1507,8 +1638,52 @@ function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
   const bestMap = bestByWinRate(mapResults);
   const bestAgent = bestByWinRate(agentResults);
   const bestComp = bestByWinRate(compResults);
+  const teamOutput = config.output.map((stat) => ({
+    ...stat,
+    ours: avg(sortedReviews.map((review) => getReviewStatValue(review, stat)), stat.decimals ?? 1),
+    theirs: avg(sortedReviews.map((review) => getReviewStatValue(review, stat, "opponent")), stat.decimals ?? 1),
+  }));
+  const impact = config.impact.map((stat) => ({
+    ...stat,
+    ours: avg(sortedReviews.map((review) => getReviewStatValue(review, stat)), stat.decimals ?? 1),
+    theirs: avg(sortedReviews.map((review) => getReviewStatValue(review, stat, "opponent")), stat.decimals ?? 1),
+    diff: avg(getDiffsForStat(stat), stat.decimals ?? 1),
+    trend: getDiffsForStat(stat).slice().reverse(),
+  }));
+  const differentials = (config.differentials || []).map((stat) => ({
+    ...stat,
+    diff: avg(getDiffsForStat(stat), stat.decimals ?? 1),
+    trend: getDiffsForStat(stat).slice().reverse(),
+  }));
+  const lastFiveReviews = sortedReviews.slice(0, 5);
+  const lastFiveOutcomes = lastFiveReviews.map(getReviewOutcome).filter(Boolean);
+  const lastFiveWins = lastFiveOutcomes.filter((outcome) => outcome === "win").length;
+  const lastFiveLosses = lastFiveOutcomes.filter((outcome) => outcome === "loss").length;
+  const marginSummary = getAverageMarginSummary(sortedReviews, config);
+  const formStats = {
+    lastFiveReviews: lastFiveReviews.length,
+    lastFiveSequence: lastFiveReviews.map((review) => getReviewOutcome(review) || "unknown"),
+    lastFiveWins,
+    lastFiveLosses,
+    averageMargin: marginSummary.value,
+    averageMarginLabel: marginSummary.label,
+    averageMarginSource: marginSummary.source,
+    mostPlayedComp: mostUsedComp
+      ? {
+        label: mostUsedComp[0],
+        detail: `${mostUsedComp[1]} ${mostUsedComp[1] === 1 ? "review" : "reviews"}`,
+      }
+      : null,
+    strongestMap: bestMap
+      ? {
+        label: bestMap[0],
+        detail: `${formatPercent(getWinRate(bestMap[1].wins, bestMap[1].total))} win rate · ${bestMap[1].total} ${bestMap[1].total === 1 ? "review" : "reviews"}`,
+      }
+      : null,
+    weakestTrend: null,
+  };
 
-  return {
+  const aggregateStats = {
     config,
     gameTitle,
     totalReviews: sortedReviews.length,
@@ -1516,23 +1691,10 @@ function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
     losses,
     winRate: getWinRate(wins, wins + losses),
     averageRoundDiff: averageValues(roundDiffs),
-    teamOutput: config.output.map((stat) => ({
-      ...stat,
-      ours: avg(sortedReviews.map((review) => getReviewStatValue(review, stat)), stat.decimals ?? 1),
-      theirs: avg(sortedReviews.map((review) => getReviewStatValue(review, stat, "opponent")), stat.decimals ?? 1),
-    })),
-    impact: config.impact.map((stat) => ({
-      ...stat,
-      ours: avg(sortedReviews.map((review) => getReviewStatValue(review, stat)), stat.decimals ?? 1),
-      theirs: avg(sortedReviews.map((review) => getReviewStatValue(review, stat, "opponent")), stat.decimals ?? 1),
-      diff: avg(getDiffsForStat(stat), stat.decimals ?? 1),
-      trend: getDiffsForStat(stat).slice().reverse(),
-    })),
-    differentials: (config.differentials || []).map((stat) => ({
-      ...stat,
-      diff: avg(getDiffsForStat(stat), stat.decimals ?? 1),
-      trend: getDiffsForStat(stat).slice().reverse(),
-    })),
+    teamOutput,
+    impact,
+    differentials,
+    form: formStats,
     mapPool: {
       bestMap: bestMap ? `${bestMap[0]} · ${formatPercent(getWinRate(bestMap[1].wins, bestMap[1].total))}` : "—",
       mostPlayedMap: mostPlayedMap ? `${mostPlayedMap[0]} · ${mostPlayedMap[1]} ${mostPlayedMap[1] === 1 ? "review" : "reviews"}` : "—",
@@ -1546,6 +1708,8 @@ function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
     characterComfort: aggregateCharacterAnalytics(sortedReviews, gameTitle),
     league: gameTitle === "League of Legends" ? buildLeagueInsights(sortedReviews) : null,
   };
+  aggregateStats.form.weakestTrend = getWeakestStatTrend(aggregateStats);
+  return aggregateStats;
 }
 
 function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
@@ -1568,10 +1732,13 @@ function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
     <div>
       <div className="mb-md flex flex-col gap-md md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Team Form</p>
-          <h3 className="mt-xs font-headline-3 text-headline-3 text-on-surface">{stats.config.title}</h3>
+          <h3 className="font-headline-3 text-headline-3 text-on-surface">
+            {gameTitle === "Valorant" ? `Valorant Stats · ${reviews.length} ${reviews.length === 1 ? "Review" : "Reviews"}` : stats.config.title}
+          </h3>
           <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
-            Showing {timelineOption.label.toLowerCase()} from {reviews.length} saved {reviews.length === 1 ? "review" : "reviews"}.
+            {gameTitle === "Valorant"
+              ? `Showing ${timelineOption.label.toLowerCase()}.`
+              : `Showing ${timelineOption.label.toLowerCase()} from ${reviews.length} saved ${reviews.length === 1 ? "review" : "reviews"}.`}
           </p>
         </div>
         <div className="grid gap-sm">
@@ -1613,7 +1780,7 @@ function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
       {stats.totalReviews === 0 ? (
         activeTab === "overview" ? (
           <StatsEmptyState
-            body="Upload a post-game screenshot to start tracking team form."
+            body="Upload a post-game screenshot to start building this review summary."
             title={`No ${gameTitle} reviews yet.`}
           />
         ) : (
@@ -1624,8 +1791,24 @@ function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
         )
       ) : activeTab === "overview" ? (
         <GameOverviewStats stats={stats} />
+      ) : gameTitle === "Valorant" ? (
+        <ValorantDeepStats stats={stats} />
       ) : gameTitle === "League of Legends" ? (
         <LeagueDeepStats stats={stats} />
+      ) : gameTitle === "Overwatch 2" ? (
+        <OverwatchDeepStats stats={stats} />
+      ) : gameTitle === "Marvel Rivals" ? (
+        <MarvelRivalsDeepStats stats={stats} />
+      ) : gameTitle === "Deadlock" ? (
+        <DeadlockDeepStats stats={stats} />
+      ) : gameTitle === "Counter-Strike 2" ? (
+        <CounterStrikeDeepStats stats={stats} />
+      ) : gameTitle === "Rocket League" ? (
+        <RocketLeagueDeepStats stats={stats} />
+      ) : gameTitle === "SSBU" ? (
+        <SsbuDeepStats stats={stats} />
+      ) : gameTitle === "Honor of Kings" ? (
+        <HonorOfKingsDeepStats stats={stats} />
       ) : (
         <GameDeepStats fallbackKpis={fallbackKpis} stats={stats} />
       )}
@@ -1653,11 +1836,85 @@ function StatKpiCard({ label, value, children }) {
 }
 
 function GameOverviewStats({ stats }) {
+  const form = stats.form || {};
+  const resultDots = Array.from({ length: 5 }).map((_, index) => form.lastFiveSequence?.[index] || "empty");
+
   return (
-    <div className="grid grid-cols-1 gap-md md:grid-cols-3">
-      <StatKpiCard label="# of Reviews" value={stats.totalReviews} />
-      <StatKpiCard label="Record" value={`${stats.wins}W - ${stats.losses}L`} />
-      <StatKpiCard label="Win Rate" value={formatPercent(stats.winRate)} />
+    <div className="grid gap-md">
+      <section className="grid gap-sm md:grid-cols-3">
+        <StatKpiCard label="Recent Form" value={`${form.lastFiveWins || 0}W - ${form.lastFiveLosses || 0}L`}>
+          <div>
+            <p className="mt-xs font-headline-2 text-headline-2 text-primary">{form.lastFiveWins || 0}W - {form.lastFiveLosses || 0}L</p>
+            <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">Last 5 reviewed games</p>
+            <div className="mt-sm flex gap-xs">
+              {resultDots.map((result, index) => (
+                <span
+                  className={`h-2.5 flex-1 rounded-full ${
+                    result === "win"
+                      ? "bg-primary"
+                      : result === "loss"
+                        ? "bg-error"
+                        : result === "unknown"
+                          ? "bg-outline"
+                          : "bg-surface-container-high"
+                  }`}
+                  key={`${result}-${index}`}
+                  title={result}
+                />
+              ))}
+            </div>
+          </div>
+        </StatKpiCard>
+        <StatKpiCard label={form.averageMarginLabel || "Average Margin"} value={formatSignedStat(form.averageMargin, 1)}>
+          <p className="mt-xs font-headline-2 text-headline-2 text-primary">{formatSignedStat(form.averageMargin, 1)}</p>
+          {form.averageMarginSource && <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{form.averageMarginSource}</p>}
+        </StatKpiCard>
+        <StatKpiCard label={`Strongest ${stats.config.mapLabel.toLowerCase()}`}>
+          <p className="mt-xs font-headline-3 text-headline-3 text-on-surface">{form.strongestMap?.label || "—"}</p>
+          {form.strongestMap?.detail && <p className="mt-xs font-label-small text-label-small text-primary">{form.strongestMap.detail}</p>}
+        </StatKpiCard>
+      </section>
+
+      <section className="grid gap-sm md:grid-cols-3">
+        <TeamFormCompCard
+          gameTitle={stats.gameTitle}
+          label="Most-played comp"
+          value={form.mostPlayedComp ? `${form.mostPlayedComp.label} · ${form.mostPlayedComp.detail}` : "—"}
+        />
+        <FeatureCard
+          icon="trending_down"
+          label="Stat trend"
+          value={form.weakestTrend ? `${form.weakestTrend.label} · ${form.weakestTrend.detail}` : "—"}
+        />
+        <RecordSummaryCard
+          losses={stats.losses}
+          reviews={stats.totalReviews}
+          winRate={stats.winRate}
+          wins={stats.wins}
+        />
+      </section>
+    </div>
+  );
+}
+
+function RecordSummaryCard({ losses, reviews, winRate, wins }) {
+  const items = [
+    { label: "Win rate", value: formatPercent(winRate) },
+    { label: "Total record", value: `${wins}W - ${losses}L` },
+    { label: "Reviews", value: reviews },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <p className="font-label-small text-label-small text-on-surface-variant">Season summary</p>
+      <div className="mt-sm grid gap-xs">
+        {items.map((item) => (
+          <div className="flex items-center justify-between gap-md rounded-xl bg-surface-container-lowest px-sm py-2" key={item.label}>
+            <span className="font-label-small text-label-small text-on-surface-variant">{item.label}</span>
+            <span className="font-label-bold text-label-bold text-on-surface">{item.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1703,8 +1960,8 @@ function appendPercentGapText(baseText, percentGap) {
 function ComparisonBar({ label, ours, theirs, note }) {
   const hasValues = Number.isFinite(ours) && Number.isFinite(theirs);
   const max = hasValues ? Math.max(Math.abs(ours), Math.abs(theirs), 1) : 1;
-  const ourWidth = hasValues ? `${Math.max(8, (Math.abs(ours) / max) * 100)}%` : "0%";
-  const theirWidth = hasValues ? `${Math.max(8, (Math.abs(theirs) / max) * 100)}%` : "0%";
+  const ourWidth = hasValues ? `${readableBarWidth(Math.abs(ours), max)}%` : "0%";
+  const theirWidth = hasValues ? `${readableBarWidth(Math.abs(theirs), max)}%` : "0%";
   const gap = hasValues ? calcDeepStatPercentGap(ours, theirs) : null;
   const gapTone = gap === null
     ? "bg-surface-container text-on-surface-variant"
@@ -1723,12 +1980,12 @@ function ComparisonBar({ label, ours, theirs, note }) {
 
   return (
     <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
-      <div className="mb-sm flex items-center justify-between gap-sm">
-        <div>
+      <div className="mb-sm flex items-start justify-between gap-sm">
+        <div className="min-w-0">
           <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
           {note && <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">{note}</p>}
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <span className={`rounded-full px-2 py-0.5 font-label-small text-label-small ${gapTone}`}>
             {gapLabel}
           </span>
@@ -1739,11 +1996,11 @@ function ComparisonBar({ label, ours, theirs, note }) {
           </div>
         </div>
       </div>
-      <div className="grid gap-xs">
-        <div className="h-2 overflow-hidden rounded-full bg-primary-fixed">
+      <div className="grid gap-sm">
+        <div className="h-3.5 overflow-hidden rounded-full bg-primary-fixed">
           <div className="h-full rounded-full bg-primary" style={{ width: ourWidth }} />
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-error-container">
+        <div className="h-3.5 overflow-hidden rounded-full bg-error-container">
           <div className="h-full rounded-full bg-error" style={{ width: theirWidth }} />
         </div>
       </div>
@@ -1824,6 +2081,35 @@ function FeatureCard({ icon, label, value }) {
   );
 }
 
+function TeamFormCompCard({ gameTitle, label, value }) {
+  const { picks, meta } = splitCompPicks(value);
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <p className="font-label-small text-label-small text-on-surface-variant">{label}</p>
+      {picks.length ? (
+        <>
+          <div className="mt-sm flex flex-wrap gap-xs" aria-label={picks.join(", ")}>
+            {picks.map((pick, index) => (
+              <div className="-mr-2" key={`${pick}-${index}`} title={pick}>
+                <PickAvatar gameTitle={gameTitle} name={pick} size="sm" />
+              </div>
+            ))}
+          </div>
+          {meta && <p className="mt-xs font-label-small text-label-small text-primary">{meta}</p>}
+        </>
+      ) : (
+        <div className="mt-sm flex items-center gap-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-fixed text-primary">
+            <MaterialSymbol className="text-[21px]">groups</MaterialSymbol>
+          </div>
+          <p className="font-headline-3 text-headline-3 text-on-surface">—</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PickAvatar({ gameTitle, name, size = "md" }) {
   const [failed, setFailed] = useState(false);
   const imagePath = getPickImagePath(gameTitle, name);
@@ -1883,14 +2169,13 @@ function CompFeatureCard({ gameTitle, icon, label, value }) {
       <p className="font-label-small text-label-small text-on-surface-variant">{label}</p>
       {hasPicks ? (
         <>
-          <div className="mt-sm flex flex-wrap gap-xs">
+          <div className="mt-sm flex flex-wrap gap-xs" aria-label={picks.join(", ")}>
             {picks.map((pick, index) => (
               <div className="-mr-2" key={`${pick}-${index}`} title={pick}>
                 <PickAvatar gameTitle={gameTitle} name={pick} size="sm" />
               </div>
             ))}
           </div>
-          <p className="mt-sm line-clamp-2 font-label-bold text-label-bold text-on-surface">{picks.join(" / ")}</p>
           {meta && <p className="mt-xs font-label-small text-label-small text-primary">{meta}</p>}
         </>
       ) : (
@@ -1915,14 +2200,13 @@ function CharacterStatSummaryCard({ gameTitle, item, label, type = "character" }
       {primary ? (
         isComp ? (
           <>
-            <div className="mt-sm flex flex-wrap gap-xs">
+            <div className="mt-sm flex flex-wrap gap-xs" aria-label={item.characters?.join(", ") || item.comp_key}>
               {item.characters?.map((pick, index) => (
                 <div className="-mr-2" key={`${pick}-${index}`} title={pick}>
                   <PickAvatar gameTitle={gameTitle} name={pick} size="sm" />
                 </div>
               ))}
             </div>
-            <p className="mt-sm line-clamp-2 font-label-bold text-label-bold text-on-surface">{item.characters?.join(" / ") || item.comp_key}</p>
           </>
         ) : (
           <div className="mt-sm flex items-center gap-sm">
@@ -2079,7 +2363,7 @@ function ImpactDifferentialCard({ stat }) {
   const percentGap = calcDeepStatPercentGap(stat.ours, stat.theirs);
   const trend = Array.isArray(stat.trend) ? stat.trend.filter(Number.isFinite) : [];
   const scale = Math.max(1, ...trend.map((value) => Math.abs(value)), Math.abs(diff));
-  const position = hasDiff ? Math.max(4, Math.min(96, 50 + (diff / scale) * 42)) : 50;
+  const position = hasDiff ? Math.max(10, Math.min(90, 50 + (diff / scale) * 38)) : 50;
   const level = !hasDiff
     ? "unknown"
     : diff >= scale * 0.35
@@ -2551,11 +2835,14 @@ function LeagueDeepStats({ stats }) {
     <div className="grid gap-lg">
       <LeagueCoachRead damageDiff={damageDiff} goldDiff={goldDiff} killDiff={stats.averageRoundDiff} />
 
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <GameKdaRibbon assists={assistStat} deaths={deathStat} kills={killStat} title="Teamfight Shape" />
+        <EdgeProfileCard stats={[goldStat, damageStat, goldPerMinStat]} title="Resource Pressure Profile" />
+      </section>
+
       <section>
         <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Map Control Signals</h3>
         <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
-          <ComparisonBar label="Average Kills" ours={killStat?.ours} theirs={killStat?.theirs} />
-          <ComparisonBar label="Average Deaths" ours={deathStat?.ours} theirs={deathStat?.theirs} note="Lower is usually cleaner." />
           <ComparisonBar label="Gold" ours={goldStat?.ours} theirs={goldStat?.theirs} />
           <ComparisonBar label="Damage to Champions" ours={damageStat?.ours} theirs={damageStat?.theirs} />
         </div>
@@ -2582,13 +2869,8 @@ function LeagueDeepStats({ stats }) {
       </section>
 
       <section>
-        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Fight Cleanliness</h3>
-        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
-          <StatKpiCard label="Average Kills" value={formatDeepStatValue(killStat?.ours)} />
-          <StatKpiCard label="Average Deaths" value={formatDeepStatValue(deathStat?.ours)} />
-          <StatKpiCard label="Average Assists" value={formatDeepStatValue(assistStat?.ours)} />
-        </div>
-        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-2">
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Pace</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
           <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
           <StatKpiCard label="Gold / Min" value={formatDeepStatValue(goldPerMinStat?.ours)} />
         </div>
@@ -2636,6 +2918,882 @@ function LeagueDeepStats({ stats }) {
       </section>
 
       <CharacterComfortPanel analytics={stats.characterComfort} gameTitle={stats.gameTitle} />
+    </div>
+  );
+}
+
+function getStatByLabel(items = [], label) {
+  return items.find((item) => item.label === label) || null;
+}
+
+function getValorantStatBundle(stats) {
+  const output = stats.teamOutput || [];
+  const impact = stats.impact || [];
+  return {
+    assists: getStatByLabel(output, "Average Assists"),
+    combat: getStatByLabel(output, "Combat Score"),
+    deaths: getStatByLabel(output, "Average Deaths"),
+    defuses: getStatByLabel(impact, "Defuses"),
+    econ: getStatByLabel(output, "Econ Rating"),
+    firstBloods: getStatByLabel(impact, "First Bloods"),
+    kills: getStatByLabel(output, "Average Kills"),
+    plants: getStatByLabel(impact, "Plants"),
+  };
+}
+
+function chartValue(value, fallback = 0) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clampChartValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatChartValue(value, decimals = 1) {
+  if (!Number.isFinite(value)) return "—";
+  return formatDeepStatValue(Number(value.toFixed(decimals)));
+}
+
+function readableBarWidth(value, max, minWidth = 12) {
+  if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(max) || max <= 0) return 0;
+  return Math.max(minWidth, (value / max) * 100);
+}
+
+function ValorantChartCard({ children, className = "", label, meta }) {
+  return (
+    <div className={`rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md ${className}`}>
+      <div className="mb-sm flex items-start justify-between gap-sm">
+        <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
+        {meta && <p className="font-label-small text-label-small text-on-surface-variant">{meta}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function polarPoint(cx, cy, radius, angleDeg) {
+  const angle = (Math.PI / 180) * angleDeg;
+  return `${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`;
+}
+
+function kdaPolygon(values, maxValue, cx = 100, cy = 92, radius = 66) {
+  const angles = [-90, 30, 150];
+  return values
+    .map((value, index) => polarPoint(cx, cy, radius * (value / Math.max(maxValue, 1)), angles[index]))
+    .join(" ");
+}
+
+function ValorantKdaRadar({ assists, deaths, kills }) {
+  const ourDeaths = chartValue(deaths?.ours);
+  const theirDeaths = chartValue(deaths?.theirs);
+  const maxDeaths = Math.max(ourDeaths, theirDeaths, 1);
+  const ourSurvival = Math.max(0, maxDeaths - ourDeaths) + 1;
+  const theirSurvival = Math.max(0, maxDeaths - theirDeaths) + 1;
+  const ourValues = [chartValue(kills?.ours), chartValue(assists?.ours), ourSurvival];
+  const theirValues = [chartValue(kills?.theirs), chartValue(assists?.theirs), theirSurvival];
+  const maxValue = Math.max(...ourValues, ...theirValues, 1);
+
+  return (
+    <ValorantChartCard label="KDA Shape" meta="Kills · Assists · Survival">
+      <svg className="h-72 w-full" role="img" viewBox="0 0 260 220">
+        <polygon fill="none" points="130,26 211,166 49,166" stroke="currentColor" strokeOpacity="0.18" />
+        <polygon fill="none" points="130,58 183,150 77,150" stroke="currentColor" strokeOpacity="0.13" />
+        <line stroke="currentColor" strokeOpacity="0.16" x1="130" x2="130" y1="110" y2="26" />
+        <line stroke="currentColor" strokeOpacity="0.16" x1="130" x2="211" y1="110" y2="166" />
+        <line stroke="currentColor" strokeOpacity="0.16" x1="130" x2="49" y1="110" y2="166" />
+        <polygon fill="rgba(0,88,188,0.24)" points={kdaPolygon(ourValues, maxValue, 130, 110, 84)} stroke="rgb(0,88,188)" strokeWidth="3" />
+        <polygon fill="rgba(209,43,43,0.16)" points={kdaPolygon(theirValues, maxValue, 130, 110, 84)} stroke="rgb(209,43,43)" strokeWidth="3" />
+        <text className="fill-on-surface text-[11px] font-bold" textAnchor="middle" x="130" y="17">Kills</text>
+        <text className="fill-on-surface text-[11px] font-bold" textAnchor="start" x="218" y="174">Assists</text>
+        <text className="fill-on-surface text-[11px] font-bold" textAnchor="end" x="42" y="174">Survival</text>
+      </svg>
+      <div className="grid grid-cols-1 gap-xs font-label-small text-label-small sm:grid-cols-2">
+        <div className="rounded-xl bg-primary-fixed p-sm text-primary">Your Team: {formatChartValue(kills?.ours)} / {formatChartValue(deaths?.ours)} / {formatChartValue(assists?.ours)}</div>
+        <div className="rounded-xl bg-error-container p-sm text-error">Opponent Avg: {formatChartValue(kills?.theirs)} / {formatChartValue(deaths?.theirs)} / {formatChartValue(assists?.theirs)}</div>
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function ValorantGauge({ stat }) {
+  const ours = chartValue(stat?.ours);
+  const theirs = chartValue(stat?.theirs);
+  const min = 80;
+  const max = 200;
+  const toX = (value) => 34 + clampChartValue((value - min) / (max - min), 0, 1) * 212;
+  const ourX = toX(ours);
+  const theirX = toX(theirs);
+  const fillWidth = Math.max(0, ourX - 34);
+
+  return (
+    <ValorantChartCard label="Combat Score">
+      <svg className="h-80 w-full" role="img" viewBox="0 0 280 240">
+        <text className="fill-primary text-[36px] font-black" textAnchor="middle" x="140" y="58">{formatChartValue(ours, 1)}</text>
+        <text className="fill-on-surface-variant text-[9px] font-bold" textAnchor="middle" x="34" y="98">Low</text>
+        <text className="fill-on-surface-variant text-[9px] font-bold" textAnchor="middle" x="140" y="98">Avg</text>
+        <text className="fill-on-surface-variant text-[9px] font-bold" textAnchor="middle" x="246" y="98">High</text>
+        <rect fill="rgba(255,255,255,0.14)" height="10" rx="5" width="212" x="34" y="125" />
+        <rect fill="rgb(37,99,235)" height="10" rx="5" width={fillWidth} x="34" y="125" />
+        {[80, 120, 160, 200].map((tick) => (
+          <g key={tick}>
+            <line stroke="currentColor" strokeOpacity="0.32" x1={toX(tick)} x2={toX(tick)} y1="145" y2="158" />
+            <text className="fill-on-surface-variant text-[9px]" textAnchor="middle" x={toX(tick)} y="176">{tick}</text>
+          </g>
+        ))}
+        <line stroke="rgb(255,95,95)" strokeLinecap="round" strokeWidth="2" x1={theirX} x2={theirX} y1="106" y2="158" />
+        <text className="fill-error text-[10px] font-bold" textAnchor="middle" x={theirX} y="196">Opp {formatChartValue(theirs, 0)}</text>
+        <circle cx={ourX} cy="130" fill="rgb(59,130,246)" r="7" stroke="rgba(255,255,255,0.45)" strokeWidth="2" />
+        <text className="fill-on-surface-variant text-[9px]" textAnchor="middle" x="140" y="220">Combat Score benchmark</text>
+        <text className="fill-on-surface-variant text-[9px]" textAnchor="middle" x="140" y="234">Higher is better</text>
+      </svg>
+    </ValorantChartCard>
+  );
+}
+
+function ValorantEconMeter({ stat }) {
+  const ours = chartValue(stat?.ours);
+  const theirs = chartValue(stat?.theirs);
+  const delta = ours - theirs;
+  const highValue = Math.max(ours, theirs, 1);
+  const max = Math.ceil((highValue + 10) / 10) * 10;
+  const ourWidth = clampChartValue((ours / max) * 100, 0, 100);
+  const theirWidth = clampChartValue((theirs / max) * 100, 0, 100);
+  const deltaTone = delta >= 0 ? "text-primary" : "text-error";
+
+  return (
+    <ValorantChartCard label="Econ Rating" meta="Average comparison">
+      <div className="grid gap-md py-sm">
+        <div>
+          <div className="mb-sm flex items-center justify-between gap-sm">
+            <p className="font-label-bold text-label-bold text-on-surface">Average econ rating</p>
+            <p className={`font-label-bold text-label-bold ${deltaTone}`}>{formatSignedValue(delta, 1)}</p>
+          </div>
+          <div className="grid gap-lg rounded-2xl border border-outline-variant/20 bg-surface-container-high/40 p-md">
+            <div>
+              <div className="mb-xs flex items-center justify-between gap-sm">
+                <p className="font-label-bold text-label-bold text-primary">Blue team</p>
+                <p className="font-headline-3 text-headline-3 text-primary">{formatChartValue(ours, 1)}</p>
+              </div>
+              <div className="h-5 overflow-hidden rounded-full bg-surface-container-high">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${ourWidth}%` }} />
+              </div>
+            </div>
+            <div>
+              <div className="mb-xs flex items-center justify-between gap-sm">
+                <p className="font-label-bold text-label-bold text-error">Red team</p>
+                <p className="font-headline-3 text-headline-3 text-error">{formatChartValue(theirs, 1)}</p>
+              </div>
+              <div className="h-5 overflow-hidden rounded-full bg-surface-container-high">
+                <div className="h-full rounded-full bg-error" style={{ width: `${theirWidth}%` }} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between font-label-small text-label-small text-on-surface-variant">
+              <span>0</span>
+              <span>Same scale</span>
+              <span>{formatChartValue(max, 0)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function ValorantRoundDial({ value }) {
+  const diff = Number.isFinite(value) ? value : 0;
+  const barWidth = clampChartValue(Math.abs(diff) / 13, 0, 1) * 96;
+  const valueTone = diff >= 0 ? "fill-primary" : "fill-error";
+
+  return (
+    <ValorantChartCard label="Average Round Differential" meta="Rounds won - lost">
+      <svg className="h-[340px] w-full" role="img" viewBox="0 0 280 240">
+        <text className={`text-[42px] font-black ${valueTone}`} textAnchor="middle" x="140" y="60">{formatSignedValue(diff)}</text>
+        <text className="fill-error text-[10px] font-bold" textAnchor="middle" x="70" y="102">Opponent edge</text>
+        <text className="fill-on-surface-variant text-[10px] font-bold" textAnchor="middle" x="140" y="102">Even</text>
+        <text className="fill-primary text-[10px] font-bold" textAnchor="middle" x="210" y="102">Your edge</text>
+        <rect fill="rgba(255,255,255,0.10)" height="18" rx="9" width="208" x="36" y="132" />
+        <line stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" x1="140" x2="140" y1="118" y2="164" />
+        {diff >= 0 ? (
+          <rect fill="rgb(37,99,235)" height="18" rx="9" width={barWidth} x="140" y="132" />
+        ) : (
+          <rect fill="rgb(239,68,68)" height="18" rx="9" width={barWidth} x={140 - barWidth} y="132" />
+        )}
+        <circle cx={diff >= 0 ? 140 + barWidth : 140 - barWidth} cy="141" fill={diff >= 0 ? "rgb(59,130,246)" : "rgb(239,68,68)"} r="9" stroke="rgba(255,255,255,0.45)" strokeWidth="2" />
+        {[-13, -7, 0, 7, 13].map((tick) => {
+          const x = 36 + ((tick + 13) / 26) * 208;
+          return (
+            <g key={tick}>
+              <line stroke="currentColor" strokeOpacity="0.28" x1={x} x2={x} y1="172" y2="184" />
+              <text className="fill-on-surface-variant text-[10px]" textAnchor="middle" x={x} y="202">{tick > 0 ? `+${tick}` : tick}</text>
+            </g>
+          );
+        })}
+        <text className="fill-on-surface-variant text-[10px]" textAnchor="middle" x="140" y="216">Positive means your team wins more rounds per review</text>
+      </svg>
+    </ValorantChartCard>
+  );
+}
+
+function ValorantDotChart({ stat }) {
+  const ours = chartValue(stat?.ours);
+  const theirs = chartValue(stat?.theirs);
+
+  return (
+    <ValorantChartCard label="First Bloods" meta="Rounded avg">
+      <ValorantTwoRowBars ours={ours} theirs={theirs} />
+    </ValorantChartCard>
+  );
+}
+
+function ValorantPlantDonut({ stat }) {
+  const ours = chartValue(stat?.ours);
+  const theirs = chartValue(stat?.theirs);
+  const total = ours + theirs;
+  const share = total > 0 ? ours / total : 0;
+  const percent = Math.round(share * 100);
+
+  return (
+    <ValorantChartCard label="Plants" meta="Share of plants">
+      <div className="grid items-center gap-sm sm:grid-cols-[150px_1fr]">
+        <svg className="h-36 w-36" role="img" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" fill="none" r="42" stroke="rgb(254,226,226)" strokeWidth="18" />
+          <circle
+            cx="60"
+            cy="60"
+            fill="none"
+            pathLength="100"
+            r="42"
+            stroke="rgb(0,88,188)"
+            strokeDasharray={`${percent} 100`}
+            strokeLinecap="round"
+            strokeWidth="18"
+            transform="rotate(-90 60 60)"
+          />
+          <text className="fill-primary text-[22px] font-black" textAnchor="middle" x="60" y="65">{percent}%</text>
+        </svg>
+        <div className="grid gap-xs font-label-bold text-label-bold">
+          <div className="flex justify-between rounded-xl bg-primary-fixed p-sm text-primary"><span>Your Team</span><span>{formatChartValue(ours)}</span></div>
+          <div className="flex justify-between rounded-xl bg-error-container p-sm text-error"><span>Opponent Avg</span><span>{formatChartValue(theirs)}</span></div>
+        </div>
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function ValorantEventMarkers({ stat }) {
+  const ours = chartValue(stat?.ours);
+  const theirs = chartValue(stat?.theirs);
+
+  return (
+    <ValorantChartCard label="Defuses" meta="Rare event markers">
+      <ValorantTwoRowBars ours={ours} theirs={theirs} />
+    </ValorantChartCard>
+  );
+}
+
+function ValorantTwoRowBars({ ours, theirs }) {
+  const max = Math.max(ours, theirs, 1);
+  const rows = [
+    { label: "Your Team", tone: "bg-primary", value: ours, valueTone: "text-primary" },
+    { label: "Opponent Avg", tone: "bg-error", value: theirs, valueTone: "text-error" },
+  ];
+
+  return (
+    <div className="grid gap-xl py-md">
+      {rows.map((row, index) => (
+        <div key={row.label}>
+          <div className="mb-sm flex items-center justify-between gap-sm">
+            <p className="font-label-bold text-label-bold text-on-surface">{row.label}</p>
+            <p className={`font-headline-3 text-headline-3 ${row.valueTone}`}>{formatChartValue(row.value, 1)}</p>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-surface-container-high">
+            <div
+              className={`h-full rounded-full ${row.tone}`}
+              style={{ width: `${readableBarWidth(row.value, max)}%` }}
+            />
+          </div>
+          {index === 0 && <div className="mt-lg h-px bg-outline-variant/30" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ValorantTugChart({ stat }) {
+  const diff = Number.isFinite(stat?.diff)
+    ? stat.diff
+    : Number.isFinite(stat?.ours) && Number.isFinite(stat?.theirs)
+      ? stat.ours - stat.theirs
+      : null;
+  const value = diff ?? 0;
+  const scale = Math.max(1, Math.abs(value), Math.abs(stat?.ours || 0), Math.abs(stat?.theirs || 0));
+  const left = 50 + (value / scale) * 42;
+
+  return (
+    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <div className="mb-sm flex items-center justify-between gap-sm">
+        <p className="font-label-bold text-label-bold text-on-surface">{stat.label}</p>
+        <p className={`font-label-bold text-label-bold ${value > 0 ? "text-primary" : value < 0 ? "text-error" : "text-on-surface-variant"}`}>
+          {diff === null ? "—" : formatSignedValue(value)}
+        </p>
+      </div>
+      <div className="relative h-10 rounded-full bg-gradient-to-r from-error-container via-surface-container-lowest to-primary-fixed">
+        <div className="absolute left-1/2 top-1 h-8 w-px bg-outline-variant" />
+        <div
+          className={`absolute top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-surface-container-lowest shadow-sm ${value >= 0 ? "border-primary" : "border-error"}`}
+          style={{ left: `${Math.max(10, Math.min(90, left))}%` }}
+        />
+      </div>
+      <div className="mt-xs flex justify-between font-label-small text-label-small text-on-surface-variant">
+        <span>Opponent edge</span>
+        <span>Even</span>
+        <span>Your edge</span>
+      </div>
+    </div>
+  );
+}
+
+function ValorantDeepStats({ stats }) {
+  const bundle = getValorantStatBundle(stats);
+  const differentialStats = [
+    { ...bundle.firstBloods, label: "First Blood Differential" },
+    { ...bundle.plants, label: "Plant Differential" },
+    { ...bundle.defuses, label: "Defuse Differential" },
+  ];
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <ValorantKdaRadar assists={bundle.assists} deaths={bundle.deaths} kills={bundle.kills} />
+        <ValorantGauge stat={bundle.combat} />
+      </section>
+
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <ValorantEconMeter stat={bundle.econ} />
+        <ValorantRoundDial value={stats.averageRoundDiff} />
+      </section>
+
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-3">
+        <ValorantDotChart stat={bundle.firstBloods} />
+        <ValorantPlantDonut stat={bundle.plants} />
+        <ValorantEventMarkers stat={bundle.defuses} />
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Differentials</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
+          {differentialStats.map((stat) => (
+            <ValorantTugChart key={stat.label} stat={stat} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{formatPoolHeading(stats.config.mapLabel)}</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+          <FeatureCard icon="map" label="Best win rate" value={stats.mapPool.bestMap} />
+          <FeatureCard icon="repeat" label="Most reviewed" value={stats.mapPool.mostPlayedMap} />
+        </div>
+      </section>
+
+      <CharacterComfortPanel analytics={stats.characterComfort} gameTitle={stats.gameTitle} />
+    </div>
+  );
+}
+
+function getOutputStat(stats, label) {
+  return getStatByLabel(stats.teamOutput || [], label);
+}
+
+function getDifferentialStats(stats) {
+  return [
+    ...(stats.impact || []).filter((stat) => stat.differentialOnly || Number.isFinite(stat.diff)),
+    ...(stats.differentials || []),
+  ];
+}
+
+function GameMapAndComfort({ stats }) {
+  return (
+    <>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{formatPoolHeading(stats.config.mapLabel)}</h3>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+          <FeatureCard icon="map" label="Best win rate" value={stats.mapPool.bestMap} />
+          <FeatureCard icon="repeat" label="Most reviewed" value={stats.mapPool.mostPlayedMap} />
+        </div>
+      </section>
+      <CharacterComfortPanel analytics={stats.characterComfort} gameTitle={stats.gameTitle} />
+    </>
+  );
+}
+
+function GameKdaRibbon({ assists, deaths, kills, title = "Fight Snapshot" }) {
+  const rows = [
+    { label: "Kills", stat: kills, tone: "bg-primary", valueTone: "text-primary" },
+    { label: "Deaths", stat: deaths, tone: "bg-error", valueTone: "text-error", lowerIsBetter: true },
+    { label: "Assists", stat: assists, tone: "bg-[#0F766E]", valueTone: "text-[#0F766E]" },
+  ];
+
+  return (
+    <ValorantChartCard label={title} meta="Your team vs opponent avg">
+      <div className="grid gap-md py-sm">
+        {rows.map((row) => {
+          const ours = chartValue(row.stat?.ours);
+          const theirs = chartValue(row.stat?.theirs);
+          const max = Math.max(ours, theirs, 1);
+          const edge = row.lowerIsBetter ? theirs - ours : ours - theirs;
+          return (
+            <div key={row.label}>
+              <div className="mb-xs flex items-center justify-between gap-sm">
+                <p className="font-label-bold text-label-bold text-on-surface">{row.label}</p>
+                <p className={`font-label-bold text-label-bold ${edge >= 0 ? "text-primary" : "text-error"}`}>
+                  {formatSignedValue(edge, 1)}
+                </p>
+              </div>
+              <div className="grid gap-xs">
+                <div className="flex items-center gap-sm">
+                  <span className="w-12 font-label-small text-label-small text-primary">You</span>
+                  <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-primary-fixed">
+                    <div className={`h-full rounded-full ${row.tone}`} style={{ width: `${readableBarWidth(ours, max)}%` }} />
+                  </div>
+                  <span className={`w-14 text-right font-label-bold text-label-bold ${row.valueTone}`}>{formatChartValue(ours, 1)}</span>
+                </div>
+                <div className="flex items-center gap-sm">
+                  <span className="w-12 font-label-small text-label-small text-error">Opp</span>
+                  <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-error-container">
+                    <div className="h-full rounded-full bg-error" style={{ width: `${readableBarWidth(theirs, max)}%` }} />
+                  </div>
+                  <span className="w-14 text-right font-label-bold text-label-bold text-error">{formatChartValue(theirs, 1)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function OutputMixCard({ stats: statRows, title }) {
+  const rows = statRows.filter((stat) => stat?.label);
+
+  return (
+    <ValorantChartCard label={title} meta="Per-stat comparison">
+      <div className="grid gap-md py-sm">
+        {rows.map((stat) => {
+          const ours = chartValue(stat.ours);
+          const theirs = chartValue(stat.theirs);
+          const max = Math.max(Math.abs(ours), Math.abs(theirs), 1);
+          const gap = calcDeepStatPercentGap(ours, theirs);
+
+          return (
+            <div className="rounded-xl border border-outline-variant/20 bg-surface-container-high/35 p-sm" key={stat.label}>
+              <div className="mb-xs flex items-center justify-between gap-sm">
+                <p className="font-label-bold text-label-bold text-on-surface">{stat.label}</p>
+                <p className={`font-label-small text-label-small ${gap === null || gap >= 0 ? "text-primary" : "text-error"}`}>
+                  {gap === null ? "—" : `${gap > 0 ? "+" : ""}${gap}%`}
+                </p>
+              </div>
+              <div className="grid gap-xs">
+                <div className="grid grid-cols-[48px_1fr_64px] items-center gap-xs">
+                  <span className="font-label-small text-label-small text-primary">You</span>
+                  <div className="h-3.5 overflow-hidden rounded-full bg-primary-fixed">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${readableBarWidth(Math.abs(ours), max)}%` }} />
+                  </div>
+                  <span className="text-right font-label-bold text-label-bold text-primary">{formatChartValue(ours, stat.decimals ?? 0)}</span>
+                </div>
+                <div className="grid grid-cols-[48px_1fr_64px] items-center gap-xs">
+                  <span className="font-label-small text-label-small text-error">Opp</span>
+                  <div className="h-3.5 overflow-hidden rounded-full bg-error-container">
+                    <div className="h-full rounded-full bg-error" style={{ width: `${readableBarWidth(Math.abs(theirs), max)}%` }} />
+                  </div>
+                  <span className="text-right font-label-bold text-label-bold text-error">{formatChartValue(theirs, stat.decimals ?? 0)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function EdgeProfileCard({ stats: statRows, title }) {
+  const rows = statRows.filter((stat) => stat?.label);
+
+  return (
+    <ValorantChartCard label={title} meta="Team edge by stat">
+      <div className="grid gap-md py-sm">
+        {rows.map((stat) => {
+          const ours = chartValue(stat.ours);
+          const theirs = chartValue(stat.theirs);
+          const lowerBetter = stat.lowerBetter;
+          const rawDiff = ours - theirs;
+          const edge = lowerBetter ? -rawDiff : rawDiff;
+          const max = Math.max(Math.abs(ours), Math.abs(theirs), 1);
+          const position = clampChartValue(50 + (edge / max) * 38, 10, 90);
+          const tone = edge >= 0 ? "text-primary" : "text-error";
+          const markerTone = edge >= 0 ? "border-primary bg-primary" : "border-error bg-error";
+          const diffLabel = lowerBetter ? "Team edge" : "Diff";
+
+          return (
+            <div key={stat.label}>
+              <div className="mb-xs flex items-center justify-between gap-sm">
+                <p className="font-label-bold text-label-bold text-on-surface">{stat.label}</p>
+                <p className={`font-label-bold text-label-bold ${tone}`}>{diffLabel} {formatSignedValue(edge, stat.decimals ?? 1)}</p>
+              </div>
+              <div className="relative h-9 rounded-full bg-gradient-to-r from-error-container via-surface-container-lowest to-primary-fixed">
+                <div className="absolute left-1/2 top-1 h-7 w-px bg-outline-variant/60" />
+                <div
+                  className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/45 ${markerTone}`}
+                  style={{ left: `${position}%` }}
+                />
+              </div>
+              <div className="mt-xs flex justify-between font-label-small text-label-small text-on-surface-variant">
+                <span>Opponent</span>
+                <span>{formatChartValue(ours, stat.decimals ?? 1)} vs {formatChartValue(theirs, stat.decimals ?? 1)}</span>
+                <span>Your team</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function MetricRingCard({ label, stat, suffix = "" }) {
+  const ours = chartValue(stat?.ours);
+  const theirs = chartValue(stat?.theirs);
+  const max = Math.max(ours, theirs, 1);
+  const ourWidth = readableBarWidth(ours, max);
+  const theirWidth = readableBarWidth(theirs, max);
+  const gap = calcDeepStatPercentGap(ours, theirs);
+  const gapTone = gap === null || gap >= 0 ? "text-primary" : "text-error";
+  const diff = ours - theirs;
+
+  return (
+    <ValorantChartCard label={label} meta="Average comparison">
+      <div className="grid gap-lg py-sm">
+        <div className="flex items-end justify-between gap-md">
+          <div>
+            <p className="font-label-small text-label-small text-on-surface-variant">Your Team</p>
+            <p className="font-display-small text-display-small text-primary">{formatChartValue(ours, suffix ? 0 : 1)}{suffix}</p>
+          </div>
+          <div className="text-right">
+            <p className="font-label-small text-label-small text-on-surface-variant">Opponent Avg</p>
+            <p className="font-headline-2 text-headline-2 text-error">{formatChartValue(theirs, suffix ? 0 : 1)}{suffix}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-md rounded-2xl border border-outline-variant/20 bg-surface-container-high/40 p-md">
+          <div>
+            <div className="mb-xs flex items-center justify-between gap-sm">
+              <span className="font-label-bold text-label-bold text-primary">Your Team</span>
+              <span className="font-label-bold text-label-bold text-primary">{formatChartValue(ours, suffix ? 0 : 1)}{suffix}</span>
+            </div>
+            <div className="h-5 overflow-hidden rounded-full bg-primary-fixed">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${ourWidth}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="mb-xs flex items-center justify-between gap-sm">
+              <span className="font-label-bold text-label-bold text-error">Opponent Avg</span>
+              <span className="font-label-bold text-label-bold text-error">{formatChartValue(theirs, suffix ? 0 : 1)}{suffix}</span>
+            </div>
+            <div className="h-5 overflow-hidden rounded-full bg-error-container">
+              <div className="h-full rounded-full bg-error" style={{ width: `${theirWidth}%` }} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between font-label-small text-label-small text-on-surface-variant">
+            <span>Same scale</span>
+            <span className={gapTone}>
+              {gap === null ? formatSignedValue(diff, suffix ? 0 : 1) : `${gap > 0 ? "+" : ""}${gap}% vs opponent`}
+            </span>
+          </div>
+        </div>
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function DifferentialStripGrid({ stats, title = "Differentials" }) {
+  const rows = stats.filter(Boolean);
+  if (!rows.length) return null;
+
+  return (
+    <section>
+      <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">{title}</h3>
+      <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+        {rows.map((stat) => (
+          <ImpactDifferentialCard key={stat.label} stat={stat} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DamageConversionCard({ objectiveDamage, playerDamage }) {
+  const player = chartValue(playerDamage?.ours);
+  const objective = chartValue(objectiveDamage?.ours);
+  const ratio = player > 0 ? objective / player : 0;
+  const percent = Math.round(ratio * 100);
+  const max = Math.max(player, objective, 1);
+
+  return (
+    <ValorantChartCard label="Damage Conversion" meta="Objective / player damage">
+      <div className="grid gap-lg py-md">
+        <div className="text-center">
+          <p className="font-display-small text-display-small text-primary">{percent}%</p>
+          <p className="font-label-small text-label-small text-on-surface-variant">of player damage converted into objective pressure</p>
+        </div>
+        <div className="grid gap-md">
+          {[
+            { label: "Player Damage", value: player, tone: "bg-primary", text: "text-primary" },
+            { label: "Objective Damage", value: objective, tone: "bg-[#D97706]", text: "text-[#D97706]" },
+          ].map((row) => (
+            <div key={row.label}>
+              <div className="mb-xs flex justify-between gap-sm">
+                <p className="font-label-bold text-label-bold text-on-surface">{row.label}</p>
+                <p className={`font-label-bold text-label-bold ${row.text}`}>{formatChartValue(row.value, 0)}</p>
+              </div>
+              <div className="h-5 overflow-hidden rounded-full bg-surface-container-high">
+                <div className={`h-full rounded-full ${row.tone}`} style={{ width: `${readableBarWidth(row.value, max)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ValorantChartCard>
+  );
+}
+
+function OverwatchDeepStats({ stats }) {
+  const eliminations = getOutputStat(stats, "Eliminations");
+  const deaths = getOutputStat(stats, "Average Deaths");
+  const assists = getOutputStat(stats, "Assists");
+  const damage = getOutputStat(stats, "Damage");
+  const healing = getOutputStat(stats, "Healing");
+  const mitigation = getOutputStat(stats, "Mitigation");
+  const finalBlows = getOutputStat(stats, "Final Blows");
+  const objectiveKills = getOutputStat(stats, "Objective Kills");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <GameKdaRibbon assists={assists} deaths={deaths} kills={eliminations} title="Fight Flow" />
+        <OutputMixCard stats={[damage, healing, mitigation]} title="Role Output Comparison" />
+      </section>
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-2">
+        <MetricRingCard label="Final Blows" stat={finalBlows} />
+        <MetricRingCard label="Objective Kills" stat={objectiveKills} />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Role Pressure</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Damage" ours={damage?.ours} theirs={damage?.theirs} />
+          <ComparisonBar label="Healing" ours={healing?.ours} theirs={healing?.theirs} />
+          <ComparisonBar label="Mitigation" ours={mitigation?.ours} theirs={mitigation?.theirs} />
+        </div>
+      </section>
+      <DifferentialStripGrid stats={getDifferentialStats(stats)} />
+      <GameMapAndComfort stats={stats} />
+    </div>
+  );
+}
+
+function MarvelRivalsDeepStats({ stats }) {
+  const kills = getOutputStat(stats, "Average Kills");
+  const deaths = getOutputStat(stats, "Average Deaths");
+  const assists = getOutputStat(stats, "Average Assists");
+  const finalHits = getOutputStat(stats, "Final Hits");
+  const damage = getOutputStat(stats, "Damage");
+  const healing = getOutputStat(stats, "Healing");
+  const blocked = getOutputStat(stats, "Damage Blocked");
+  const accuracy = getOutputStat(stats, "Accuracy");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <GameKdaRibbon assists={assists} deaths={deaths} kills={kills} title="Team KDA Shape" />
+        <OutputMixCard stats={[damage, blocked, healing]} title="Damage / Sustain Comparison" />
+      </section>
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-2">
+        <MetricRingCard label="Final Hits" stat={finalHits} />
+        <MetricRingCard label="Accuracy" stat={accuracy} suffix="%" />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Core Combat Output</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Damage" ours={damage?.ours} theirs={damage?.theirs} />
+          <ComparisonBar label="Damage Blocked" ours={blocked?.ours} theirs={blocked?.theirs} />
+          <ComparisonBar label="Healing" ours={healing?.ours} theirs={healing?.theirs} />
+        </div>
+      </section>
+      <DifferentialStripGrid stats={getDifferentialStats(stats)} />
+      <GameMapAndComfort stats={stats} />
+    </div>
+  );
+}
+
+function DeadlockDeepStats({ stats }) {
+  const kills = getOutputStat(stats, "Average Kills");
+  const deaths = getOutputStat(stats, "Average Deaths");
+  const assists = getOutputStat(stats, "Average Assists");
+  const souls = getOutputStat(stats, "Souls / Net Worth");
+  const soulsPerMin = getOutputStat(stats, "Souls / Min");
+  const playerDamage = getOutputStat(stats, "Player Damage");
+  const objectiveDamage = getOutputStat(stats, "Objective Damage");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <EdgeProfileCard stats={[souls, playerDamage, objectiveDamage]} title="Economy to Pressure Profile" />
+        <DamageConversionCard objectiveDamage={objectiveDamage} playerDamage={playerDamage} />
+      </section>
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <GameKdaRibbon assists={assists} deaths={deaths} kills={kills} title="Fight Trading" />
+        <MetricRingCard label="Souls / Min" stat={soulsPerMin} />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Economy and Objective Race</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Souls / Net Worth" ours={souls?.ours} theirs={souls?.theirs} />
+          <ComparisonBar label="Player Damage" ours={playerDamage?.ours} theirs={playerDamage?.theirs} />
+          <ComparisonBar label="Objective Damage" ours={objectiveDamage?.ours} theirs={objectiveDamage?.theirs} />
+        </div>
+      </section>
+      <DifferentialStripGrid stats={getDifferentialStats(stats)} />
+      <GameMapAndComfort stats={stats} />
+    </div>
+  );
+}
+
+function CounterStrikeDeepStats({ stats }) {
+  const kills = getOutputStat(stats, "Average Kills");
+  const deaths = getOutputStat(stats, "Average Deaths");
+  const assists = getOutputStat(stats, "Average Assists");
+  const adr = getOutputStat(stats, "Average ADR");
+  const headshots = getOutputStat(stats, "Average HS%");
+  const mvps = getStatByLabel(stats.impact || [], "MVPs / Stars");
+  const rating = getStatByLabel(stats.impact || [], "Score / Rating");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <GameKdaRibbon assists={assists} deaths={deaths} kills={kills} title="Gunfight Trading" />
+        <EdgeProfileCard stats={[adr, headshots, rating]} title="Precision Profile" />
+      </section>
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-2">
+        <MetricRingCard label="Average HS%" stat={headshots} suffix="%" />
+        <MetricRingCard label="MVPs / Stars" stat={mvps} />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Round Impact</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Average ADR" ours={adr?.ours} theirs={adr?.theirs} />
+          <ComparisonBar label="Average HS%" ours={headshots?.ours} theirs={headshots?.theirs} />
+          <ComparisonBar label="Score / Rating" ours={rating?.ours} theirs={rating?.theirs} />
+        </div>
+      </section>
+      <GameMapAndComfort stats={stats} />
+    </div>
+  );
+}
+
+function RocketLeagueDeepStats({ stats }) {
+  const goals = getOutputStat(stats, "Goals");
+  const assists = getOutputStat(stats, "Assists");
+  const saves = getOutputStat(stats, "Saves");
+  const shots = getOutputStat(stats, "Shots");
+  const score = getOutputStat(stats, "Scoreboard Score");
+  const demos = getStatByLabel(stats.impact || [], "Demos");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <OutputMixCard stats={[goals, assists, saves, shots]} title="Rotation Output Comparison" />
+        <EdgeProfileCard stats={[goals, shots, score]} title="Scoring Pressure Profile" />
+      </section>
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-2">
+        <MetricRingCard label="Goals" stat={goals} />
+        <MetricRingCard label="Saves" stat={saves} />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Pressure and Disruption</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Shots" ours={shots?.ours} theirs={shots?.theirs} />
+          <ComparisonBar label="Assists" ours={assists?.ours} theirs={assists?.theirs} />
+          <ComparisonBar label="Demos" ours={demos?.ours} theirs={demos?.theirs} />
+        </div>
+      </section>
+      <DifferentialStripGrid stats={getDifferentialStats(stats)} />
+      <GameMapAndComfort stats={stats} />
+    </div>
+  );
+}
+
+function SsbuDeepStats({ stats }) {
+  const kos = getOutputStat(stats, "KOs");
+  const falls = getOutputStat(stats, "Falls");
+  const selfDestructs = getOutputStat(stats, "Self-Destructs");
+  const damageDealt = getOutputStat(stats, "Damage Dealt");
+  const damageTaken = getOutputStat(stats, "Damage Taken");
+  const stocks = getOutputStat(stats, "Stocks Remaining");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <EdgeProfileCard stats={[kos, falls && { ...falls, lowerBetter: true }, damageTaken && { ...damageTaken, lowerBetter: true }]} title="Stock Control Profile" />
+        <OutputMixCard stats={[kos, damageDealt, stocks]} title="Conversion Comparison" />
+      </section>
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-2">
+        <MetricRingCard label="Stocks Remaining" stat={stocks} />
+        <MetricRingCard label="KOs" stat={kos} />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Clean Play</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Falls" note="Lower is cleaner." ours={falls?.ours} theirs={falls?.theirs} />
+          <ComparisonBar label="Self-Destructs" note="Lower is cleaner." ours={selfDestructs?.ours} theirs={selfDestructs?.theirs} />
+          <ComparisonBar label="Damage Taken" note="Lower is cleaner." ours={damageTaken?.ours} theirs={damageTaken?.theirs} />
+        </div>
+      </section>
+      <DifferentialStripGrid stats={getDifferentialStats(stats)} />
+      <GameMapAndComfort stats={stats} />
+    </div>
+  );
+}
+
+function HonorOfKingsDeepStats({ stats }) {
+  const kills = getOutputStat(stats, "Average Kills");
+  const deaths = getOutputStat(stats, "Average Deaths");
+  const assists = getOutputStat(stats, "Average Assists");
+  const gold = getOutputStat(stats, "Gold");
+  const damage = getOutputStat(stats, "Damage");
+  const damageTaken = getOutputStat(stats, "Damage Taken");
+  const healing = getOutputStat(stats, "Healing");
+
+  return (
+    <div className="grid gap-lg">
+      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+        <GameKdaRibbon assists={assists} deaths={deaths} kills={kills} title="Teamfight Shape" />
+        <EdgeProfileCard stats={[gold, damage, damageTaken && { ...damageTaken, lowerBetter: true }, healing]} title="Lane Pressure Profile" />
+      </section>
+      <section className="grid grid-cols-1 gap-md lg:grid-cols-2">
+        <OutputMixCard stats={[damage, damageTaken, healing]} title="Damage / Sustain Comparison" />
+        <MetricRingCard label="Gold" stat={gold} />
+      </section>
+      <section>
+        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">MOBA Output</h3>
+        <div className="grid grid-cols-1 gap-sm lg:grid-cols-3">
+          <ComparisonBar label="Gold" ours={gold?.ours} theirs={gold?.theirs} />
+          <ComparisonBar label="Damage" ours={damage?.ours} theirs={damage?.theirs} />
+          <ComparisonBar label="Healing" ours={healing?.ours} theirs={healing?.theirs} />
+        </div>
+      </section>
+      <DifferentialStripGrid stats={getDifferentialStats(stats)} />
+      <GameMapAndComfort stats={stats} />
     </div>
   );
 }

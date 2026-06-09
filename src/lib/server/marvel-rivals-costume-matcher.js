@@ -76,8 +76,10 @@ function estimateCropForRow(row, index, metadata) {
   const topStart = Math.round(metadata.height * 0.22);
   const usableHeight = Math.round(metadata.height * 0.56);
   const rowHeight = usableHeight / rowCount;
-  const size = Math.round(Math.min(metadata.width, metadata.height) * 0.055);
-  const left = Math.round(metadata.width * 0.09);
+  const size = Math.round(Math.min(metadata.width, metadata.height) * 0.075);
+  // Marvel scoreboards put the role glyph before the row portrait. Starting
+  // farther right keeps fallback crops on the hero art instead of that glyph.
+  const left = Math.round(metadata.width * 0.12);
   const top = Math.round(topStart + safeIndex * rowHeight + rowHeight * 0.1);
 
   if (size < 20 || left + size > metadata.width || top < 0 || top + size > metadata.height) return null;
@@ -201,7 +203,7 @@ export async function matchMarvelRivalsCostumeIcons({ imageBuffer, rows = [] }) 
   const matches = [];
 
   for (const [index, row] of rows.entries()) {
-    const crop = normalizeCropHint(row.portrait_crop_hint, metadata) || estimateCropForRow(row, index, metadata);
+    const crop = estimateCropForRow(row, index, metadata) || normalizeCropHint(row.portrait_crop_hint, metadata);
     if (!crop) {
       matches.push(manualMatch(row, index, "no-crop"));
       continue;

@@ -111,40 +111,55 @@ function TeamProgramRow({ scrims, team }) {
   const counts = getScrimCounts(scrims);
   const activeCount = (counts.open || 0) + (counts.pending || 0) + (counts.matched || 0) + (counts.confirmed || 0);
   const rowAccent = activeCount ? "bg-primary" : "bg-outline-variant";
+  const openCount = counts.open || 0;
+  const secondaryStats = [
+    { label: "Mode", value: getDisplayModeForTeam(team), icon: "stadia_controller" },
+    { label: "Location", value: normalizeTeamLocation(team.region) || "Not set", icon: "location_on" },
+    { label: "Pending", value: counts.pending || 0, icon: "hourglass_top" },
+    { label: "Matched", value: counts.matched || 0, icon: "handshake" },
+    { label: "Confirmed", value: counts.confirmed || 0, icon: "event_available" },
+    { label: "Rating", value: Number(team.scrimgg_rating || 0).toFixed(1), icon: "military_tech" },
+  ];
 
   return (
-    <Link
-      href={`/team?id=${team.id}`}
-      className="grid gap-sm p-md transition-colors hover:bg-surface-container-low md:grid-cols-[minmax(180px,1.5fr)_repeat(5,minmax(88px,auto))_auto] md:items-center"
-    >
-      <div className="flex min-w-0 items-center gap-sm">
-        <span className={`h-10 w-1 rounded-full ${rowAccent}`} />
-        <div className="min-w-0">
-          <p className="truncate font-label-bold text-label-bold text-on-surface">{team.name}</p>
-          <p className="font-label-small text-label-small text-on-surface-variant">{team.game_title || "Game not set"}</p>
+    <details className="group transition-colors hover:bg-surface-container-low">
+      <summary className="grid cursor-pointer list-none gap-sm p-md marker:hidden md:grid-cols-[minmax(180px,1fr)_minmax(96px,auto)_minmax(96px,auto)_auto] md:items-center [&::-webkit-details-marker]:hidden">
+        <div className="flex min-w-0 items-center gap-sm">
+          <span className={`h-11 w-1 rounded-full ${rowAccent}`} />
+          <div className="min-w-0">
+            <p className="truncate font-label-bold text-label-bold text-on-surface">{team.name}</p>
+            <p className="font-label-small text-label-small text-on-surface-variant">{team.game_title || "Game not set"}</p>
+          </div>
         </div>
+        <div className="flex items-center justify-between gap-sm rounded-lg bg-surface-container-low px-sm py-xs md:block md:bg-transparent md:px-0 md:py-0">
+          <span className="font-label-small text-[10px] uppercase tracking-wide text-outline md:block">Rank</span>
+          <span className="font-label-bold text-label-small text-on-surface md:block">{team.rank_tier || "TBD"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-sm rounded-lg bg-primary-fixed px-sm py-xs text-on-primary-fixed md:block">
+          <span className="font-label-small text-[10px] uppercase tracking-wide md:block">Open scrims</span>
+          <span className="font-label-bold text-label-small md:block">{openCount}</span>
+        </div>
+        <div className="flex items-center justify-between gap-sm md:justify-end">
+          <Link
+            className="inline-flex items-center gap-xs rounded-lg bg-primary px-sm py-xs font-label-bold text-label-small text-on-primary hover:bg-on-primary-fixed-variant"
+            href={`/team?id=${team.id}`}
+          >
+            Manage
+            <MaterialSymbol className="text-[16px]">arrow_forward</MaterialSymbol>
+          </Link>
+          <MaterialSymbol className="text-on-surface-variant transition-transform group-open:rotate-180">expand_more</MaterialSymbol>
+        </div>
+      </summary>
+      <div className="grid gap-sm border-t border-outline-variant/15 bg-surface-container-low/45 px-md pb-md pt-sm sm:grid-cols-2 lg:grid-cols-3">
+        {secondaryStats.map((item) => (
+          <div className="flex items-center gap-sm rounded-xl bg-surface-container-lowest px-sm py-xs" key={item.label}>
+            <MaterialSymbol className="text-[17px] text-on-surface-variant">{item.icon}</MaterialSymbol>
+            <span className="font-label-small text-[10px] uppercase tracking-wide text-outline">{item.label}</span>
+            <span className="ml-auto font-label-bold text-label-small text-on-surface">{item.value}</span>
+          </div>
+        ))}
       </div>
-      <ProgramRowPill label="Mode" value={getDisplayModeForTeam(team)} />
-      <ProgramRowPill label="Rank" value={team.rank_tier || "TBD"} />
-      <ProgramRowPill label="Location" value={normalizeTeamLocation(team.region) || "Not set"} />
-      <ProgramRowPill label="Open" value={counts.open || 0} />
-      <ProgramRowPill label="Pending" value={counts.pending || 0} />
-      <div className="flex items-center justify-between gap-sm md:justify-end">
-        <span className="font-label-small text-label-small text-on-surface-variant">
-          Rating {Number(team.scrimgg_rating || 0).toFixed(1)}
-        </span>
-        <MaterialSymbol className="text-primary">arrow_forward</MaterialSymbol>
-      </div>
-    </Link>
-  );
-}
-
-function ProgramRowPill({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-sm rounded-lg bg-surface-container-low px-sm py-xs md:block md:bg-transparent md:px-0 md:py-0">
-      <span className="font-label-small text-[10px] uppercase tracking-wide text-outline md:block">{label}</span>
-      <span className="font-label-bold text-label-small text-on-surface md:block">{value}</span>
-    </div>
+    </details>
   );
 }
 

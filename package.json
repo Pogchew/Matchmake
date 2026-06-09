@@ -14,7 +14,8 @@
     "@supabase/supabase-js": "^2.104.1",
     "next": "^15.5.9",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@next/swc-wasm-nodejs": "^16.2.4",

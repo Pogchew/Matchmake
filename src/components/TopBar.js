@@ -52,7 +52,7 @@ function buildScrimTitle(scrim) {
   return `${getTeamName(scrim?.posting_team)} vs ${getTeamName(scrim?.matched_team)}`;
 }
 
-export default function TopBar({ right }) {
+export default function TopBar({ actions, right }) {
   const pathname = usePathname();
   const router = useRouter();
   const notificationRef = useRef(null);
@@ -276,6 +276,7 @@ export default function TopBar({ right }) {
 
       {/* Right: slot (defaults to notifications bell) */}
       <div className="flex items-center justify-end gap-sm">
+        {actions}
         <ThemeToggle />
         {right ?? (
           <div className="relative" ref={notificationRef}>

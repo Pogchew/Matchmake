@@ -48,8 +48,8 @@ export const MARVEL_RIVALS_HERO_ASSETS = HEROES.map(([heroId, heroName]) => ({
   hero_name: heroName,
   costume_id: "default",
   costume_name: "Default",
-  asset_type: "scoreboard_icon",
-  src: `/game-assets/marvel-rivals/scoreboard-icons/${heroId}/default.png`,
+  asset_type: "scoreboard_headshot",
+  src: `/game-assets/marvel-rivals/scoreboard-headshots/${heroId}.png`,
   source: "manual",
-  notes: "Add manually sourced scoreboard/costume icons at this path. Missing files are skipped by the matcher.",
+  notes: "Compact default headshot used by the scoreboard reference sheet and portrait matcher.",
 }));

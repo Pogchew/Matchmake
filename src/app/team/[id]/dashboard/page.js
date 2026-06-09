@@ -6,8 +6,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import GameDashboardShell from "@/components/dashboard/GameDashboardShell";
+import GameSpecificOverview from "@/components/dashboard/GameSpecificOverview";
+import ReviewDashboardTabs from "@/components/dashboard/ReviewDashboardTabs";
 import MaterialSymbol from "@/components/MaterialSymbol";
-import ThemeToggle from "@/components/ThemeToggle";
+import TopBar from "@/components/TopBar";
+import { getDashboardConfig } from "@/lib/dashboard/game-dashboard-configs";
 import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
@@ -26,249 +30,7 @@ const DEADLOCK_HERO_OPTIONS = Array.from(
     .filter((name) => typeof name === "string" && name.trim().length > 0))
 ).sort((a, b) => a.localeCompare(b));
 
-const GAME_DASHBOARD_CONFIGS = {
-  "League of Legends": {
-    pickField: "champion",
-    pickLabel: "Champion",
-    mapLabel: "Scrim Context",
-    compositionLabel: "Composition",
-    defaultMap: "",
-    roles: ["Top", "Jungle", "Mid", "ADC", "Support"],
-    editFields: ["level", "k", "d", "a", "gold", "damage_to_champions"],
-    cardStats: [
-      { key: "kda", label: "K/D/A" },
-      { key: "gold", label: "Gold" },
-    ],
-    tableFields: [
-      { key: "kda", label: "K/D/A" },
-      { key: "gold", label: "Gold" },
-      { key: "damage_to_champions", label: "Damage" },
-    ],
-    highlightStats: [
-      { key: "total_gold", label: "Total Gold" },
-      { key: "total_damage_to_champions", label: "Damage" },
-    ],
-  },
-  Valorant: {
-    pickField: "agent",
-    pickLabel: "Agent",
-    mapLabel: "Map",
-    compositionLabel: "Composition",
-    defaultMap: "Ascent",
-    roles: ["Duelist", "Initiator", "Controller", "Sentinel", "Flex"],
-    editFields: ["k", "d", "a", "acs", "econ_rating", "first_bloods", "plants", "defuses"],
-    cardStats: [
-      { key: "acs", label: "Combat Score" },
-      { key: "kda", label: "K/D/A" },
-    ],
-    tableFields: [
-      { key: "acs", label: "Combat Score" },
-      { key: "kda", label: "K/D/A" },
-      { key: "econ_rating", label: "Econ" },
-      { key: "first_bloods", label: "FB" },
-      { key: "plants", label: "Plants" },
-      { key: "defuses", label: "Defuses" },
-    ],
-    highlightStats: [
-      { key: "team_kills", label: "Total Kills" },
-      { key: "team_deaths", label: "Total Deaths" },
-      { key: "team_assists", label: "Total Assists" },
-      { key: "average_acs", label: "Average Combat Score" },
-      { key: "average_econ_rating", label: "Average Econ" },
-      { key: "total_first_bloods", label: "First Bloods" },
-      { key: "total_plants", label: "Plants" },
-      { key: "total_defuses", label: "Defuses" },
-    ],
-  },
-  "Counter-Strike 2": {
-    pickField: "role",
-    pickLabel: "Role",
-    mapLabel: "Map",
-    compositionLabel: "Lineup",
-    defaultMap: "Competitive Map",
-    roles: ["Entry", "AWPer", "Rifler", "IGL", "Support"],
-    editFields: ["k", "a", "d", "adr", "hs_percent", "mvps", "score"],
-    cardStats: [
-      { key: "kda", label: "K/A/D" },
-      { key: "adr", label: "ADR" },
-    ],
-    tableFields: [
-      { key: "kda", label: "K/A/D" },
-      { key: "adr", label: "ADR" },
-      { key: "hs_percent", label: "HS%" },
-      { key: "mvps", label: "MVPs" },
-      { key: "score", label: "Score" },
-    ],
-    highlightStats: [
-      { key: "team_kills", label: "Team Kills" },
-      { key: "average_adr", label: "Avg ADR" },
-      { key: "average_hs_percent", label: "Avg HS%" },
-    ],
-  },
-  "Rocket League": {
-    pickField: "car",
-    pickLabel: "Car / Role",
-    mapLabel: "Arena / Mode",
-    compositionLabel: "Rotation",
-    defaultMap: "3v3",
-    roles: ["First Man", "Second Man", "Third Man"],
-    editFields: ["score", "goals", "assists", "saves", "shots", "demos"],
-    cardStats: [
-      { key: "goals", label: "Goals" },
-      { key: "saves", label: "Saves" },
-    ],
-    tableFields: [
-      { key: "score", label: "Score" },
-      { key: "goals", label: "Goals" },
-      { key: "assists", label: "Assists" },
-      { key: "saves", label: "Saves" },
-      { key: "shots", label: "Shots" },
-      { key: "demos", label: "Demos" },
-    ],
-    highlightStats: [
-      { key: "goals", label: "Goals" },
-      { key: "saves", label: "Saves" },
-      { key: "shots", label: "Shots" },
-    ],
-  },
-  "Overwatch 2": {
-    pickField: "hero",
-    pickLabel: "Hero",
-    mapLabel: "Map / Objective",
-    compositionLabel: "Hero Composition",
-    defaultMap: "Hybrid",
-    roles: ["Tank", "Damage", "Damage", "Support", "Support", "Flex"],
-    editFields: ["eliminations", "assists", "deaths", "damage", "healing", "mitigation", "final_blows", "objective_kills"],
-    cardStats: [
-      { key: "eliminations", label: "Elims" },
-      { key: "deaths", label: "Deaths" },
-    ],
-    tableFields: [
-      { key: "eliminations", label: "Elims" },
-      { key: "assists", label: "Assists" },
-      { key: "deaths", label: "Deaths" },
-      { key: "damage", label: "Damage" },
-      { key: "healing", label: "Healing" },
-      { key: "mitigation", label: "Mitigation" },
-      { key: "final_blows", label: "Final Blows" },
-      { key: "objective_kills", label: "Obj Kills" },
-    ],
-    highlightStats: [
-      { key: "total_eliminations", fallback: "eliminations", label: "Eliminations" },
-      { key: "total_damage", fallback: "damage", label: "Damage" },
-      { key: "total_healing", fallback: "healing", label: "Healing" },
-      { key: "total_mitigation", fallback: "mitigation", label: "Mitigation" },
-    ],
-  },
-  "Marvel Rivals": {
-    pickField: "hero",
-    pickLabel: "Hero",
-    mapLabel: "Map / Mode",
-    compositionLabel: "Hero Composition",
-    defaultMap: "Domination",
-    roles: ["Vanguard", "Duelist", "Duelist", "Strategist", "Strategist", "Flex"],
-    editFields: ["k", "d", "a", "final_hits", "damage", "damage_blocked", "healing", "accuracy"],
-    cardStats: [
-      { key: "kda", label: "K/D/A" },
-      { key: "damage", label: "Damage" },
-    ],
-    tableFields: [
-      { key: "kda", label: "K/D/A" },
-      { key: "final_hits", label: "Final Hits" },
-      { key: "damage", label: "Damage" },
-      { key: "damage_blocked", label: "Blocked" },
-      { key: "healing", label: "Healing" },
-      { key: "accuracy", label: "Accuracy" },
-    ],
-    highlightStats: [
-      { key: "total_kills", label: "Kills" },
-      { key: "total_final_hits", label: "Final Hits" },
-      { key: "total_damage", label: "Damage" },
-      { key: "total_healing", label: "Healing" },
-    ],
-  },
-  Deadlock: {
-    pickField: "hero",
-    pickLabel: "Hero",
-    mapLabel: "Match / Lane",
-    compositionLabel: "Hero Lineup",
-    defaultMap: "Ending Match",
-    roles: ["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6"],
-    editFields: ["k", "d", "a", "souls", "player_damage", "objective_damage", "healing"],
-    cardStats: [
-      { key: "kda", label: "K/D/A" },
-      { key: "souls", label: "Souls" },
-    ],
-    tableFields: [
-      { key: "kda", label: "K/D/A" },
-      { key: "souls", label: "Souls" },
-      { key: "player_damage", label: "Player Dmg" },
-      { key: "objective_damage", label: "Obj Dmg" },
-      { key: "healing", label: "Healing" },
-    ],
-    highlightStats: [
-      { key: "team_kills", label: "Team Kills" },
-      { key: "total_souls", label: "Souls" },
-      { key: "player_damage", label: "Player Dmg" },
-      { key: "objective_damage", label: "Objective Dmg" },
-    ],
-  },
-  SSBU: {
-    pickField: "character",
-    pickLabel: "Character",
-    mapLabel: "Ruleset / Stage",
-    compositionLabel: "Crew",
-    screenshotUpload: false,
-    defaultMap: "Crew Battle",
-    roles: ["Starter", "Anchor", "Counterpick", "Flex", "Closer"],
-    editFields: ["kos", "falls", "self_destructs", "damage_dealt", "damage_taken", "stocks_remaining"],
-    cardStats: [
-      { key: "kos", label: "KOs" },
-      { key: "stocks_remaining", label: "Stocks" },
-    ],
-    tableFields: [
-      { key: "kos", label: "KOs" },
-      { key: "falls", label: "Falls" },
-      { key: "self_destructs", label: "SDs" },
-      { key: "damage_dealt", label: "Dmg Dealt" },
-      { key: "damage_taken", label: "Dmg Taken" },
-      { key: "stocks_remaining", label: "Stocks" },
-    ],
-    highlightStats: [
-      { key: "kos", label: "KOs" },
-      { key: "stocks_remaining", label: "Stocks Left" },
-      { key: "self_destructs", label: "SDs" },
-    ],
-  },
-  "Honor of Kings": {
-    pickField: "hero",
-    pickLabel: "Hero",
-    mapLabel: "Mode",
-    compositionLabel: "Hero Composition",
-    defaultMap: "Ranked 5v5",
-    roles: ["Clash Lane", "Jungle", "Mid", "Farm Lane", "Roam"],
-    editFields: ["k", "d", "a", "gold", "damage", "damage_taken", "healing", "rating"],
-    cardStats: [
-      { key: "kda", label: "K/D/A" },
-      { key: "gold", label: "Gold" },
-    ],
-    tableFields: [
-      { key: "kda", label: "K/D/A" },
-      { key: "gold", label: "Gold" },
-      { key: "damage", label: "Damage" },
-      { key: "damage_taken", label: "Taken" },
-      { key: "healing", label: "Healing" },
-    ],
-    highlightStats: [
-      { key: "team_kills", label: "Team Kills" },
-      { key: "total_gold", label: "Total Gold" },
-      { key: "total_damage", fallback: "damage", label: "Damage" },
-      { key: "healing", label: "Healing" },
-    ],
-  },
-};
 
-GAME_DASHBOARD_CONFIGS.Overwatch = GAME_DASHBOARD_CONFIGS["Overwatch 2"];
 
 const SUPPORTED_GAMES = Object.keys(POSTGAME_SCREENSHOT_STATS);
 const SERVER_EXTRACTOR_GAMES = new Set([
@@ -328,10 +90,6 @@ const MARVEL_RIVALS_HERO_OPTIONS = [
   "Winter Soldier",
   "Wolverine",
 ];
-
-function getDashboardConfig(gameTitle) {
-  return GAME_DASHBOARD_CONFIGS[gameTitle] || GAME_DASHBOARD_CONFIGS.Valorant;
-}
 
 function createBlankReview(gameTitle, matchType = "scrim") {
   const config = getDashboardConfig(gameTitle);
@@ -418,8 +176,10 @@ function normalizeRowsForSave(rows = [], gameTitle) {
   if (gameTitle !== "Marvel Rivals") return rows;
   return rows.map((row) => ({
     ...row,
-    hero: row.hero_confirmed || "",
-    hero_confirmed: row.hero_confirmed || "",
+    hero: row.hero_confirmed || row.hero || row.hero_guess || "",
+    hero_confirmed: row.needs_hero_review || row.needs_manual_review
+      ? ""
+      : row.hero_confirmed || row.hero || row.hero_guess || "",
     hero_id: row.hero_id || "",
     costume_name: row.costume_name || "",
     costume_id: row.costume_id || "",
@@ -469,25 +229,51 @@ function normalizeExtractedNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeExtractedNumberOrReview(value, fallback = "Needs review") {
+  const number = normalizeExtractedNumber(value);
+  if (number !== null) return number;
+  if (value !== null && value !== undefined && String(value).trim() !== "") return value;
+  return fallback;
+}
+
+function normalizeExtractedScore(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const cleaned = String(value).replace(/,/g, "").trim();
+  if (!/^-?\d+(?:\.\d+)?$/.test(cleaned)) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeExtractedFinalScore(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const text = String(value).trim();
+  if (/^\d+(?:\.\d+)?\s*[-:]\s*\d+(?:\.\d+)?$/.test(text)) return text;
+  if (/^(victory|defeat|win|loss)$/i.test(text)) return text;
+  return "";
+}
+
 function formatScore(teamScore, opponentScore) {
-  const hasTeamScore = teamScore !== null && teamScore !== undefined && teamScore !== "";
-  const hasOpponentScore = opponentScore !== null && opponentScore !== undefined && opponentScore !== "";
+  const normalizedTeamScore = normalizeExtractedScore(teamScore);
+  const normalizedOpponentScore = normalizeExtractedScore(opponentScore);
+  const hasTeamScore = normalizedTeamScore !== null;
+  const hasOpponentScore = normalizedOpponentScore !== null;
   if (!hasTeamScore && !hasOpponentScore) return "";
-  return `${hasTeamScore ? teamScore : "—"} - ${hasOpponentScore ? opponentScore : "—"}`;
+  return `${hasTeamScore ? normalizedTeamScore : "—"} - ${hasOpponentScore ? normalizedOpponentScore : "—"}`;
 }
 
 function mapLeaguePlayerRow(player = {}) {
   return {
-    role: player.role || "",
-    champion: player.champion || "",
-    player_name: player.player_name || "",
-    level: normalizeExtractedNumber(player.level) ?? "",
-    k: normalizeExtractedNumber(player.kills) ?? "",
-    d: normalizeExtractedNumber(player.deaths) ?? "",
-    a: normalizeExtractedNumber(player.assists) ?? "",
-    gold: normalizeExtractedNumber(player.gold) ?? "",
-    gold_per_min: normalizeExtractedNumber(player.gold_per_min) ?? "",
-    damage_to_champions: normalizeExtractedNumber(player.damage_to_champions) ?? "",
+    role: player.role || "Needs review",
+    champion: player.champion || "Unidentified champion",
+    player_name: player.player_name || "Player",
+    level: normalizeExtractedNumberOrReview(player.level),
+    k: normalizeExtractedNumberOrReview(player.kills),
+    d: normalizeExtractedNumberOrReview(player.deaths),
+    a: normalizeExtractedNumberOrReview(player.assists),
+    gold: normalizeExtractedNumberOrReview(player.gold),
+    gold_per_min: normalizeExtractedNumberOrReview(player.gold_per_min),
+    damage_to_champions: normalizeExtractedNumberOrReview(player.damage_to_champions),
     damage_share_percent: normalizeExtractedNumber(player.damage_share_percent) ?? "",
     items: Array.isArray(player.items) ? player.items : [],
     summoner_spells: Array.isArray(player.summoner_spells) ? player.summoner_spells : [],
@@ -496,15 +282,31 @@ function mapLeaguePlayerRow(player = {}) {
   };
 }
 
-function mapLeagueTeamStats(team = {}, derived = {}) {
+function mapLeagueTeamStats(team = {}, derived = {}, rows = []) {
   const totals = team.team_totals || {};
   return {
-    team_kills: normalizeExtractedNumber(totals.kills) ?? normalizeExtractedNumber(derived.total_kills_from_rows),
-    team_deaths: normalizeExtractedNumber(totals.deaths) ?? normalizeExtractedNumber(derived.total_deaths_from_rows),
-    team_assists: normalizeExtractedNumber(totals.assists) ?? normalizeExtractedNumber(derived.total_assists_from_rows),
-    total_gold: normalizeExtractedNumber(totals.gold) ?? normalizeExtractedNumber(derived.total_gold_from_rows),
-    total_damage_to_champions: normalizeExtractedNumber(totals.damage_to_champions) ?? normalizeExtractedNumber(derived.total_damage_to_champions_from_rows),
+    team_kills: sumRows(rows, "k") ?? normalizeExtractedNumber(derived.total_kills_from_rows) ?? normalizeExtractedNumber(totals.kills),
+    team_deaths: sumRows(rows, "d") ?? normalizeExtractedNumber(derived.total_deaths_from_rows) ?? normalizeExtractedNumber(totals.deaths),
+    team_assists: sumRows(rows, "a") ?? normalizeExtractedNumber(derived.total_assists_from_rows) ?? normalizeExtractedNumber(totals.assists),
+    total_gold: sumRows(rows, "gold") ?? normalizeExtractedNumber(derived.total_gold_from_rows) ?? normalizeExtractedNumber(totals.gold),
+    total_damage_to_champions: sumRows(rows, "damage_to_champions") ?? normalizeExtractedNumber(derived.total_damage_to_champions_from_rows) ?? normalizeExtractedNumber(totals.damage_to_champions),
   };
+}
+
+function correctLeagueGoldDamageColumns(team = {}, rows = []) {
+  const visibleGoldTotal = normalizeExtractedNumber(team?.team_totals?.gold);
+  const rowGoldTotal = sumRows(rows, "gold");
+  const rowDamageTotal = sumRows(rows, "damage_to_champions");
+  const goldMatchesDamageColumn = visibleGoldTotal !== null && rowDamageTotal !== null && Math.abs(rowDamageTotal - visibleGoldTotal) <= 2;
+  const goldAlreadyCorrect = visibleGoldTotal !== null && rowGoldTotal !== null && Math.abs(rowGoldTotal - visibleGoldTotal) <= 2;
+
+  if (!goldMatchesDamageColumn || goldAlreadyCorrect) return rows;
+
+  return rows.map((row) => ({
+    ...row,
+    gold: row.damage_to_champions,
+    damage_to_champions: row.gold,
+  }));
 }
 
 function findUserLeagueTeam(extraction, teamName) {
@@ -533,24 +335,26 @@ function mapLeagueExtractionToReview(extraction, teamName) {
   const ourScore = ourTeamKey === "team_2" ? match.team_2_score : match.team_1_score;
   const opponentScore = opponentTeamKey === "team_1" ? match.team_1_score : match.team_2_score;
   const normalizedResult = match.result?.toLowerCase?.();
+  const teamComp = correctLeagueGoldDamageColumns(ourTeam, (ourTeam?.players || []).map(mapLeaguePlayerRow));
+  const opponentComp = correctLeagueGoldDamageColumns(opponentTeam, (opponentTeam?.players || []).map(mapLeaguePlayerRow));
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(ourScore, opponentScore) || match.final_score || "",
-    team_score: normalizeExtractedNumber(ourScore) ?? "",
-    opponent_score: normalizeExtractedNumber(opponentScore) ?? "",
+    final_score: formatScore(ourScore, opponentScore) || normalizeExtractedFinalScore(match.final_score),
+    team_score: normalizeExtractedScore(ourScore) ?? "",
+    opponent_score: normalizeExtractedScore(opponentScore) ?? "",
     opponent_name: opponentTeam?.team_name || "",
     map_or_mode: "",
     played_at: match.played_at || new Date().toISOString(),
-    team_comp: (ourTeam?.players || []).map(mapLeaguePlayerRow),
-    opponent_comp: (opponentTeam?.players || []).map(mapLeaguePlayerRow),
+    team_comp: teamComp,
+    opponent_comp: opponentComp,
     team_stats: {
-      ...mapLeagueTeamStats(ourTeam, derived[ourTeamKey]),
+      ...mapLeagueTeamStats(ourTeam, derived[ourTeamKey], teamComp),
       game_length: match.game_length || null,
       patch: match.patch || null,
       fields_needing_manual_review: extraction?.fields_needing_manual_review || [],
     },
-    opponent_stats: mapLeagueTeamStats(opponentTeam, derived[opponentTeamKey]),
+    opponent_stats: mapLeagueTeamStats(opponentTeam, derived[opponentTeamKey], opponentComp),
     notes: extraction?.fields_needing_manual_review?.length
       ? `Gemini extraction flagged these fields for review: ${extraction.fields_needing_manual_review.join(", ")}`
       : "Gemini extraction. Review each field before saving.",
@@ -577,17 +381,17 @@ function mapValorantPlayerRow(row = {}) {
   return {
     team_key: row.team_key || null,
     row_color_group: row.row_color_group || null,
-    agent: row.agent || "",
-    player_name: row.player_name || "",
+    agent: row.agent || "Unidentified agent",
+    player_name: row.player_name || "Player",
     role: row.role || "",
-    k: normalizeExtractedNumber(row.kills) ?? parsedKda.k,
-    d: normalizeExtractedNumber(row.deaths) ?? parsedKda.d,
-    a: normalizeExtractedNumber(row.assists) ?? parsedKda.a,
-    acs: normalizeExtractedNumber(row.avg_combat_score) ?? normalizeExtractedNumber(row.acs) ?? "",
-    econ_rating: normalizeExtractedNumber(row.econ_rating) ?? "",
-    first_bloods: normalizeExtractedNumber(row.first_bloods) ?? "",
-    plants: normalizeExtractedNumber(row.plants) ?? "",
-    defuses: normalizeExtractedNumber(row.defuses) ?? "",
+    k: normalizeExtractedNumber(row.kills) ?? (parsedKda.k !== "" ? parsedKda.k : normalizeExtractedNumberOrReview(row.kills)),
+    d: normalizeExtractedNumber(row.deaths) ?? (parsedKda.d !== "" ? parsedKda.d : normalizeExtractedNumberOrReview(row.deaths)),
+    a: normalizeExtractedNumber(row.assists) ?? (parsedKda.a !== "" ? parsedKda.a : normalizeExtractedNumberOrReview(row.assists)),
+    acs: normalizeExtractedNumberOrReview(row.avg_combat_score ?? row.acs),
+    econ_rating: normalizeExtractedNumberOrReview(row.econ_rating),
+    first_bloods: normalizeExtractedNumberOrReview(row.first_bloods),
+    plants: normalizeExtractedNumberOrReview(row.plants),
+    defuses: normalizeExtractedNumberOrReview(row.defuses),
     small_agent_headshot_detected: row.small_agent_headshot_detected ?? null,
     confidence: normalizeExtractedNumber(row.confidence),
   };
@@ -610,14 +414,14 @@ function averageRows(rows, key) {
 function mapValorantTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
   return {
-    team_kills: normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k"),
-    team_deaths: normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d"),
-    team_assists: normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a"),
-    average_acs: normalizeExtractedNumber(totals.average_acs) ?? averageRows(rows, "acs"),
-    average_econ_rating: normalizeExtractedNumber(totals.average_econ_rating) ?? averageRows(rows, "econ_rating"),
-    total_first_bloods: normalizeExtractedNumber(totals.total_first_bloods) ?? sumRows(rows, "first_bloods"),
-    total_plants: normalizeExtractedNumber(totals.total_plants) ?? sumRows(rows, "plants"),
-    total_defuses: normalizeExtractedNumber(totals.total_defuses) ?? sumRows(rows, "defuses"),
+    team_kills: sumRows(rows, "k") ?? normalizeExtractedNumber(totals.kills),
+    team_deaths: sumRows(rows, "d") ?? normalizeExtractedNumber(totals.deaths),
+    team_assists: sumRows(rows, "a") ?? normalizeExtractedNumber(totals.assists),
+    average_acs: averageRows(rows, "acs") ?? normalizeExtractedNumber(totals.average_acs),
+    average_econ_rating: averageRows(rows, "econ_rating") ?? normalizeExtractedNumber(totals.average_econ_rating),
+    total_first_bloods: sumRows(rows, "first_bloods") ?? normalizeExtractedNumber(totals.total_first_bloods),
+    total_plants: sumRows(rows, "plants") ?? normalizeExtractedNumber(totals.total_plants),
+    total_defuses: sumRows(rows, "defuses") ?? normalizeExtractedNumber(totals.total_defuses),
   };
 }
 
@@ -676,9 +480,9 @@ function mapValorantExtractionToReview(extraction) {
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
-    team_score: normalizeExtractedNumber(match.team_1_score) ?? "",
-    opponent_score: normalizeExtractedNumber(match.team_2_score) ?? "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || normalizeExtractedFinalScore(match.final_score),
+    team_score: normalizeExtractedScore(match.team_1_score) ?? "",
+    opponent_score: normalizeExtractedScore(match.team_2_score) ?? "",
     opponent_name: "",
     map_or_mode: match.map || "",
     played_at: match.played_at || new Date().toISOString(),
@@ -704,10 +508,11 @@ function mapValorantExtractionToReview(extraction) {
 
 function mapMarvelRivalsPlayerRow(row = {}) {
   const parsedKda = parseKdaText(row.kda_text);
+  const heroValue = row.hero_confirmed || row.hero || row.hero_guess || "Unidentified hero";
   return {
     team_key: row.team_key || null,
     row_color_group: row.row_color_group || null,
-    hero: row.hero_confirmed || row.hero || "",
+    hero: heroValue,
     hero_confirmed: row.hero_confirmed || row.hero || "",
     hero_id: row.hero_id || "",
     costume_name: row.costume_name || "",
@@ -720,16 +525,16 @@ function mapMarvelRivalsPlayerRow(row = {}) {
     matched_asset_src: row.matched_asset_src || "",
     needs_manual_review: Boolean(row.needs_manual_review),
     needs_hero_review: Boolean(row.needs_hero_review || row.needs_manual_review),
-    player_name: row.player_name || "",
+    player_name: row.player_name || "Player",
     role: row.role || "",
-    k: normalizeExtractedNumber(row.kills) ?? parsedKda.k,
-    d: normalizeExtractedNumber(row.deaths) ?? parsedKda.d,
-    a: normalizeExtractedNumber(row.assists) ?? parsedKda.a,
-    final_hits: normalizeExtractedNumber(row.final_hits) ?? "",
-    damage: normalizeExtractedNumber(row.damage) ?? "",
-    damage_blocked: normalizeExtractedNumber(row.damage_blocked) ?? "",
-    healing: normalizeExtractedNumber(row.healing) ?? "",
-    accuracy: normalizeExtractedNumber(row.accuracy_percent ?? row.accuracy) ?? "",
+    k: normalizeExtractedNumber(row.kills) ?? (parsedKda.k !== "" ? parsedKda.k : normalizeExtractedNumberOrReview(row.kills)),
+    d: normalizeExtractedNumber(row.deaths) ?? (parsedKda.d !== "" ? parsedKda.d : normalizeExtractedNumberOrReview(row.deaths)),
+    a: normalizeExtractedNumber(row.assists) ?? (parsedKda.a !== "" ? parsedKda.a : normalizeExtractedNumberOrReview(row.assists)),
+    final_hits: normalizeExtractedNumberOrReview(row.final_hits),
+    damage: normalizeExtractedNumberOrReview(row.damage),
+    damage_blocked: normalizeExtractedNumberOrReview(row.damage_blocked),
+    healing: normalizeExtractedNumberOrReview(row.healing),
+    accuracy: normalizeExtractedNumberOrReview(row.accuracy_percent ?? row.accuracy),
     hero_confidence: normalizeExtractedNumber(row.hero_confidence) ?? normalizeExtractedNumber(row.asset_confidence) ?? normalizeExtractedNumber(row.hero_asset_confidence) ?? normalizeExtractedNumber(row.hero_guess_confidence) ?? normalizeExtractedNumber(row.confidence) ?? 0,
     is_mvp: Boolean(row.is_mvp),
     is_svp: Boolean(row.is_svp),
@@ -740,14 +545,14 @@ function mapMarvelRivalsPlayerRow(row = {}) {
 
 function mapMarvelRivalsTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
-  const totalKills = normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k");
-  const totalDeaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d");
-  const totalAssists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a");
-  const totalFinalHits = normalizeExtractedNumber(totals.final_hits) ?? sumRows(rows, "final_hits");
-  const totalDamage = normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage");
-  const totalDamageBlocked = normalizeExtractedNumber(totals.damage_blocked) ?? sumRows(rows, "damage_blocked");
-  const totalHealing = normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing");
-  const averageAccuracy = normalizeExtractedNumber(totals.average_accuracy_percent ?? totals.average_accuracy) ?? averageRows(rows, "accuracy");
+  const totalKills = sumRows(rows, "k") ?? normalizeExtractedNumber(totals.kills);
+  const totalDeaths = sumRows(rows, "d") ?? normalizeExtractedNumber(totals.deaths);
+  const totalAssists = sumRows(rows, "a") ?? normalizeExtractedNumber(totals.assists);
+  const totalFinalHits = sumRows(rows, "final_hits") ?? normalizeExtractedNumber(totals.final_hits);
+  const totalDamage = sumRows(rows, "damage") ?? normalizeExtractedNumber(totals.damage);
+  const totalDamageBlocked = sumRows(rows, "damage_blocked") ?? normalizeExtractedNumber(totals.damage_blocked);
+  const totalHealing = sumRows(rows, "healing") ?? normalizeExtractedNumber(totals.healing);
+  const averageAccuracy = averageRows(rows, "accuracy") ?? normalizeExtractedNumber(totals.average_accuracy_percent ?? totals.average_accuracy);
 
   return {
     total_kills: totalKills,
@@ -832,9 +637,9 @@ function mapMarvelRivalsExtractionToReview(extraction) {
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
-    team_score: normalizeExtractedNumber(match.team_1_score) ?? "",
-    opponent_score: normalizeExtractedNumber(match.team_2_score) ?? "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || normalizeExtractedFinalScore(match.final_score),
+    team_score: normalizeExtractedScore(match.team_1_score) ?? "",
+    opponent_score: normalizeExtractedScore(match.team_2_score) ?? "",
     opponent_name: "",
     map_or_mode: mapMode,
     played_at: match.played_at || new Date().toISOString(),
@@ -862,25 +667,25 @@ function mapDeadlockPlayerRow(row = {}) {
   const parsedKda = parseKdaText(row.kda_text);
   return {
     team_key: row.team_key || null,
-    hero: row.hero || "",
-    player_name: row.player_name || "",
+    hero: row.hero || "Unidentified hero",
+    player_name: row.player_name || "Player",
     role: row.role || "",
-    k: normalizeExtractedNumber(row.kills) ?? parsedKda.k,
-    d: normalizeExtractedNumber(row.deaths) ?? parsedKda.d,
-    a: normalizeExtractedNumber(row.assists) ?? parsedKda.a,
-    souls: normalizeExtractedNumber(row.souls ?? row.total_souls) ?? "",
-    player_damage: normalizeExtractedNumber(row.player_damage) ?? "",
-    objective_damage: normalizeExtractedNumber(row.objective_damage ?? row.obj_damage) ?? "",
-    healing: normalizeExtractedNumber(row.healing) ?? "",
+    k: normalizeExtractedNumber(row.kills) ?? (parsedKda.k !== "" ? parsedKda.k : normalizeExtractedNumberOrReview(row.kills)),
+    d: normalizeExtractedNumber(row.deaths) ?? (parsedKda.d !== "" ? parsedKda.d : normalizeExtractedNumberOrReview(row.deaths)),
+    a: normalizeExtractedNumber(row.assists) ?? (parsedKda.a !== "" ? parsedKda.a : normalizeExtractedNumberOrReview(row.assists)),
+    souls: normalizeExtractedNumberOrReview(row.souls ?? row.total_souls),
+    player_damage: normalizeExtractedNumberOrReview(row.player_damage),
+    objective_damage: normalizeExtractedNumberOrReview(row.objective_damage ?? row.obj_damage),
+    healing: normalizeExtractedNumberOrReview(row.healing),
     confidence: normalizeExtractedNumber(row.confidence),
   };
 }
 
 function mapDeadlockTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
-  const totalKills = normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k");
-  const totalDeaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d");
-  const totalAssists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a");
+  const totalKills = sumRows(rows, "k") ?? normalizeExtractedNumber(totals.kills);
+  const totalDeaths = sumRows(rows, "d") ?? normalizeExtractedNumber(totals.deaths);
+  const totalAssists = sumRows(rows, "a") ?? normalizeExtractedNumber(totals.assists);
 
   return {
     team_kills: totalKills,
@@ -889,11 +694,11 @@ function mapDeadlockTeamStats(team = {}, rows = []) {
     total_kills: totalKills,
     total_deaths: totalDeaths,
     total_assists: totalAssists,
-    total_souls: normalizeExtractedNumber(totals.souls ?? totals.total_souls) ?? sumRows(rows, "souls"),
-    souls: normalizeExtractedNumber(totals.souls ?? totals.total_souls) ?? sumRows(rows, "souls"),
-    player_damage: normalizeExtractedNumber(totals.player_damage) ?? sumRows(rows, "player_damage"),
-    objective_damage: normalizeExtractedNumber(totals.objective_damage ?? totals.obj_damage) ?? sumRows(rows, "objective_damage"),
-    healing: normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing"),
+    total_souls: sumRows(rows, "souls") ?? normalizeExtractedNumber(totals.souls ?? totals.total_souls),
+    souls: sumRows(rows, "souls") ?? normalizeExtractedNumber(totals.souls ?? totals.total_souls),
+    player_damage: sumRows(rows, "player_damage") ?? normalizeExtractedNumber(totals.player_damage),
+    objective_damage: sumRows(rows, "objective_damage") ?? normalizeExtractedNumber(totals.objective_damage ?? totals.obj_damage),
+    healing: sumRows(rows, "healing") ?? normalizeExtractedNumber(totals.healing),
   };
 }
 
@@ -949,7 +754,7 @@ function mapDeadlockExtractionToReview(extraction) {
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(teamOneScore, teamTwoScore) || match.final_score || "",
+    final_score: formatScore(teamOneScore, teamTwoScore) || normalizeExtractedFinalScore(match.final_score),
     team_score: teamOneScore ?? "",
     opponent_score: teamTwoScore ?? "",
     opponent_name: match.team_2_name || teamTwo.team_name || "",
@@ -981,31 +786,31 @@ function mapDeadlockExtractionToReview(extraction) {
 function mapOverwatchPlayerRow(row = {}) {
   return {
     team_key: row.team_key || null,
-    hero: row.hero || "",
-    player_name: row.player_name || "",
-    role: row.role || "",
-    eliminations: normalizeExtractedNumber(row.eliminations ?? row.kills) ?? "",
-    assists: normalizeExtractedNumber(row.assists) ?? "",
-    deaths: normalizeExtractedNumber(row.deaths) ?? "",
-    damage: normalizeExtractedNumber(row.damage) ?? "",
-    healing: normalizeExtractedNumber(row.healing) ?? "",
-    mitigation: normalizeExtractedNumber(row.mitigation ?? row.damage_blocked) ?? "",
-    final_blows: normalizeExtractedNumber(row.final_blows) ?? "",
-    objective_kills: normalizeExtractedNumber(row.objective_kills) ?? "",
+    hero: row.hero || "Unidentified hero",
+    player_name: row.player_name || "Player",
+    role: row.role || "Needs review",
+    eliminations: normalizeExtractedNumberOrReview(row.eliminations ?? row.kills),
+    assists: normalizeExtractedNumberOrReview(row.assists),
+    deaths: normalizeExtractedNumberOrReview(row.deaths),
+    damage: normalizeExtractedNumberOrReview(row.damage),
+    healing: normalizeExtractedNumberOrReview(row.healing),
+    mitigation: normalizeExtractedNumberOrReview(row.mitigation ?? row.damage_blocked),
+    final_blows: normalizeExtractedNumberOrReview(row.final_blows),
+    objective_kills: normalizeExtractedNumberOrReview(row.objective_kills),
     confidence: normalizeExtractedNumber(row.confidence),
   };
 }
 
 function mapOverwatchTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
-  const eliminations = normalizeExtractedNumber(totals.eliminations ?? totals.kills) ?? sumRows(rows, "eliminations");
-  const assists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "assists");
-  const deaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "deaths");
-  const damage = normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage");
-  const healing = normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing");
-  const mitigation = normalizeExtractedNumber(totals.mitigation ?? totals.damage_blocked) ?? sumRows(rows, "mitigation");
-  const finalBlows = normalizeExtractedNumber(totals.final_blows) ?? sumRows(rows, "final_blows");
-  const objectiveKills = normalizeExtractedNumber(totals.objective_kills) ?? sumRows(rows, "objective_kills");
+  const eliminations = sumRows(rows, "eliminations") ?? normalizeExtractedNumber(totals.eliminations ?? totals.kills);
+  const assists = sumRows(rows, "assists") ?? normalizeExtractedNumber(totals.assists);
+  const deaths = sumRows(rows, "deaths") ?? normalizeExtractedNumber(totals.deaths);
+  const damage = sumRows(rows, "damage") ?? normalizeExtractedNumber(totals.damage);
+  const healing = sumRows(rows, "healing") ?? normalizeExtractedNumber(totals.healing);
+  const mitigation = sumRows(rows, "mitigation") ?? normalizeExtractedNumber(totals.mitigation ?? totals.damage_blocked);
+  const finalBlows = sumRows(rows, "final_blows") ?? normalizeExtractedNumber(totals.final_blows);
+  const objectiveKills = sumRows(rows, "objective_kills") ?? normalizeExtractedNumber(totals.objective_kills);
 
   return {
     eliminations,
@@ -1068,12 +873,12 @@ function mapOverwatchExtractionToReview(extraction) {
   } = groupOverwatchRows(extraction);
   const normalizedResult = match.result?.toLowerCase?.();
   const mapMode = [match.map, match.mode].filter(Boolean).join(" · ");
-  const teamOneScore = normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score);
-  const teamTwoScore = normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score);
+  const teamOneScore = normalizeExtractedScore(match.team_1_score ?? teamOne.team_score);
+  const teamTwoScore = normalizeExtractedScore(match.team_2_score ?? teamTwo.team_score);
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(teamOneScore, teamTwoScore) || match.final_score || "",
+    final_score: formatScore(teamOneScore, teamTwoScore) || normalizeExtractedFinalScore(match.final_score),
     team_score: teamOneScore ?? "",
     opponent_score: teamTwoScore ?? "",
     opponent_name: match.team_2_name || teamTwo.team_name || "",
@@ -1157,13 +962,13 @@ function mapCounterStrikePlayerRow(row = {}) {
 function mapCounterStrikeTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
   return {
-    team_kills: normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k"),
-    team_deaths: normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d"),
-    team_assists: normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a"),
-    average_adr: normalizeExtractedNumber(totals.average_adr) ?? averageRows(rows, "adr"),
-    average_hs_percent: normalizeExtractedNumber(totals.average_hs_percent ?? totals.hs_percent) ?? averageRows(rows, "hs_percent"),
-    total_mvps: normalizeExtractedNumber(totals.mvps ?? totals.total_mvps) ?? sumRows(rows, "mvps"),
-    score: normalizeExtractedNumber(totals.score) ?? sumRows(rows, "score"),
+    team_kills: sumRows(rows, "k") ?? normalizeExtractedNumber(totals.kills),
+    team_deaths: sumRows(rows, "d") ?? normalizeExtractedNumber(totals.deaths),
+    team_assists: sumRows(rows, "a") ?? normalizeExtractedNumber(totals.assists),
+    average_adr: averageRows(rows, "adr") ?? normalizeExtractedNumber(totals.average_adr),
+    average_hs_percent: averageRows(rows, "hs_percent") ?? normalizeExtractedNumber(totals.average_hs_percent ?? totals.hs_percent),
+    total_mvps: sumRows(rows, "mvps") ?? normalizeExtractedNumber(totals.mvps ?? totals.total_mvps),
+    score: sumRows(rows, "score") ?? normalizeExtractedNumber(totals.score),
   };
 }
 
@@ -1174,9 +979,9 @@ function mapCounterStrikeExtractionToReview(extraction) {
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
-    team_score: normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score) ?? "",
-    opponent_score: normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score) ?? "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || normalizeExtractedFinalScore(match.final_score),
+    team_score: normalizeExtractedScore(match.team_1_score ?? teamOne.team_score) ?? "",
+    opponent_score: normalizeExtractedScore(match.team_2_score ?? teamTwo.team_score) ?? "",
     opponent_name: match.team_2_name || teamTwo.team_name || "",
     map_or_mode: match.map || "",
     played_at: match.played_at || new Date().toISOString(),
@@ -1218,12 +1023,12 @@ function mapRocketLeaguePlayerRow(row = {}) {
 function mapRocketLeagueTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
   return {
-    goals: normalizeExtractedNumber(totals.goals) ?? sumRows(rows, "goals"),
-    assists: normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "assists"),
-    saves: normalizeExtractedNumber(totals.saves) ?? sumRows(rows, "saves"),
-    shots: normalizeExtractedNumber(totals.shots) ?? sumRows(rows, "shots"),
-    demos: normalizeExtractedNumber(totals.demos) ?? sumRows(rows, "demos"),
-    scoreboard_score: normalizeExtractedNumber(totals.scoreboard_score ?? totals.score) ?? sumRows(rows, "score"),
+    goals: sumRows(rows, "goals") ?? normalizeExtractedNumber(totals.goals),
+    assists: sumRows(rows, "assists") ?? normalizeExtractedNumber(totals.assists),
+    saves: sumRows(rows, "saves") ?? normalizeExtractedNumber(totals.saves),
+    shots: sumRows(rows, "shots") ?? normalizeExtractedNumber(totals.shots),
+    demos: sumRows(rows, "demos") ?? normalizeExtractedNumber(totals.demos),
+    scoreboard_score: sumRows(rows, "score") ?? normalizeExtractedNumber(totals.scoreboard_score ?? totals.score),
   };
 }
 
@@ -1235,9 +1040,9 @@ function mapRocketLeagueExtractionToReview(extraction) {
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
-    team_score: normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score) ?? "",
-    opponent_score: normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score) ?? "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || normalizeExtractedFinalScore(match.final_score),
+    team_score: normalizeExtractedScore(match.team_1_score ?? teamOne.team_score) ?? "",
+    opponent_score: normalizeExtractedScore(match.team_2_score ?? teamTwo.team_score) ?? "",
     opponent_name: match.team_2_name || teamTwo.team_name || "",
     map_or_mode: mapMode || "",
     played_at: match.played_at || new Date().toISOString(),
@@ -1292,9 +1097,9 @@ function mapHonorOfKingsPlayerRow(row = {}) {
 
 function mapHonorOfKingsTeamStats(team = {}, rows = []) {
   const totals = team.team_totals || {};
-  const totalKills = normalizeExtractedNumber(totals.kills) ?? sumRows(rows, "k");
-  const totalDeaths = normalizeExtractedNumber(totals.deaths) ?? sumRows(rows, "d");
-  const totalAssists = normalizeExtractedNumber(totals.assists) ?? sumRows(rows, "a");
+  const totalKills = sumRows(rows, "k") ?? normalizeExtractedNumber(totals.kills);
+  const totalDeaths = sumRows(rows, "d") ?? normalizeExtractedNumber(totals.deaths);
+  const totalAssists = sumRows(rows, "a") ?? normalizeExtractedNumber(totals.assists);
 
   return {
     team_kills: totalKills,
@@ -1303,11 +1108,11 @@ function mapHonorOfKingsTeamStats(team = {}, rows = []) {
     total_kills: totalKills,
     total_deaths: totalDeaths,
     total_assists: totalAssists,
-    total_gold: normalizeExtractedNumber(totals.gold ?? totals.total_gold) ?? sumRows(rows, "gold"),
-    damage: normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage"),
-    total_damage: normalizeExtractedNumber(totals.damage) ?? sumRows(rows, "damage"),
-    damage_taken: normalizeExtractedNumber(totals.damage_taken) ?? sumRows(rows, "damage_taken"),
-    healing: normalizeExtractedNumber(totals.healing) ?? sumRows(rows, "healing"),
+    total_gold: sumRows(rows, "gold") ?? normalizeExtractedNumber(totals.gold ?? totals.total_gold),
+    damage: sumRows(rows, "damage") ?? normalizeExtractedNumber(totals.damage),
+    total_damage: sumRows(rows, "damage") ?? normalizeExtractedNumber(totals.damage),
+    damage_taken: sumRows(rows, "damage_taken") ?? normalizeExtractedNumber(totals.damage_taken),
+    healing: sumRows(rows, "healing") ?? normalizeExtractedNumber(totals.healing),
     objectives: totals.objectives ?? null,
   };
 }
@@ -1320,9 +1125,9 @@ function mapHonorOfKingsExtractionToReview(extraction) {
 
   return {
     match_result: ["victory", "defeat"].includes(normalizedResult) ? normalizedResult : "",
-    final_score: formatScore(match.team_1_score, match.team_2_score) || match.final_score || "",
-    team_score: normalizeExtractedNumber(match.team_1_score ?? teamOne.team_score) ?? "",
-    opponent_score: normalizeExtractedNumber(match.team_2_score ?? teamTwo.team_score) ?? "",
+    final_score: formatScore(match.team_1_score, match.team_2_score) || normalizeExtractedFinalScore(match.final_score),
+    team_score: normalizeExtractedScore(match.team_1_score ?? teamOne.team_score) ?? "",
+    opponent_score: normalizeExtractedScore(match.team_2_score ?? teamTwo.team_score) ?? "",
     opponent_name: match.team_2_name || teamTwo.team_name || "",
     map_or_mode: match.mode || "",
     played_at: match.played_at || new Date().toISOString(),
@@ -1450,6 +1255,8 @@ export default function TeamDashboardPage() {
   const [screenshotPreview, setScreenshotPreview] = useState("");
   const [loading, setLoading] = useState(true);
   const [extracting, setExtracting] = useState(false);
+  const [extractionStatus, setExtractionStatus] = useState("");
+  const [extractionIssue, setExtractionIssue] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -1677,13 +1484,17 @@ export default function TeamDashboardPage() {
     const previewUrl = URL.createObjectURL(file);
     setScreenshotPreview(previewUrl);
     setExtracting(true);
+    setExtractionStatus("Preparing screenshot...");
+    setExtractionIssue("");
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
       let extracted;
+      let extractionUsedFallback = false;
 
       if (SERVER_EXTRACTOR_GAMES.has(team.game_title)) {
+        setExtractionStatus("Optimizing screenshot for AI extraction...");
         const extractionFile = await resizeImageForExtraction(file);
         const formData = new FormData();
         formData.append("gameTitle", team.game_title);
@@ -1692,10 +1503,26 @@ export default function TeamDashboardPage() {
         if (scrimId) formData.append("scrimRequestId", scrimId);
         formData.append("scrimGameNumber", String(selectedGameNumber));
 
-        const response = await fetch("/api/postgame/extract", {
-          method: "POST",
-          body: formData,
-        });
+        setExtractionStatus("Sending screenshot to AI extractor...");
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 75000);
+        let response;
+        try {
+          response = await fetch("/api/postgame/extract", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
+          });
+        } catch (fetchError) {
+          if (fetchError.name === "AbortError") {
+            throw new Error("Extraction took too long and was stopped. Try a smaller/cropped screenshot, or enter stats manually.");
+          }
+          throw fetchError;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        setExtractionStatus("Reading AI response...");
         const responseText = await response.text();
         let payload = {};
         try {
@@ -1705,6 +1532,7 @@ export default function TeamDashboardPage() {
         }
 
         if (!response.ok) {
+          const detailCode = payload?.details?.code;
           if (response.status === 413) {
             throw new Error("That screenshot is too large for the deployed app. Try a cropped or smaller screenshot, or enter stats manually.");
           }
@@ -1713,8 +1541,24 @@ export default function TeamDashboardPage() {
             throw new Error("Screenshot extraction timed out on the deployed app. You can still enter stats manually.");
           }
 
+          if (detailCode === "model_overloaded") {
+            throw new Error("AI extraction is overloaded right now. Try again in a minute, or use a cropped screenshot.");
+          }
+
+          if (detailCode === "parse_failed") {
+            throw new Error("AI read the screenshot but returned messy data. Try a clearer/cropped screenshot, or enter stats manually.");
+          }
+
+          if (detailCode === "quota_exhausted") {
+            throw new Error("AI extraction quota is exhausted for the configured key. You can still enter stats manually.");
+          }
+
           throw new Error(payload?.error || "Could not extract scoreboard data. You can still enter stats manually.");
         }
+
+        const durationSeconds = payload?.meta?.durationMs ? Math.round(payload.meta.durationMs / 1000) : null;
+        extractionUsedFallback = Boolean(payload?.meta?.usedFallback);
+        setExtractionStatus(durationSeconds ? `Extraction finished in ${durationSeconds}s. Mapping fields...` : "Mapping extracted fields...");
 
         if (team.game_title === "League of Legends") {
           extracted = mapLeagueExtractionToReview(payload.data, team.name);
@@ -1754,9 +1598,14 @@ export default function TeamDashboardPage() {
         series_game_count: seriesGameCount,
         scrim_request_id: scrimId || null,
       }, team.game_title));
-      setSuccessMessage(`Stats extracted into the Game ${selectedGameNumber} review form. Check the fields before saving.`);
+      setExtractionIssue("");
+      setSuccessMessage(
+        `Stats extracted into the Game ${selectedGameNumber} review form. Check the fields before saving.${extractionUsedFallback ? " Fallback row-only mode was used, so character fields may need extra review." : ""}`
+      );
     } catch (error) {
       console.warn("Post-game extraction fell back to manual entry", error);
+      setExtractionIssue(error.message || "We could not extract this screenshot.");
+      setExtractionStatus("Extraction stopped. Manual entry is still available.");
       setErrorMessage(error.message || "We could not extract this screenshot.");
     } finally {
       setExtracting(false);
@@ -1890,6 +1739,8 @@ export default function TeamDashboardPage() {
   const dashboardProps = {
     errorMessage,
     extracting,
+    extractionIssue,
+    extractionStatus,
     form,
     handleAddSeriesGame,
     handleSaveReview,
@@ -1919,26 +1770,19 @@ export default function TeamDashboardPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-surface-variant bg-surface/85 px-5 text-on-surface backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <Link className="flex h-9 w-9 items-center justify-center rounded-full text-primary hover:bg-surface-container" href={`/team?id=${id}`}>
-            <MaterialSymbol>arrow_back</MaterialSymbol>
+      <TopBar
+        actions={(
+          <Link
+            aria-label="Back to team"
+            className="hidden h-10 items-center justify-center gap-xs rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-md font-label-bold text-label-bold text-on-surface-variant transition-colors hover:border-primary/35 hover:bg-surface-container hover:text-primary active:scale-95 sm:flex"
+            href={`/team?id=${id}`}
+            title="Back to team"
+          >
+            <MaterialSymbol className="text-[18px]">arrow_back</MaterialSymbol>
+            Team
           </Link>
-          <div>
-            <p className="font-headline-3 text-headline-3 font-black">Matchmake</p>
-            <p className="font-label-small text-label-small text-on-surface-variant">Post-game dashboard</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-sm">
-          <nav className="hidden items-center gap-1 md:flex">
-            <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/">Scrims</Link>
-            <Link className="px-3 py-2 font-label-bold text-label-bold text-primary bg-primary-fixed rounded-lg" href="/org">Org</Link>
-            <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/requests">Requests</Link>
-            <Link className="px-3 py-2 font-label-bold text-label-bold text-on-surface-variant hover:bg-surface-container rounded-lg" href="/calendar">Calendar</Link>
-          </nav>
-          <ThemeToggle />
-        </div>
-      </header>
+        )}
+      />
 
       <main className="min-h-screen bg-background px-margin-mobile py-lg pb-28 md:px-xl">
         {loading ? (
@@ -1988,9 +1832,10 @@ function EmptyState({ title, body }) {
   );
 }
 
-function UploadCard({ extracting, handleScreenshotChange, screenshotPreview, title = "Upload Post-Game Screenshot" }) {
+function UploadCard({ extracting, extractionIssue = "", extractionStatus = "", handleScreenshotChange, screenshotPreview, title = "Upload Post-Game Screenshot" }) {
   const [progress, setProgress] = useState(0);
   const [showBar, setShowBar] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Animate the progress bar:
   //  - When `extracting` flips to true, start at 5% and asymptotically approach
@@ -2031,6 +1876,20 @@ function UploadCard({ extracting, handleScreenshotChange, screenshotPreview, tit
     };
   }, [extracting]);
 
+  useEffect(() => {
+    if (!extracting) {
+      setElapsedSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = Date.now();
+    const id = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [extracting]);
+
   const buttonLabel = extracting
     ? "Extracting..."
     : screenshotPreview
@@ -2049,6 +1908,12 @@ function UploadCard({ extracting, handleScreenshotChange, screenshotPreview, tit
             <p className="font-body-sub text-body-sub text-on-surface-variant">
               {extracting ? "Extracting visible scoreboard stats..." : "Upload a screenshot, then review and save the extracted fields."}
             </p>
+            {(extracting || extractionStatus) && (
+              <p className="mt-xs font-label-small text-label-small text-primary">
+                {extractionStatus || "Working on extraction..."}
+                {extracting && elapsedSeconds > 0 ? ` · ${elapsedSeconds}s elapsed` : ""}
+              </p>
+            )}
           </div>
         </div>
         <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-primary px-lg py-sm font-label-bold text-label-bold text-on-primary">
@@ -2076,6 +1941,16 @@ function UploadCard({ extracting, handleScreenshotChange, screenshotPreview, tit
               style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
             />
           </div>
+          {elapsedSeconds >= 20 && (
+            <p className="mt-xs font-label-small text-label-small text-on-surface-variant">
+              Still working. Large screenshots and reference-heavy games can take longer; you can wait, or retry with a tighter crop of the scoreboard.
+            </p>
+          )}
+        </div>
+      )}
+      {extractionIssue && !extracting && (
+        <div className="mt-md rounded-xl bg-error-container px-md py-sm font-body-sub text-body-sub text-on-error-container">
+          <span className="font-label-bold">Extraction issue:</span> {extractionIssue}
         </div>
       )}
     </section>
@@ -2191,34 +2066,8 @@ function ReviewMessages({ errorMessage, successMessage }) {
   );
 }
 
-const REVIEW_DASHBOARD_TABS = [
-  { label: "Overview", value: "overview" },
-  { label: "Compare", value: "compare" },
-];
-
 function getMetricValue(stats = {}, metric = {}) {
   return stats?.[metric.key] ?? stats?.[metric.fallback];
-}
-
-function ReviewDashboardTabs({ activeTab, onChange }) {
-  return (
-    <div className="grid grid-cols-2 rounded-xl bg-surface-container-low p-1 md:inline-grid">
-      {REVIEW_DASHBOARD_TABS.map((tab) => (
-        <button
-          className={`rounded-lg px-md py-sm font-label-bold text-label-bold transition-colors ${
-            activeTab === tab.value
-              ? "bg-surface-container-lowest text-primary shadow-sm"
-              : "text-on-surface-variant hover:bg-surface-container"
-          }`}
-          key={tab.value}
-          onClick={() => onChange(tab.value)}
-          type="button"
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function formatCompareValue(value) {
@@ -2333,42 +2182,37 @@ function CompareTab({ currentReview, gameTitle, historicalReviews }) {
 }
 
 function LeagueDashboard(props) {
-  const { form, historicalReviews, reviews, selectedReview, team } = props;
+  const { form, historicalReviews, selectedReview, team } = props;
   const [activeTab, setActiveTab] = useState("overview");
   const displayReview = form || selectedReview;
-  const gameLength = displayReview?.team_stats?.game_length || "Length TBD";
   const patch = displayReview?.team_stats?.patch;
   const combinedRows = [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])];
+  const config = getDashboardConfig("League of Legends");
 
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-lg">
+    <GameDashboardShell>
       <GameSeriesControl {...props} />
       <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === "overview" && (
         <>
-          <UploadCard
-            extracting={props.extracting}
-            handleScreenshotChange={props.handleScreenshotChange}
-            screenshotPreview={props.screenshotPreview}
-            title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
-          />
+          <section>
+            <UploadCard
+              extracting={props.extracting}
+              extractionIssue={props.extractionIssue}
+              extractionStatus={props.extractionStatus}
+              handleScreenshotChange={props.handleScreenshotChange}
+              screenshotPreview={props.screenshotPreview}
+              title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
+            />
+          </section>
           <section className="grid gap-lg">
-            <div className="flex items-end justify-between border-b border-outline-variant/40 pb-md">
-              <div>
-                <div className="mb-xs flex flex-wrap items-center gap-sm">
-                  <ResultBadge result={displayReview?.match_result} />
-                  {patch && <span className="font-body-main text-body-main text-on-surface-variant">Patch {patch}</span>}
-                </div>
-                <h1 className="font-editorial-large text-editorial-large text-on-surface">Match Overview</h1>
-                <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">{team.name} • League of Legends</p>
+            {patch && (
+              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-md">
+                <p className="font-label-small text-label-small text-on-surface-variant">Patch</p>
+                <p className="mt-xs font-headline-3 text-headline-3 text-on-surface">{patch}</p>
               </div>
-              <div className="text-right">
-                <p className="font-headline-2 text-headline-2 text-on-surface">{gameLength}</p>
-                <p className="font-body-sub text-body-sub text-on-surface-variant">{formatDate(displayReview?.played_at)}</p>
-              </div>
-            </div>
-
+            )}
             <CompositionSection accent="bg-primary" game="League of Legends" rows={displayReview?.team_comp || []} title="Our Team Composition" />
             <CompositionSection accent="bg-[#d12b2b]" game="League of Legends" rows={displayReview?.opponent_comp || []} title="Enemy Composition" />
             <PerformanceTable game="League of Legends" rows={combinedRows} />
@@ -2379,6 +2223,14 @@ function LeagueDashboard(props) {
 
       {activeTab === "compare" && (
         <>
+          <GameSpecificOverview
+            config={config}
+            opponentRows={displayReview?.opponent_comp || []}
+            opponentStats={displayReview?.opponent_stats || {}}
+            review={displayReview}
+            teamRows={displayReview?.team_comp || []}
+            teamStats={displayReview?.team_stats || {}}
+          />
           <LeagueComparisonPanel
             opponentName={displayReview?.opponent_name || "Opponent"}
             opponentStats={displayReview?.opponent_stats || {}}
@@ -2388,24 +2240,23 @@ function LeagueDashboard(props) {
           <CompareTab currentReview={displayReview} gameTitle="League of Legends" historicalReviews={historicalReviews} />
         </>
       )}
-    </div>
+    </GameDashboardShell>
   );
 }
 
 function ValorantDashboard(props) {
-  const { form, historicalReviews, reviews, selectedReview, team } = props;
+  const { form, historicalReviews, selectedReview, team } = props;
   const [activeTab, setActiveTab] = useState("overview");
   const displayReview = form || selectedReview;
   const combinedRows = [
     ...(displayReview?.team_comp || []),
     ...(displayReview?.opponent_comp || []),
   ];
-  const duration = displayReview?.team_stats?.duration;
-  const matchDateText = displayReview?.team_stats?.match_date_text;
   const groupingNeedsReview = displayReview?.team_stats?.team_grouping_needs_review || displayReview?.manual_edit_required;
+  const config = getDashboardConfig("Valorant");
 
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-lg">
+    <GameDashboardShell>
       <GameSeriesControl {...props} />
       <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
 
@@ -2417,23 +2268,11 @@ function ValorantDashboard(props) {
 
       {activeTab === "overview" && (
         <>
-          <section className="grid gap-lg lg:grid-cols-[1fr_470px]">
-            <div>
-              <div className="mb-sm flex flex-wrap items-center gap-sm">
-                <ResultBadge result={displayReview?.match_result} />
-                <span className="font-label-small text-label-small text-on-surface-variant">{displayReview?.map_or_mode || "Map TBD"}</span>
-                <span className="font-label-small text-label-small text-on-surface-variant">{matchDateText || formatDate(displayReview?.played_at)}</span>
-                {duration && <span className="font-label-small text-label-small text-on-surface-variant">{duration}</span>}
-              </div>
-              <h1 className="font-editorial-large text-[42px] font-black leading-none text-on-surface">
-                {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
-              </h1>
-              <p className="mt-sm font-body-main text-body-main text-on-surface-variant">
-                {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"}
-              </p>
-            </div>
+          <section>
             <UploadCard
               extracting={props.extracting}
+              extractionIssue={props.extractionIssue}
+              extractionStatus={props.extractionStatus}
               handleScreenshotChange={props.handleScreenshotChange}
               screenshotPreview={props.screenshotPreview}
               title={`Post-Game Screenshot · Game ${props.selectedGameNumber}`}
@@ -2441,7 +2280,6 @@ function ValorantDashboard(props) {
           </section>
           <CompositionSection game="Valorant" rows={displayReview?.team_comp || []} title="Team Composition" />
           <CompositionSection game="Valorant" rows={displayReview?.opponent_comp || []} title="Opponent Team Composition" opponentName={displayReview?.opponent_name} />
-          <ValorantSummaryCards stats={displayReview?.team_stats || {}} />
           <PerformanceTable game="Valorant" rows={combinedRows} />
           <ReviewEditor {...props} game="Valorant" />
         </>
@@ -2449,6 +2287,14 @@ function ValorantDashboard(props) {
 
       {activeTab === "compare" && (
         <>
+          <GameSpecificOverview
+            config={config}
+            opponentRows={displayReview?.opponent_comp || []}
+            opponentStats={displayReview?.opponent_stats || {}}
+            review={displayReview}
+            teamRows={displayReview?.team_comp || []}
+            teamStats={displayReview?.team_stats || {}}
+          />
           <CurrentOpponentComparisonPanel
             metrics={[
               { key: "total_kills", fallback: "team_kills", label: "Kills" },
@@ -2467,38 +2313,7 @@ function ValorantDashboard(props) {
           <CompareTab currentReview={displayReview} gameTitle="Valorant" historicalReviews={historicalReviews} />
         </>
       )}
-    </div>
-  );
-}
-
-function ValorantSummaryCards({ limit, stats }) {
-  const cards = [
-    { key: "total_kills", label: "Total Kills" },
-    { key: "total_deaths", label: "Total Deaths" },
-    { key: "total_assists", label: "Total Assists" },
-    { key: "average_acs", label: "Avg Combat Score" },
-    { key: "average_econ_rating", label: "Avg Econ" },
-    { key: "total_first_bloods", label: "First Bloods" },
-    { key: "total_plants", label: "Plants" },
-    { key: "total_defuses", label: "Defuses" },
-  ];
-  const visibleCards = limit ? cards.slice(0, limit) : cards;
-
-  return (
-    <section>
-      <div className="mb-sm flex items-center gap-sm">
-        <span className="h-3 w-3 rounded-full bg-primary" />
-        <h2 className="font-headline-3 text-headline-3 text-on-surface">Your Team Stats</h2>
-      </div>
-      <div className="grid grid-cols-2 gap-sm md:grid-cols-4">
-        {visibleCards.map((card) => (
-          <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-md" key={card.key}>
-            <p className="font-label-small text-label-small text-on-surface-variant">{card.label}</p>
-            <p className="mt-xs font-headline-2 text-headline-2 text-primary">{stats?.[card.key] ?? "—"}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+    </GameDashboardShell>
   );
 }
 
@@ -2524,41 +2339,20 @@ function UniversalGameDashboard(props) {
     : displayReview?.team_comp || [];
 
   return (
-    <div className={`mx-auto flex max-w-[1240px] flex-col ${isCompactSix ? "gap-md" : "gap-lg"}`}>
+    <GameDashboardShell compact={isCompactSix}>
       <GameSeriesControl {...props} />
       <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === "overview" && (
         <>
-          <section className={`grid ${isCompactSix ? "gap-md lg:grid-cols-[1fr_380px]" : "gap-lg lg:grid-cols-[1fr_440px]"}`}>
-            <div className={`rounded-3xl border border-outline-variant/25 bg-surface-container-lowest ${isCompactSix ? "p-md" : "p-lg"}`}>
-              <div className="mb-sm flex flex-wrap items-center gap-sm">
-                <ResultBadge result={displayReview?.match_result} />
-                <span className="rounded-full bg-primary-fixed px-sm py-xs font-label-small text-label-small text-on-primary-fixed">
-                  {team.game_title}
-                </span>
-                <span className="font-label-small text-label-small text-on-surface-variant">{formatDate(displayReview?.played_at)}</span>
-              </div>
-              <h1 className={`${isCompactSix ? "font-headline-1 text-headline-1" : "font-editorial-large text-editorial-large"} text-on-surface`}>
-                {formatScore(displayReview?.team_score, displayReview?.opponent_score) || "Score TBD"}
-              </h1>
-              <p className={`${isCompactSix ? "mt-xs font-body-sub text-body-sub" : "mt-sm font-body-main text-body-main"} text-on-surface-variant`}>
-                {team.name} vs. {displayReview?.opponent_name || "Opponent TBD"} · {displayReview?.map_or_mode || config.defaultMap}
-              </p>
-              <div className={`mt-md grid gap-sm ${isCompactSix ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
-                {config.highlightStats.slice(0, 4).map((stat) => (
-                  <div className={`rounded-2xl bg-surface-container-low ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
-                    <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                    <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{getMetricValue(displayReview?.team_stats, stat) ?? "—"}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <section>
             {config.screenshotUpload === false ? (
               <ManualEntryCard gameTitle={team.game_title} selectedGameNumber={props.selectedGameNumber} />
             ) : (
               <UploadCard
                 extracting={props.extracting}
+                extractionIssue={props.extractionIssue}
+                extractionStatus={props.extractionStatus}
                 handleScreenshotChange={props.handleScreenshotChange}
                 screenshotPreview={props.screenshotPreview}
                 title={`Upload Screenshot for Game ${props.selectedGameNumber}`}
@@ -2580,17 +2374,9 @@ function UniversalGameDashboard(props) {
               accent="bg-[#d12b2b]"
               game={team.game_title}
               opponentName={displayReview?.opponent_name}
-              rows={displayReview?.opponent_comp || []}
+                rows={displayReview?.opponent_comp || []}
               title={`Opponent ${config.compositionLabel}`}
             />
-            <div className={`grid gap-sm ${isCompactSix ? "grid-cols-2 md:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
-              {config.highlightStats.map((stat) => (
-                <div className={`rounded-2xl bg-surface-container-lowest border border-outline-variant/25 ${isCompactSix ? "p-sm" : "p-md"}`} key={stat.key}>
-                  <p className="font-label-small text-label-small text-on-surface-variant">{stat.label}</p>
-                  <p className={`${isCompactSix ? "mt-[2px] font-label-bold text-label-bold" : "mt-xs font-headline-3 text-headline-3"} text-primary`}>{getMetricValue(displayReview?.team_stats, stat) ?? "—"}</p>
-                </div>
-              ))}
-            </div>
             <PerformanceTable game={team.game_title} rows={performanceRows} />
 
             {!isCompactSix && (
@@ -2615,6 +2401,14 @@ function UniversalGameDashboard(props) {
 
       {activeTab === "compare" && (
         <>
+          <GameSpecificOverview
+            config={config}
+            opponentRows={displayReview?.opponent_comp || []}
+            opponentStats={displayReview?.opponent_stats || {}}
+            review={displayReview}
+            teamRows={displayReview?.team_comp || []}
+            teamStats={displayReview?.team_stats || {}}
+          />
           {isMarvelRivals && <MarvelRivalsComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
           {isDeadlock && <DeadlockComparisonPanel opponentStats={displayReview?.opponent_stats || {}} teamStats={displayReview?.team_stats || {}} />}
           {!isMarvelRivals && !isDeadlock && (
@@ -2630,7 +2424,7 @@ function UniversalGameDashboard(props) {
           <CompareTab currentReview={displayReview} gameTitle={team.game_title} historicalReviews={historicalReviews} />
         </>
       )}
-    </div>
+    </GameDashboardShell>
   );
 }
 
@@ -2963,7 +2757,9 @@ function CharacterTile({ game, row, index }) {
         </div>
         <div className="min-w-0">
           <p className="truncate font-label-bold text-label-bold text-on-surface">{row.player_name || "Player TBD"}</p>
-          <p className="truncate font-label-small text-label-small text-on-surface-variant">{pick || `${config.pickLabel} TBD`}</p>
+          {!showImage && (
+            <p className="truncate font-label-small text-label-small text-on-surface-variant">{pick || `${config.pickLabel} TBD`}</p>
+          )}
           {subtitle && subtitle !== config.pickLabel && (
             <p className="truncate font-label-small text-[10px] text-outline">{subtitle}</p>
           )}
@@ -2991,11 +2787,7 @@ function CharacterTile({ game, row, index }) {
             src={imagePath}
           />
         )}
-        {showImage && isMarvelRivals ? (
-          <span className="absolute bottom-xs left-xs right-xs z-10 truncate rounded-lg bg-black/55 px-xs py-1 font-label-small text-[10px] text-white backdrop-blur-sm">
-            {pick}
-          </span>
-        ) : showImage ? (
+        {showImage ? (
           <span className="absolute left-sm top-sm z-10 rounded-full bg-black/55 px-sm py-1 font-label-small text-label-small text-white backdrop-blur-sm">
             {subtitle || "Role TBD"}
           </span>
@@ -3037,6 +2829,8 @@ function formatStatValue(row, key) {
   const value = row[key];
   if (value === null || value === undefined || value === "") return "—";
   if (key === "hs_percent" || key === "accuracy") return `${value}%`;
+  const number = Number(value);
+  if (Number.isFinite(number)) return new Intl.NumberFormat("en-US").format(number);
   return value;
 }
 
@@ -3401,7 +3195,7 @@ function EditableRows({ game, rows, side, title, updateComp }) {
   const canEditRole = game === "League of Legends";
   const characterOptions = getCharacterOptionsForGame(game);
   const usesCharacterDropdown = characterOptions.length > 0;
-  const showsHeroReviewHint = game === "Honor of Kings" || game === "HOK";
+  const showsHeroReviewHint = game === "Marvel Rivals" || game === "Honor of Kings" || game === "HOK";
   const gridClass = getReviewEditorGridClass(canEditRole, statFields.length);
   const columnLabels = [
     "Player",
@@ -3460,6 +3254,11 @@ function EditableRows({ game, rows, side, title, updateComp }) {
                 {row.hero_asset_match && (
                   <span className="truncate font-label-small text-[10px] text-on-surface-variant">
                     Matched: {row.hero_asset_match}{row.costume_name ? ` / ${row.costume_name}` : ""} · {Math.round(Number(row.asset_confidence || row.hero_asset_confidence || 0) * 100)}%
+                  </span>
+                )}
+                {game === "Marvel Rivals" && !row.hero_asset_match && row.needs_hero_review && row.hero_guess && (
+                  <span className="truncate font-label-small text-[10px] text-[#b26a00]">
+                    Review hero: {row.hero_guess}{row.hero_guess_confidence !== "" && row.hero_guess_confidence !== undefined ? ` · ${Math.round(Number(row.hero_guess_confidence || row.hero_confidence || 0) * 100)}%` : ""}
                   </span>
                 )}
                 {!row.hero_asset_match && row.hero_confirmed && row.hero_guess_confidence !== "" && (
