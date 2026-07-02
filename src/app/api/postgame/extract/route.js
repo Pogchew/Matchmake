@@ -25,6 +25,23 @@ const MAX_PRIMARY_MODEL_ATTEMPTS = 2;
 const MAX_FALLBACK_MODEL_ATTEMPTS = 2;
 const GEMINI_MAX_IMAGE_SIDE = 1400;
 const GEMINI_IMAGE_QUALITY = 72;
+const AUTH_ACCESS_TOKEN_COOKIE = "matchmake-access-token";
+const DEFAULT_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MULTIPART_UPLOAD_OVERHEAD_BYTES = 256 * 1024;
+const EXTRACTION_MAX_UPLOAD_BYTES = Number.parseInt(process.env.POSTGAME_EXTRACT_MAX_UPLOAD_BYTES || `${DEFAULT_MAX_UPLOAD_BYTES}`, 10);
+const EXTRACTION_RATE_LIMIT_WINDOW_MS = Number.parseInt(process.env.POSTGAME_EXTRACT_RATE_LIMIT_WINDOW_MS || `${60 * 60 * 1000}`, 10);
+const EXTRACTION_RATE_LIMIT_MAX_REQUESTS = Number.parseInt(process.env.POSTGAME_EXTRACT_RATE_LIMIT_MAX_REQUESTS || "20", 10);
+const EXTRACTOR_DEBUG_LOGS_ENABLED = process.env.NODE_ENV === "development" || process.env.POSTGAME_EXTRACT_DEBUG_LOGS === "true";
+const SUPPORTED_UPLOAD_IMAGE_TYPES = new Set([
+  "image/avif",
+  "image/bmp",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const extractionRateLimitBuckets = globalThis.__matchmakePostgameExtractionRateLimitBuckets || new Map();
+globalThis.__matchmakePostgameExtractionRateLimitBuckets = extractionRateLimitBuckets;
 
 const ROW_FIRST_EXTRACTION_RULES = `
 Matchmake extraction priority:
@@ -148,8 +165,168 @@ function parseGeminiJson(rawText) {
   }
 }
 
-function errorResponse(message, status = 400, details = {}) {
-  return NextResponse.json({ error: message, details }, { status });
+function errorResponse(message, status = 400, details = {}, headers = undefined) {
+  return NextResponse.json({ error: message, details }, { status, headers });
+}
+
+function extractorDebugLog(message, details = {}) {
+  if (!EXTRACTOR_DEBUG_LOGS_ENABLED) return;
+  console.debug(message, details);
+}
+
+function getMaxUploadBytes() {
+  return Number.isFinite(EXTRACTION_MAX_UPLOAD_BYTES) && EXTRACTION_MAX_UPLOAD_BYTES > 0
+    ? EXTRACTION_MAX_UPLOAD_BYTES
+    : DEFAULT_MAX_UPLOAD_BYTES;
+}
+
+function uploadTooLargeResponse(maxBytes) {
+  return errorResponse("Uploaded scoreboard image is too large.", 413, {
+    code: "upload_too_large",
+    maxBytes,
+  });
+}
+
+function unsupportedImageTypeResponse() {
+  return errorResponse("Uploaded file must be a supported image type.", 400, {
+    code: "unsupported_image_type",
+    supportedTypes: [...SUPPORTED_UPLOAD_IMAGE_TYPES].sort(),
+  });
+}
+
+function malformedImageResponse() {
+  return errorResponse("Uploaded image is malformed or unreadable.", 400, {
+    code: "malformed_image_upload",
+  });
+}
+
+function malformedFormDataResponse() {
+  return errorResponse("Upload request must be valid multipart form data.", 400, {
+    code: "malformed_form_data",
+  });
+}
+
+function requestBodyExceedsUploadLimit(request) {
+  const contentLength = Number.parseInt(request.headers.get("content-length") || "", 10);
+  if (!Number.isFinite(contentLength)) return false;
+
+  return contentLength > getMaxUploadBytes() + MULTIPART_UPLOAD_OVERHEAD_BYTES;
+}
+
+function fileExceedsUploadLimit(file) {
+  const size = Number(file?.size);
+  if (!Number.isFinite(size)) return false;
+
+  return size > getMaxUploadBytes();
+}
+
+function detectImageMimeType(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4) return null;
+
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") return "image/gif";
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  if (buffer.subarray(0, 2).toString("ascii") === "BM") return "image/bmp";
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString("ascii") === "ftyp") {
+    const brandBox = buffer.subarray(8, Math.min(buffer.length, 32)).toString("ascii");
+    if (brandBox.includes("avif") || brandBox.includes("avis")) return "image/avif";
+  }
+
+  return null;
+}
+
+async function validateImageUpload({ imageBuffer, sourceMimeType }) {
+  if (!SUPPORTED_UPLOAD_IMAGE_TYPES.has(sourceMimeType)) {
+    return { ok: false, response: unsupportedImageTypeResponse() };
+  }
+
+  const detectedMimeType = detectImageMimeType(imageBuffer);
+  if (!detectedMimeType || detectedMimeType !== sourceMimeType) {
+    return { ok: false, response: malformedImageResponse() };
+  }
+
+  try {
+    await sharp(imageBuffer, { failOn: "error" }).metadata();
+  } catch {
+    return { ok: false, response: malformedImageResponse() };
+  }
+
+  return { ok: true };
+}
+
+async function readMultipartFormData(request) {
+  try {
+    return { ok: true, formData: await request.formData() };
+  } catch {
+    return { ok: false, response: malformedFormDataResponse() };
+  }
+}
+
+async function readUploadedImageBuffer(image) {
+  try {
+    return { ok: true, imageBuffer: Buffer.from(await image.arrayBuffer()) };
+  } catch {
+    return { ok: false, response: malformedImageResponse() };
+  }
+}
+
+async function hasValidSession(request) {
+  const accessToken = request.cookies.get(AUTH_ACCESS_TOKEN_COOKIE)?.value;
+
+  if (!accessToken) return { ok: false };
+
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) return { ok: false };
+
+    const user = await response.json().catch(() => null);
+    if (!user?.id) return { ok: false };
+
+    return { ok: true, userId: user.id };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function getRateLimitConfig() {
+  const windowMs = Number.isFinite(EXTRACTION_RATE_LIMIT_WINDOW_MS) && EXTRACTION_RATE_LIMIT_WINDOW_MS > 0
+    ? EXTRACTION_RATE_LIMIT_WINDOW_MS
+    : 60 * 60 * 1000;
+  const maxRequests = Number.isFinite(EXTRACTION_RATE_LIMIT_MAX_REQUESTS) && EXTRACTION_RATE_LIMIT_MAX_REQUESTS > 0
+    ? EXTRACTION_RATE_LIMIT_MAX_REQUESTS
+    : 20;
+
+  return { windowMs, maxRequests };
+}
+
+function checkExtractionRateLimit(userId, now = Date.now()) {
+  const { windowMs, maxRequests } = getRateLimitConfig();
+  const key = `user:${userId}`;
+  const existing = extractionRateLimitBuckets.get(key);
+  const resetAt = existing?.resetAt && existing.resetAt > now ? existing.resetAt : now + windowMs;
+  const count = existing?.resetAt && existing.resetAt > now ? existing.count + 1 : 1;
+  const bucket = { count, resetAt };
+
+  extractionRateLimitBuckets.set(key, bucket);
+
+  for (const [bucketKey, value] of extractionRateLimitBuckets) {
+    if (value.resetAt <= now) extractionRateLimitBuckets.delete(bucketKey);
+  }
+
+  return {
+    allowed: count <= maxRequests,
+    limit: maxRequests,
+    remaining: Math.max(0, maxRequests - count),
+    resetAt,
+    retryAfterSeconds: Math.max(1, Math.ceil((resetAt - now) / 1000)),
+  };
 }
 
 function inferImageMimeType(file) {
@@ -502,17 +679,20 @@ function buildPromptParts({
   referenceParts = [],
   costumeMetadataPart = null,
   deadlockHeroMetadataPart = null,
+  supplementalParts = [],
   imageType,
   base64Image,
   includeReferences = true,
 }) {
   const safeReferenceParts = Array.isArray(referenceParts) ? referenceParts : [];
+  const safeSupplementalParts = Array.isArray(supplementalParts) ? supplementalParts : [];
 
   return [
     { text: prompt },
     ...(includeReferences ? safeReferenceParts : []),
     ...(includeReferences && costumeMetadataPart ? [costumeMetadataPart] : []),
     ...(includeReferences && deadlockHeroMetadataPart ? [deadlockHeroMetadataPart] : []),
+    ...safeSupplementalParts,
     {
       inlineData: {
         mimeType: imageType,
@@ -618,6 +798,266 @@ function getReferenceDebugMeta(gameTitle, referenceParts, primaryReferenceParts,
   };
 }
 
+const VALORANT_AGENT_BY_KEY = new Map(
+  VALORANT_AGENT_OPTIONS.map((agent) => [
+    String(agent).toLowerCase().replace(/[^a-z0-9]/g, ""),
+    agent,
+  ]),
+);
+let valorantAgentIconReferenceCache = null;
+
+function addManualReviewField(fields, field) {
+  if (field && !fields.includes(field)) fields.push(field);
+}
+
+function compactValorantAgentKey(value = "") {
+  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isValorantReviewAgent(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return !normalized || normalized === "needs review" || normalized.startsWith("unidentified agent");
+}
+
+function parseValorantKdaText(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)/);
+  if (!match) return null;
+
+  return {
+    kills: Number.parseInt(match[1], 10),
+    deaths: Number.parseInt(match[2], 10),
+    assists: Number.parseInt(match[3], 10),
+    kda_text: `${match[1]}/${match[2]}/${match[3]}`,
+  };
+}
+
+function normalizeValorantRow(row = {}, pathPrefix, manualReviewFields, debug) {
+  const normalized = { ...row };
+  const rowNumber = Number(normalized.row_index) || Number(pathPrefix.match(/\[(\d+)\]/)?.[1] || 0) + 1;
+  const agentPath = `${pathPrefix}.agent`;
+  const agent = normalized.agent;
+
+  if (isValorantReviewAgent(agent)) {
+    normalized.agent = `Unidentified agent ${rowNumber}`;
+    normalized.needs_agent_review = true;
+    normalized.needs_manual_review = true;
+    addManualReviewField(manualReviewFields, agentPath);
+    debug.agentFieldsMarkedForReview.push(agentPath);
+  } else {
+    const canonicalAgent = VALORANT_AGENT_BY_KEY.get(compactValorantAgentKey(agent));
+    if (canonicalAgent) {
+      normalized.agent = canonicalAgent;
+    } else {
+      normalized.agent = `Unidentified agent ${rowNumber}`;
+      normalized.needs_agent_review = true;
+      normalized.needs_manual_review = true;
+      addManualReviewField(manualReviewFields, agentPath);
+      debug.agentFieldsMarkedForReview.push(agentPath);
+    }
+  }
+
+  const parsedKda = parseValorantKdaText(normalized.kda_text);
+  if (parsedKda) {
+    for (const field of ["kills", "deaths", "assists"]) {
+      if (Number(normalized[field]) !== parsedKda[field]) {
+        debug.kdaFieldsCorrected.push(`${pathPrefix}.${field}`);
+        normalized[field] = parsedKda[field];
+      }
+    }
+    normalized.kda_text = parsedKda.kda_text;
+  }
+
+  return normalized;
+}
+
+function normalizeValorantExtraction(rawJson = {}) {
+  const manualReviewFields = Array.isArray(rawJson.fields_needing_manual_review)
+    ? [...rawJson.fields_needing_manual_review]
+    : [];
+  const debug = {
+    agentFieldsMarkedForReview: [],
+    kdaFieldsCorrected: [],
+  };
+
+  const rows = Array.isArray(rawJson.rows)
+    ? rawJson.rows.map((row, index) => normalizeValorantRow(row, `rows[${index}]`, manualReviewFields, debug))
+    : [];
+  const teams = Array.isArray(rawJson.teams)
+    ? rawJson.teams.map((team, teamIndex) => ({
+      ...team,
+      players: Array.isArray(team?.players)
+        ? team.players.map((row, playerIndex) => normalizeValorantRow(row, `teams[${teamIndex}].players[${playerIndex}]`, manualReviewFields, debug))
+        : [],
+    }))
+    : rawJson.teams;
+
+  return {
+    ...rawJson,
+    rows,
+    teams,
+    fields_needing_manual_review: manualReviewFields,
+    manual_review_required: Boolean(rawJson.manual_review_required || manualReviewFields.length),
+    meta: {
+      ...(rawJson.meta || {}),
+      valorant_reference_validation: {
+        allowed_agents: VALORANT_AGENT_OPTIONS.length,
+        agent_fields_marked_for_review: [...new Set(debug.agentFieldsMarkedForReview)],
+        kda_fields_corrected_from_kda_text: [...new Set(debug.kdaFieldsCorrected)],
+      },
+    },
+  };
+}
+
+async function imageColorVector(buffer, size = 32) {
+  const { data } = await sharp(buffer, { failOn: "none" })
+    .resize(size, size, { fit: "cover" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const vector = [];
+  for (let index = 0; index < data.length; index += 3) {
+    vector.push(data[index] / 255, data[index + 1] / 255, data[index + 2] / 255);
+  }
+  return vector;
+}
+
+function vectorDistance(first, second) {
+  if (!first?.length || first.length !== second?.length) return Number.POSITIVE_INFINITY;
+  let sum = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    const delta = first[index] - second[index];
+    sum += delta * delta;
+  }
+  return Math.sqrt(sum / first.length);
+}
+
+async function getValorantAgentIconReferences() {
+  if (valorantAgentIconReferenceCache) return valorantAgentIconReferenceCache;
+
+  const references = [];
+  for (const agent of VALORANT_AGENT_OPTIONS) {
+    const filePath = path.join(VALORANT_AGENT_DIR, `${assetStemForName(agent)}.png`);
+    try {
+      references.push({
+        agent,
+        vector: await imageColorVector(await fs.readFile(filePath)),
+      });
+    } catch {
+      // The prompt-level reference sheet still handles missing local files.
+    }
+  }
+  valorantAgentIconReferenceCache = references;
+  return references;
+}
+
+async function matchValorantRowAgentIcon(imageBuffer, rowIndex) {
+  const references = await getValorantAgentIconReferences();
+  if (!references.length) return null;
+
+  const metadata = await sharp(imageBuffer, { failOn: "none" }).metadata();
+  const width = Number(metadata.width);
+  const height = Number(metadata.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+
+  const cropSize = Math.max(28, Math.round(height * 0.0484));
+  const left = Math.round(width * 0.1432);
+  const top = Math.round(height * 0.3219 + (Math.max(1, Number(rowIndex) || 1) - 1) * cropSize);
+  if (left < 0 || top < 0 || left + cropSize > width || top + cropSize > height) return null;
+
+  const crop = await sharp(imageBuffer, { failOn: "none" })
+    .extract({ left, top, width: cropSize, height: cropSize })
+    .png()
+    .toBuffer();
+  const cropVector = await imageColorVector(crop);
+  const scores = references
+    .map((reference) => ({
+      agent: reference.agent,
+      distance: vectorDistance(cropVector, reference.vector),
+    }))
+    .sort((first, second) => first.distance - second.distance);
+  const best = scores[0];
+  const second = scores[1];
+  if (!best || !second) return null;
+
+  const margin = second.distance - best.distance;
+  const isConfident = best.distance <= 0.32 && margin >= 0.015;
+  return {
+    agent: best.agent,
+    distance: best.distance,
+    margin,
+    isConfident,
+  };
+}
+
+async function applyValorantAgentIconMatches(extraction, imageBuffer) {
+  if (!extraction || typeof extraction !== "object") return extraction;
+
+  const corrections = [];
+  const matchesByRowIndex = new Map();
+  const rowEntries = Array.isArray(extraction.rows) ? extraction.rows : [];
+
+  for (const [fallbackIndex, row] of rowEntries.entries()) {
+    const rowIndex = Number(row?.row_index) || fallbackIndex + 1;
+    const match = await matchValorantRowAgentIcon(imageBuffer, rowIndex).catch(() => null);
+    if (!match) continue;
+    matchesByRowIndex.set(rowIndex, match);
+  }
+
+  const mergeRow = (row = {}, fallbackIndex) => {
+    const rowIndex = Number(row?.row_index) || fallbackIndex + 1;
+    const match = matchesByRowIndex.get(rowIndex);
+    if (!match) return row;
+
+    const currentAgent = row.agent || "";
+    const currentKey = compactValorantAgentKey(currentAgent);
+    const matchedKey = compactValorantAgentKey(match.agent);
+    const shouldCorrect = match.isConfident && currentKey !== matchedKey;
+
+    if (shouldCorrect) {
+      corrections.push({
+        row_index: rowIndex,
+        from: currentAgent || null,
+        to: match.agent,
+        distance: Number(match.distance.toFixed(4)),
+        margin: Number(match.margin.toFixed(4)),
+      });
+    }
+
+    return {
+      ...row,
+      agent: shouldCorrect ? match.agent : row.agent,
+      agent_asset_match: match.agent,
+      agent_asset_distance: Number(match.distance.toFixed(4)),
+      agent_asset_margin: Number(match.margin.toFixed(4)),
+      agent_asset_confident: match.isConfident,
+    };
+  };
+
+  const rows = rowEntries.map((row, index) => mergeRow(row, index));
+  const teams = Array.isArray(extraction.teams)
+    ? extraction.teams.map((team) => ({
+      ...team,
+      players: Array.isArray(team?.players)
+        ? team.players.map((row, index) => mergeRow(row, index))
+        : [],
+    }))
+    : extraction.teams;
+
+  return {
+    ...extraction,
+    rows,
+    teams,
+    meta: {
+      ...(extraction.meta || {}),
+      valorant_agent_icon_match: {
+        rows_checked: matchesByRowIndex.size,
+        corrections,
+      },
+    },
+  };
+}
+
 async function readGeminiText(geminiResponse) {
   const geminiJson = await geminiResponse.json();
   return geminiJson?.candidates?.[0]?.content?.parts
@@ -627,7 +1067,8 @@ async function readGeminiText(geminiResponse) {
 }
 
 async function normalizeExtractionResult({ gameTitle, parsedJson, imageBuffer }) {
-  let normalizedJson = gameTitle === "Marvel Rivals" ? normalizeMarvelRivalsExtraction(parsedJson) : parsedJson;
+  let normalizedJson = gameTitle === "Valorant" ? normalizeValorantExtraction(parsedJson) : parsedJson;
+  normalizedJson = gameTitle === "Marvel Rivals" ? normalizeMarvelRivalsExtraction(normalizedJson) : normalizedJson;
 
   if (gameTitle === "Marvel Rivals") {
     normalizedJson = applyMarvelMajorityConfidenceHeroes(normalizedJson);
@@ -639,7 +1080,11 @@ async function normalizeExtractionResult({ gameTitle, parsedJson, imageBuffer })
     };
   }
 
-  return completePostgameExtractionFields(normalizedJson, gameTitle);
+  let completedJson = completePostgameExtractionFields(normalizedJson, gameTitle);
+  if (gameTitle === "Valorant") {
+    completedJson = await applyValorantAgentIconMatches(completedJson, imageBuffer);
+  }
+  return completedJson;
 }
 
 async function optimizeImageForGemini(imageBuffer, originalMimeType) {
@@ -671,9 +1116,58 @@ async function optimizeImageForGemini(imageBuffer, originalMimeType) {
   }
 }
 
+async function getDeadlockSupplementalParts(gameTitle, imageBuffer) {
+  if (gameTitle !== "Deadlock") return [];
+
+  try {
+    const metadata = await sharp(imageBuffer, { failOn: "none" }).rotate().metadata();
+    const width = Number(metadata.width);
+    const height = Number(metadata.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return [];
+
+    const cropWidth = Math.max(220, Math.round(width * 0.32));
+    const cropHeight = Math.max(58, Math.round(height * 0.14));
+    const left = Math.max(0, Math.round((width - cropWidth) / 2));
+    const top = 0;
+    const headerCrop = await sharp(imageBuffer, { failOn: "none" })
+      .rotate()
+      .extract({
+        left,
+        top,
+        width: Math.min(cropWidth, width - left),
+        height: Math.min(cropHeight, height),
+      })
+      .resize({ width: 1200, withoutEnlargement: false })
+      .grayscale()
+      .normalize()
+      .sharpen()
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+
+    return [
+      {
+        text: "Deadlock duration crop: the next image is a zoomed crop of the same uploaded screenshot's top-center header. Use this crop only to read match.duration. The full scoreboard screenshot follows after it.",
+      },
+      {
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: headerCrop.toString("base64"),
+        },
+      },
+    ];
+  } catch (error) {
+    console.warn("Could not build Deadlock duration crop; continuing with the full screenshot only.", {
+      error: error.message,
+    });
+    return [];
+  }
+}
+
 async function runFallbackExtraction({ apiKey, gameTitle, imageType, base64Image, imageBuffer, requestStartedAt, attempts, fallbackReason }) {
+  const supplementalParts = await getDeadlockSupplementalParts(gameTitle, imageBuffer);
   const fallbackParts = buildPromptParts({
     prompt: getFallbackExtractionPrompt(gameTitle),
+    supplementalParts,
     imageType,
     base64Image,
     includeReferences: false,
@@ -717,6 +1211,9 @@ async function runFallbackExtraction({ apiKey, gameTitle, imageType, base64Image
   } catch (parseError) {
     console.error("Fallback extraction returned unparseable JSON", {
       parseError,
+      rawTextLength: rawText.length,
+    });
+    extractorDebugLog("Fallback extraction raw response preview", {
       rawTextPreview: rawText.slice(0, 1200),
       rawTextLength: rawText.length,
     });
@@ -727,12 +1224,43 @@ async function runFallbackExtraction({ apiKey, gameTitle, imageType, base64Image
 export async function POST(request) {
   const requestStartedAt = Date.now();
   try {
+    const session = await hasValidSession(request);
+    if (!session.ok) {
+      return errorResponse("Authentication is required for screenshot extraction.", 401, {
+        code: "authentication_required",
+      });
+    }
+
+    if (requestBodyExceedsUploadLimit(request)) {
+      return uploadTooLargeResponse(getMaxUploadBytes());
+    }
+
+    const rateLimit = checkExtractionRateLimit(session.userId);
+    if (!rateLimit.allowed) {
+      return errorResponse("Screenshot extraction rate limit exceeded. Try again later.", 429, {
+        code: "rate_limit_exceeded",
+        limit: rateLimit.limit,
+        remaining: rateLimit.remaining,
+        resetAt: new Date(rateLimit.resetAt).toISOString(),
+      }, {
+        "Retry-After": String(rateLimit.retryAfterSeconds),
+        "X-RateLimit-Limit": String(rateLimit.limit),
+        "X-RateLimit-Remaining": String(rateLimit.remaining),
+        "X-RateLimit-Reset": String(Math.ceil(rateLimit.resetAt / 1000)),
+      });
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return errorResponse("Gemini API key is not configured.", 500);
     }
 
-    const formData = await request.formData();
+    const parsedFormData = await readMultipartFormData(request);
+    if (!parsedFormData.ok) {
+      return parsedFormData.response;
+    }
+
+    const formData = parsedFormData.formData;
     const gameTitle = formData.get("gameTitle");
     const image = formData.get("image");
 
@@ -758,13 +1286,27 @@ export async function POST(request) {
       return errorResponse("A scoreboard image is required.");
     }
 
+    if (fileExceedsUploadLimit(image)) {
+      return uploadTooLargeResponse(getMaxUploadBytes());
+    }
+
     const sourceMimeType = inferImageMimeType(image);
 
     if (!sourceMimeType) {
-      return errorResponse("Uploaded file must be an image.");
+      return unsupportedImageTypeResponse();
     }
 
-    const imageBuffer = Buffer.from(await image.arrayBuffer());
+    const uploadedImage = await readUploadedImageBuffer(image);
+    if (!uploadedImage.ok) {
+      return uploadedImage.response;
+    }
+
+    const imageBuffer = uploadedImage.imageBuffer;
+    const imageValidation = await validateImageUpload({ imageBuffer, sourceMimeType });
+    if (!imageValidation.ok) {
+      return imageValidation.response;
+    }
+
     const optimizedImage = await optimizeImageForGemini(imageBuffer, sourceMimeType);
     const base64Image = optimizedImage.buffer.toString("base64");
     const referenceParts = [
@@ -774,6 +1316,7 @@ export async function POST(request) {
     ];
     const costumeMetadataPart = await getMarvelRivalsCostumeMetadataPart(gameTitle);
     const deadlockHeroMetadataPart = await getDeadlockHeroMetadataPart(gameTitle);
+    const supplementalParts = await getDeadlockSupplementalParts(gameTitle, imageBuffer);
     const primaryReferenceParts = getPrimaryReferencePartsForGame(gameTitle, referenceParts);
     const referenceDebugMeta = getReferenceDebugMeta(gameTitle, referenceParts, primaryReferenceParts, costumeMetadataPart, deadlockHeroMetadataPart);
     const modelAttempts = [];
@@ -782,6 +1325,7 @@ export async function POST(request) {
       referenceParts: primaryReferenceParts,
       costumeMetadataPart,
       deadlockHeroMetadataPart,
+      supplementalParts,
       imageType: optimizedImage.mimeType,
       base64Image,
       includeReferences: true,
@@ -798,6 +1342,9 @@ export async function POST(request) {
     if (!geminiResponse?.ok) {
       const quotaExceeded = geminiResponse?.status === 429 || lastErrorText.includes("RESOURCE_EXHAUSTED") || lastErrorText.includes("quota");
       console.error("Gemini extraction failed", {
+        status: geminiResponse?.status,
+      });
+      extractorDebugLog("Gemini extraction failure body", {
         status: geminiResponse?.status,
         body: lastErrorText,
       });
@@ -884,7 +1431,7 @@ export async function POST(request) {
     }
 
     if (gameTitle === "Deadlock") {
-      console.log("Deadlock Gemini raw response", {
+      extractorDebugLog("Deadlock Gemini raw response", {
         rawTextLength: rawText.length,
         rawTextPreview: rawText.slice(0, 500),
       });
@@ -894,8 +1441,8 @@ export async function POST(request) {
       const parsedJson = parseGeminiJson(rawText);
       const normalizedJson = await normalizeExtractionResult({ gameTitle, parsedJson, imageBuffer });
 
-      if (gameTitle === "Marvel Rivals" && process.env.NODE_ENV === "development") {
-        console.debug("Marvel Rivals extraction normalized", {
+      if (gameTitle === "Marvel Rivals") {
+        extractorDebugLog("Marvel Rivals extraction normalized", {
           rows: normalizedJson.rows?.length || 0,
           team1: normalizedJson.teams?.[0]?.players?.length || 0,
           team2: normalizedJson.teams?.[1]?.players?.length || 0,
@@ -909,7 +1456,7 @@ export async function POST(request) {
       if (gameTitle === "Deadlock") {
         const rowsArr = Array.isArray(normalizedJson?.rows) ? normalizedJson.rows : [];
         const teamsArr = Array.isArray(normalizedJson?.teams) ? normalizedJson.teams : [];
-        console.log("Deadlock extraction summary", {
+        extractorDebugLog("Deadlock extraction summary", {
           referenceSheetsSent: primaryReferenceParts.length,
           metadataAttached: Boolean(deadlockHeroMetadataPart),
           result: normalizedJson?.match?.result || null,
@@ -939,6 +1486,9 @@ export async function POST(request) {
     } catch (parseError) {
       console.error("Gemini extraction returned unparseable JSON", {
         parseError,
+        rawTextLength: rawText.length,
+      });
+      extractorDebugLog("Gemini extraction raw response preview", {
         rawTextPreview: rawText.slice(0, 1200),
         rawTextLength: rawText.length,
       });

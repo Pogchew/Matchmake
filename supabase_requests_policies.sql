@@ -51,6 +51,19 @@ create policy "Posting org can accept inbound scrim requests"
   with check (
     status = 'confirmed'
     and matched_team_id is not null
+    and private.scrim_request_update_columns_guard(
+      posting_team_id,
+      matched_team_id,
+      game_title,
+      scheduled_at,
+      games_count,
+      team_rank,
+      opponent_rank_min,
+      opponent_rank_max,
+      status,
+      expires_at,
+      updated_at
+    )
     and exists (
       select 1
       from public.users owner
@@ -82,6 +95,19 @@ create policy "Posting org can decline inbound scrim requests"
   with check (
     status = 'open'
     and matched_team_id is null
+    and private.scrim_request_update_columns_guard(
+      posting_team_id,
+      matched_team_id,
+      game_title,
+      scheduled_at,
+      games_count,
+      team_rank,
+      opponent_rank_min,
+      opponent_rank_max,
+      status,
+      expires_at,
+      updated_at
+    )
     and exists (
       select 1
       from public.users owner
@@ -113,6 +139,19 @@ create policy "Matched org can cancel outbound scrim requests"
   with check (
     status = 'open'
     and matched_team_id is null
+    and private.scrim_request_update_columns_guard(
+      posting_team_id,
+      matched_team_id,
+      game_title,
+      scheduled_at,
+      games_count,
+      team_rank,
+      opponent_rank_min,
+      opponent_rank_max,
+      status,
+      expires_at,
+      updated_at
+    )
   );
 
 create policy "Participant org can complete confirmed scrims"
@@ -138,6 +177,19 @@ create policy "Participant org can complete confirmed scrims"
   with check (
     status = 'completed'
     and matched_team_id is not null
+    and private.scrim_request_update_columns_guard(
+      posting_team_id,
+      matched_team_id,
+      game_title,
+      scheduled_at,
+      games_count,
+      team_rank,
+      opponent_rank_min,
+      opponent_rank_max,
+      status,
+      expires_at,
+      updated_at
+    )
     and exists (
       select 1
       from public.users participant

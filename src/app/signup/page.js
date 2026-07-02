@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import { storeAuthSession } from "@/lib/auth-session";
+import { trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
@@ -90,6 +91,18 @@ export default function SignupPage() {
         return;
       }
     }
+
+    await trackLaunchAnalyticsEvent({
+      eventName: "signup_completed",
+      status: "success",
+      targetLabel: "Organization signup",
+      entityId: orgData?.id || null,
+      details: "Signup completed",
+      metadata: {
+        account_type: "org",
+        has_org: Boolean(orgData?.id),
+      },
+    });
 
     router.push("/team/new");
     router.refresh();

@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-display: swap;
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 400;
+  src: url("/fonts/material-symbols-outlined.ttf") format("truetype");
+}
+
+.material-symbols-outlined {
+  direction: ltr;
+  display: inline-block;
+  font-family: "Material Symbols Outlined";
+  font-feature-settings: "liga", "rlig";
+  font-variant-ligatures: normal;
+  font-size: 24px;
+  font-style: normal;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  font-weight: normal;
+  flex-shrink: 0;
+  letter-spacing: normal;
+  line-height: 1;
+  min-width: 1em;
+  overflow: hidden;
+  text-transform: none;
+  width: 1em;
+  white-space: nowrap;
+  word-wrap: normal;
+  -webkit-font-feature-settings: "liga", "rlig";
+  -webkit-font-smoothing: antialiased;
+}
+
 :root {
   color-scheme: light;
   --color-surface-dim: 218 217 223;
@@ -121,6 +152,17 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.admin-live-activity table {
+  table-layout: fixed;
+}
+
+.admin-live-activity th:nth-child(1) { width: 78px; }
+.admin-live-activity th:nth-child(2) { width: 180px; }
+.admin-live-activity th:nth-child(3) { width: 145px; }
+.admin-live-activity th:nth-child(4) { width: 180px; }
+.admin-live-activity th:nth-child(5) { width: 90px; }
+.admin-live-activity td { overflow: hidden; }
 
 .rank-range-slider {
   appearance: none;

@@ -6,6 +6,7 @@ import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import LandingPage from "@/components/LandingPage";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import {
   GAME_OPTIONS,
   TEAM_LOCATION_OPTIONS,
@@ -332,10 +333,10 @@ function ScrimCard({ scrim }) {
     <article className={`bg-surface-container-lowest rounded-[16px] p-md border border-outline-variant/30 shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow ${scrim.hasRequested ? "opacity-80" : ""}`}>
       <div className="flex items-start justify-between mb-md">
         <div className="flex items-center gap-sm">
-          <div className="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center font-headline-2 text-headline-2 text-on-surface font-bold">
+          <div className="h-12 w-12 shrink-0 rounded-xl bg-surface-container-high flex items-center justify-center font-headline-2 text-headline-2 text-on-surface font-bold">
             {scrim.initials}
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="font-headline-3 text-headline-3 text-on-surface flex items-center gap-1">
               {scrim.team}
               {scrim.verified && (
@@ -871,6 +872,56 @@ function PostScrimModal({
   postError,
   teams,
 }) {
+  const closeButtonRef = useRef(null);
+  const dialogRef = useRef(null);
+  const openerRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    openerRef.current = document.activeElement;
+    closeButtonRef.current?.focus();
+
+    function handleDialogKeyDown(event) {
+      if (event.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = Array.from(
+        dialogRef.current?.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) || []
+      ).filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true");
+
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeyDown);
+      openerRef.current?.focus?.();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const hasNoTeams = !isLoadingTeams && teams.length === 0;
@@ -884,18 +935,25 @@ function PostScrimModal({
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-50 md:items-center md:justify-center md:inset-0 md:flex">
-        <div className="w-full bg-surface md:w-[780px] md:mx-auto rounded-t-[28px] md:rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.24)] flex max-h-[94vh] flex-col overflow-hidden border border-outline-variant/25">
+        <div
+          aria-labelledby="post-scrim-title"
+          aria-modal="true"
+          className="w-full bg-surface md:w-[780px] md:mx-auto rounded-t-[28px] md:rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.24)] flex max-h-[94vh] flex-col overflow-hidden border border-outline-variant/25"
+          ref={dialogRef}
+          role="dialog"
+        >
           <div className="flex items-center justify-between px-margin-mobile pt-md pb-sm border-b border-surface-variant relative">
             <div className="md:hidden w-12 h-1.5 bg-outline-variant rounded-full absolute top-3 left-1/2 -translate-x-1/2" />
             <button
               className="text-primary hover:text-on-primary-fixed-variant transition-colors p-sm -ml-sm"
               onClick={onClose}
+              ref={closeButtonRef}
               type="button"
             >
               <MaterialSymbol className="text-2xl">close</MaterialSymbol>
             </button>
             <div className="text-center">
-              <h2 className="font-headline-2 text-headline-2 text-on-surface">Post Scrim</h2>
+              <h2 className="font-headline-2 text-headline-2 text-on-surface" id="post-scrim-title">Post Scrim</h2>
               <p className="font-label-small text-label-small text-on-surface-variant">Create an open listing for another team to request.</p>
             </div>
             <div className="w-10" />
@@ -1564,12 +1622,23 @@ function ScrimBoardPage() {
         expires_at: expiresAt,
       };
 
-      let { error: insertError } = await supabase.from("scrim_requests").insert(payload);
+      let createdScrimId = null;
+      let { data: insertedScrim, error: insertError } = await supabase
+        .from("scrim_requests")
+        .insert(payload)
+        .select("id")
+        .single();
+      createdScrimId = insertedScrim?.id || null;
 
       if (isMissingGamesCountError(insertError)) {
         console.warn("games_count is missing in Supabase. Posting scrim without saved game count.");
         const { games_count, ...fallbackPayload } = payload;
-        ({ error: insertError } = await supabase.from("scrim_requests").insert(fallbackPayload));
+        ({ data: insertedScrim, error: insertError } = await supabase
+          .from("scrim_requests")
+          .insert(fallbackPayload)
+          .select("id")
+          .single());
+        createdScrimId = insertedScrim?.id || null;
       }
 
       if (insertError) {
@@ -1577,6 +1646,20 @@ function ScrimBoardPage() {
         setPostError(insertError.message);
         return;
       }
+
+      await trackLaunchAnalyticsEvent({
+        eventName: "scrim_posted",
+        status: "success",
+        targetLabel: `${gameTitle} scrim`,
+        entityId: createdScrimId,
+        details: "Scrim posted",
+        metadata: {
+          game_title: gameTitle,
+          posting_team_id: postingTeam.id,
+          scheduled_at: scheduledAt,
+          games_count: payload.games_count,
+        },
+      });
 
       setIsPostModalOpen(false);
       setPostForm(createInitialPostForm());

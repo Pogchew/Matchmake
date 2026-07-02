@@ -10,11 +10,13 @@ const protectedRoutes = [
   "/team",
   "/chat",
   "/scrims",
+  "/admin",
 ];
 
-const publicAuthRoutes = ["/login", "/signup"];
+const publicAuthRoutes = ["/login", "/signup", "/admin/login"];
 
 function isProtectedPath(pathname) {
+  if (publicAuthRoutes.includes(pathname)) return false;
   if (pathname === "/") return true;
   return protectedRoutes.some((route) => route !== "/" && (pathname === route || pathname.startsWith(`${route}/`)));
 }
@@ -44,7 +46,7 @@ export async function middleware(request) {
   const isAuthenticated = await hasValidSession(request);
 
   if (isAuthRoute && isAuthenticated) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL(pathname === "/admin/login" ? "/admin" : "/", request.url));
   }
 
   if (isProtectedPath(pathname) && !isAuthenticated) {

@@ -238,7 +238,7 @@ export default function ScrimChatPage() {
         .insert({
           scrim_request_id: scrim.id,
           sender_user_id: authUser.id,
-          sender_display_name: profile?.display_name || authUser.email || "Teammate",
+          sender_display_name: profile?.display_name || "Teammate",
           sender_team_id: senderTeamId,
           body,
         });

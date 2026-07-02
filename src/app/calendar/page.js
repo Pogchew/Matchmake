@@ -121,7 +121,7 @@ function StatusChip({ status }) {
   const styles = getStatusStyles(status);
 
   return (
-    <div className={`flex items-center gap-xs font-label-small text-label-small px-3 py-1 rounded-full self-start sm:self-auto ${styles.chip}`}>
+    <div className={`flex shrink-0 items-center gap-xs whitespace-nowrap font-label-small text-label-small px-3 py-1 rounded-full self-start sm:self-auto ${styles.chip}`}>
       <MaterialSymbol className="text-[14px]">{styles.icon}</MaterialSymbol>
       {styles.label}
     </div>
@@ -547,10 +547,10 @@ export default function CalendarPage() {
     <>
       <TopBar />
 
-      <main className="pt-lg pb-[100px] px-margin-mobile max-w-[1200px] mx-auto">
-        <div className="mb-md flex flex-col gap-sm md:flex-row md:items-end md:justify-between">
+      <main className="pt-md sm:pt-lg pb-[100px] px-margin-mobile max-w-[1200px] mx-auto">
+        <div className="mb-sm sm:mb-md flex flex-col gap-sm md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="font-headline-1 text-headline-1 text-on-surface">{MONTHS[month]}</h1>
+            <h1 className="font-headline-1 text-[30px] leading-9 text-on-surface sm:text-headline-1">{MONTHS[month]}</h1>
             <p className="font-body-sub text-body-sub text-on-surface-variant">
               {monthScrims.length} {monthScrims.length === 1 ? "scrim" : "scrims"} this month · {pendingCount} pending · {confirmedCount} confirmed
             </p>
@@ -582,10 +582,10 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        <div className="mb-md flex gap-xs overflow-x-auto pb-xs">
+        <div className="mb-sm grid grid-cols-[repeat(4,minmax(0,1fr))_44px] gap-xs sm:mb-md sm:flex sm:overflow-x-auto sm:pb-xs">
           {STATUS_FILTERS.map((filter) => (
             <button
-              className={`rounded-full px-md py-sm font-label-bold text-label-bold capitalize transition-colors ${
+              className={`min-w-0 rounded-full px-xs py-2 font-label-bold text-[12px] leading-4 capitalize transition-colors sm:px-md sm:py-sm sm:text-label-bold ${
                 statusFilter === filter
                   ? "bg-primary text-on-primary"
                   : "bg-surface-container-high text-on-surface-variant hover:bg-surface-variant"
@@ -598,7 +598,8 @@ export default function CalendarPage() {
             </button>
           ))}
           <button
-            className={`inline-flex items-center gap-xs rounded-full px-md py-sm font-label-bold text-label-bold transition-colors ${
+            aria-label="Export calendar integrations"
+            className={`inline-flex h-10 min-w-0 items-center justify-center gap-xs rounded-full px-0 font-label-bold text-[12px] leading-4 transition-colors sm:h-auto sm:px-md sm:py-sm sm:text-label-bold ${
               isIntegrationOpen
                 ? "bg-primary text-on-primary"
                 : "bg-surface-container-high text-on-surface-variant hover:bg-surface-variant"
@@ -607,12 +608,12 @@ export default function CalendarPage() {
             type="button"
           >
             <MaterialSymbol className="text-[18px]">ios_share</MaterialSymbol>
-            Export
+            <span className="hidden sm:inline">Export</span>
           </button>
         </div>
 
         {isIntegrationOpen && (
-          <section className="mb-md rounded-xl border border-surface-variant/50 bg-surface-container-lowest p-md shadow-[0_8px_30px_0_rgba(0,0,0,0.04)]">
+          <section className="mb-md rounded-xl border border-surface-variant/50 bg-surface-container-lowest p-sm sm:p-md shadow-[0_8px_30px_0_rgba(0,0,0,0.04)]">
             <div className="mb-md flex flex-col gap-xs sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="font-headline-3 text-headline-3 text-on-surface">Calendar integrations</h2>
@@ -933,15 +934,15 @@ export default function CalendarPage() {
           />
         ) : (
           <>
-            <section className="bg-surface-container-lowest rounded-xl p-md mb-xl shadow-[0_8px_30px_0_rgba(0,0,0,0.04)] border border-surface-variant/50">
-              <div className="grid grid-cols-7 mb-sm text-center">
+            <section className="bg-surface-container-lowest rounded-xl p-sm sm:p-md mb-lg sm:mb-xl shadow-[0_8px_30px_0_rgba(0,0,0,0.04)] border border-surface-variant/50">
+              <div className="grid grid-cols-7 mb-xs sm:mb-sm text-center">
                 {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
                   <div key={`${day}-${index}`} className="font-label-small text-label-small text-on-surface-variant">{day}</div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-y-sm gap-x-xs text-center font-body-main text-body-main">
+              <div className="grid grid-cols-7 gap-y-xs gap-x-xs text-center font-body-main text-[15px] leading-6 sm:gap-y-sm sm:text-body-main">
                 {Array.from({ length: firstDay }).map((_, index) => (
-                  <div key={`prev-${index}`} className="py-2 text-outline-variant cursor-default">
+                  <div key={`prev-${index}`} className="py-1 sm:py-2 text-outline-variant cursor-default">
                     {prevDays - (firstDay - 1 - index)}
                   </div>
                 ))}
@@ -957,7 +958,7 @@ export default function CalendarPage() {
                     <button
                       key={dateValue}
                       onClick={() => setSelectedDate(dateValue)}
-                      className={`min-h-12 py-2 cursor-pointer rounded-lg flex flex-col items-center justify-center relative transition-colors ${
+                      className={`min-h-10 py-1 sm:min-h-12 sm:py-2 cursor-pointer rounded-lg flex flex-col items-center justify-center relative transition-colors ${
                         isSelected
                           ? "bg-primary text-on-primary shadow-sm"
                           : isToday
@@ -987,7 +988,7 @@ export default function CalendarPage() {
                 })}
 
                 {Array.from({ length: trailing }).map((_, index) => (
-                  <div key={`next-${index}`} className="py-2 text-outline-variant cursor-default">
+                  <div key={`next-${index}`} className="py-1 sm:py-2 text-outline-variant cursor-default">
                     {index + 1}
                   </div>
                 ))}
@@ -995,14 +996,14 @@ export default function CalendarPage() {
             </section>
 
             <section>
-              <div className="flex items-center justify-between mb-md">
-                <h2 className="font-headline-2 text-headline-2 text-on-surface">{dayLabel}</h2>
+              <div className="flex items-center justify-between mb-sm sm:mb-md">
+                <h2 className="font-headline-2 text-[22px] leading-7 text-on-surface sm:text-headline-2">{dayLabel}</h2>
                 <span className="font-label-small text-label-small text-primary bg-primary-fixed px-2 py-1 rounded-full">
                   {selectedDayScrims.length} {selectedDayScrims.length === 1 ? "Scrim" : "Scrims"}
                 </span>
               </div>
 
-              <div className="flex flex-col gap-md">
+              <div className="flex flex-col gap-sm sm:gap-md">
                 {selectedDayScrims.length === 0 ? (
                   <EmptyState
                     title="No scrims scheduled for this day."
@@ -1029,32 +1030,39 @@ export default function CalendarPage() {
                       <Link
                         key={scrim.id}
                         href={`/scrims/${scrim.id}`}
-                        className="bg-surface-container-lowest rounded-xl p-md shadow-[0_8px_30px_0_rgba(0,0,0,0.04)] border border-surface-variant/50 flex items-stretch gap-md relative overflow-hidden hover:border-outline-variant transition-colors cursor-pointer"
+                        className="bg-surface-container-lowest rounded-xl p-sm sm:p-md shadow-[0_8px_30px_0_rgba(0,0,0,0.04)] border border-surface-variant/50 flex flex-col sm:flex-row sm:items-stretch gap-sm sm:gap-md relative overflow-hidden hover:border-outline-variant transition-colors cursor-pointer"
                       >
-                        <div className={`w-1 ${statusStyles.accent} absolute left-0 top-md bottom-md rounded-r-full`} />
-                        <div className="flex flex-col justify-center min-w-[72px] pl-sm">
-                          <span className="font-label-bold text-label-bold text-on-surface">{formatScrimTime(scrim.scheduled_at)}</span>
-                          <span className="font-label-small text-label-small text-on-surface-variant">{localTimeZoneLabel}</span>
+                        <div className={`w-1 ${statusStyles.accent} absolute left-0 top-sm bottom-sm sm:top-md sm:bottom-md rounded-r-full`} />
+                        <div className="flex items-center justify-between gap-sm pl-sm sm:min-w-[72px] sm:flex-col sm:items-start sm:justify-center">
+                          <div className="flex items-baseline gap-xs sm:block">
+                            <span className="font-label-bold text-label-bold text-on-surface">{formatScrimTime(scrim.scheduled_at)}</span>
+                            <span className="font-label-small text-label-small text-on-surface-variant">{localTimeZoneLabel}</span>
+                          </div>
+                          <div className="sm:hidden">
+                            <StatusChip status={scrim.status} />
+                          </div>
                         </div>
-                        <div className="w-[1px] bg-surface-variant" />
+                        <div className="hidden w-[1px] bg-surface-variant sm:block" />
                         <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-md py-xs">
                           <div className="flex items-center gap-sm min-w-0">
-                            <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center border border-surface-variant shrink-0">
+                            <div className="hidden w-10 h-10 rounded-full bg-surface-container-high sm:flex items-center justify-center border border-surface-variant shrink-0">
                               <span className="font-label-bold text-on-surface-variant">{getInitials(postingTeam?.name)}</span>
                             </div>
-                            <div className="min-w-0">
-                              <h3 className="font-body-main text-body-main text-on-surface font-semibold truncate">
+                            <div className="min-w-0 flex-1 pl-sm sm:pl-0">
+                              <h3 className="truncate font-body-main text-[15px] leading-5 text-on-surface font-semibold sm:text-body-main">
                                 {postingTeam?.name || "Unknown Team"} vs {opponentLabel}
                               </h3>
-                              <p className="font-label-small text-label-small text-on-surface-variant">
+                              <p className="truncate font-label-small text-label-small text-on-surface-variant">
                                 {scrim.game_title} · VS {formatRankRange(scrim)} · {region}
                               </p>
-                              <p className="mt-0.5 font-label-small text-label-small text-outline">
+                              <p className="mt-0.5 hidden font-label-small text-label-small text-outline sm:block">
                                 {getPerspectiveText(scrim, teamIds)}
                               </p>
                             </div>
                           </div>
-                          <StatusChip status={scrim.status} />
+                          <div className="hidden sm:block">
+                            <StatusChip status={scrim.status} />
+                          </div>
                         </div>
                       </Link>
                     );

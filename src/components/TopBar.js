@@ -8,6 +8,7 @@ import MatchmakeLogo from "./MatchmakeLogo";
 import ThemeToggle from "./ThemeToggle";
 import { clearAuthSession } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
+import { useOwnerAccess } from "@/lib/use-owner-access";
 
 const navItems = [
   { label: "Find Scrims", icon: "sports_esports", href: "/" },
@@ -15,6 +16,12 @@ const navItems = [
   { label: "Requests", icon: "pending_actions", href: "/requests" },
   { label: "Schedule", icon: "calendar_month", href: "/calendar" },
 ];
+
+const adminNavItem = {
+  label: "Admin",
+  icon: "admin_panel_settings",
+  href: "/admin",
+};
 
 function formatNotificationTime(value) {
   if (!value) return "";
@@ -55,6 +62,7 @@ function buildScrimTitle(scrim) {
 export default function TopBar({ actions, right }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isOwner = useOwnerAccess();
   const notificationRef = useRef(null);
   const [notifications, setNotifications] = useState([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -251,7 +259,7 @@ export default function TopBar({ actions, right }) {
 
       {/* Centre: desktop nav */}
       <nav className="hidden items-center justify-center gap-xs lg:flex" aria-label="Primary navigation">
-        {navItems.map((item) => {
+        {(isOwner ? [...navItems, adminNavItem] : navItems).map((item) => {
           const isActive =
             item.href === "/"
               ? pathname === "/"

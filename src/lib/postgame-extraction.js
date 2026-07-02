@@ -984,7 +984,12 @@ Rules:
 - Do not use large splash art, full-body art, store icons, party icons, right-side social icons, friend list icons, or unrelated UI images.
 - If the screenshot shows row tint/color grouping, use it to group team_1 and team_2.
 - If teams are mixed because the scoreboard is individually sorted, preserve row order and use team_key only when visually clear.
-- Split KDA into kills, deaths, assists.
+- Valorant scoreboards use this player-row column order after the player/agent area: AVG COMBAT SCORE, KDA, ECON RATING, FIRST BLOODS, PLANTS, DEFUSES.
+- Read kills, deaths, and assists only from the three slash-separated numbers in the KDA column.
+- The KDA column is between AVG COMBAT SCORE and ECON RATING. Never copy assist values from ECON RATING, FIRST BLOODS, PLANTS, DEFUSES, social icons, or any right-side panel.
+- Preserve kda_text exactly as the visible KDA group normalized with slashes, and make kills/deaths/assists equal those three components.
+- Example: if the KDA column shows 45 / 35 / 18, return kills=45, deaths=35, assists=18, kda_text="45/35/18". Do not return assists=10 from nearby columns.
+- If any KDA digit is ambiguous, use "Needs review" for that row's ambiguous KDA field(s) and add those field paths to fields_needing_manual_review.
 - Convert numeric values to integers.
 - Extract map/date/duration from the upper-left match info when visible.
 - Extract match result and final score from the top center when visible.
@@ -1099,6 +1104,9 @@ Specific extraction instructions:
 4. Player rows:
    - Extract each row from top to bottom.
    - For each row extract player_name, agent, avg_combat_score, kills, deaths, assists, econ_rating, first_bloods, plants, and defuses.
+   - First identify the row's KDA column as the three-number slash group immediately after avg_combat_score and immediately before econ_rating.
+   - Set kda_text to that exact group, then split it left-to-right into kills, deaths, assists.
+   - Do not infer assists from the last visible digit near the econ, first_bloods, plants, or defuses columns.
 
 5. Team grouping:
    - If teal/green rows and red/pink rows indicate teams, group them accordingly.
@@ -1558,6 +1566,16 @@ The three combat-stat columns immediately after Player Name are K/D/A.
 - second number = deaths
 - third number = assists
 - kda_text = "kills/deaths/assists"
+
+SAVED STAT COLUMN RULE:
+After Medals, the saved numeric columns appear left-to-right as Final Hits, Damage, Damage Blocked, Healing, Accuracy.
+- The number immediately after Medals is final_hits.
+- The next number is damage.
+- The next number is damage_blocked.
+- The next number is healing.
+- The rightmost percentage is accuracy_percent.
+- Never copy Damage Blocked into damage, and never skip the Damage column.
+- Example: if a row shows Final Hits 3, Damage 4554, Damage Blocked 3237, Healing 0, Accuracy 33%, return final_hits=3, damage=4554, damage_blocked=3237, healing=0, accuracy_percent=33.
 
 NUMBER RULES:
 - Convert comma numbers into integers.

@@ -12,17 +12,17 @@ const FEATURES = [
   {
     icon: "scoreboard",
     title: "Scrim Board",
-    desc: "Browse open scrims from teams in your rank window. Filter by game, time, and region. Post your own in under a minute.",
+    desc: "Browse open scrims from high school teams in your rank window. Filter by game, time, and region. Post your own in under a minute.",
   },
   {
     icon: "auto_awesome",
     title: "Auto Stat Extraction",
-    desc: "Drop a screenshot of any post-game scoreboard. Matchmake reads the numbers, maps the heroes, and files the result automatically.",
+    desc: "Upload a post-game scoreboard screenshot to draft visible stats. Coaches review and edit the fields before saving the match review.",
   },
   {
     icon: "groups",
     title: "Team & Org Workspace",
-    desc: "Manage rosters, ranks, and verification in one place. Coaches see everything; players see only what matters to them.",
+    desc: "Manage rosters, ranks, and school team verification in one place. Coaches see everything; players see only what matters to them.",
   },
   {
     icon: "insights",
@@ -35,7 +35,7 @@ const STEPS = [
   {
     n: 1,
     title: "Post or browse",
-    desc: "List your team's availability or scroll the board for matchups in your rank range.",
+    desc: "List your high school team's availability or scroll the board for matchups in your rank range.",
   },
   {
     n: 2,
@@ -45,15 +45,39 @@ const STEPS = [
   {
     n: 3,
     title: "Review the tape",
-    desc: "Upload the scoreboard. Get instant deep stats — KDA, role breakdowns, and gap analysis.",
+    desc: "Upload the scoreboard, check the extracted draft, then save the review once the fields look right.",
+  },
+];
+
+const SCHOOL_SAFETY_POINTS = [
+  {
+    icon: "admin_panel_settings",
+    title: "Coach-led setup",
+    desc: "Organizations, teams, rosters, and match reviews are built around school and coach-admin workflows.",
+  },
+  {
+    icon: "visibility",
+    title: "Limited public listings",
+    desc: "The public board focuses on matchup details while private roster, chat, and review work stays in the right team workflow.",
+  },
+  {
+    icon: "block",
+    title: "No student-data ads",
+    desc: "Launch privacy language keeps student data tied to the school-authorized service, not targeted ads, data sales, or unrelated commercial profiles.",
   },
 ];
 
 const GAMES = [
   { name: "Valorant", color: "#FF4655" },
+  { name: "Call of Duty", color: "#16A34A" },
+  { name: "Counter-Strike 2", color: "#F59E0B" },
   { name: "League of Legends", color: "#C8AA6E" },
+  { name: "Rocket League", color: "#2563EB" },
+  { name: "Overwatch 2", color: "#F97316" },
   { name: "Marvel Rivals", color: "#B91C1C" },
   { name: "Deadlock", color: "#FF8C42" },
+  { name: "Super Smash Bros. Ultimate", color: "#7C3AED" },
+  { name: "Honor of Kings", color: "#DC2626" },
 ];
 
 function scrollToAuthCard() {
@@ -203,7 +227,7 @@ export default function LandingPage() {
               onClick={() => jumpTo("signup")}
               className="bg-primary text-on-primary font-label-bold text-label-bold px-4 py-2 rounded-full hover:bg-on-primary-fixed-variant active:scale-95 transition-all shadow-[0_4px_14px_rgba(0,88,188,0.3)]"
             >
-              Get started
+              Request access
             </button>
           </nav>
         </div>
@@ -225,15 +249,15 @@ export default function LandingPage() {
               <MaterialSymbol className="text-[16px]" fill>
                 bolt
               </MaterialSymbol>
-              Built for competitive esports teams
+              Built for high school esports teams
             </span>
             <h1 className="mt-6 font-editorial-large text-[40px] leading-[1.05] md:text-[60px] md:leading-[1.02] tracking-[-0.025em] font-extrabold text-on-surface">
-              The scrim board your team should already have.
+              The scrim board for high school esports teams.
             </h1>
             <p className="mt-5 font-body-main text-body-main md:text-[19px] md:leading-[28px] text-on-surface-variant max-w-[560px]">
-              Find opponents at your rank. Lock matches in minutes. Drop a
-              screenshot after every game and let Matchmake do the stats work —
-              across Valorant, League, Marvel Rivals, and Deadlock.
+              Help coaches and school teams find opponents at the right level,
+              lock matches in minutes, and turn post-game screenshots into stats
+              without another spreadsheet.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <button
@@ -241,7 +265,7 @@ export default function LandingPage() {
                 onClick={() => jumpTo("signup")}
                 className="bg-primary text-on-primary font-label-bold text-label-bold px-6 py-3 rounded-full hover:bg-on-primary-fixed-variant active:scale-95 transition-all shadow-[0_8px_24px_rgba(0,88,188,0.3)]"
               >
-                Create your team workspace
+                Request school access
               </button>
               <a
                 href="#features"
@@ -257,7 +281,7 @@ export default function LandingPage() {
               <MaterialSymbol className="text-[16px] text-primary" fill>
                 verified
               </MaterialSymbol>
-              {"Free for amateur and student orgs · No credit card required"}
+              {"Free for high school esports programs · No credit card required"}
             </div>
           </div>
 
@@ -399,6 +423,43 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* School safety */}
+      <section className="max-w-[1200px] mx-auto px-margin-mobile md:px-lg py-20">
+        <div className="max-w-[720px]">
+          <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline mb-2">
+            School-safe privacy
+          </p>
+          <h2 className="font-editorial-large text-[36px] leading-[42px] md:text-[44px] md:leading-[50px] tracking-[-0.02em] font-extrabold text-on-surface">
+            Built for coach-supervised esports programs.
+          </h2>
+          <p className="mt-4 font-body-main text-body-main text-on-surface-variant">
+            Matchmake is positioned for school-authorized team operations:
+            clear coach ownership, limited public scrim details, and
+            student-data commitments that avoid advertising or resale.
+          </p>
+        </div>
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-md">
+          {SCHOOL_SAFETY_POINTS.map((point) => (
+            <article
+              key={point.title}
+              className="rounded-[24px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_4px_20px_rgba(0,0,0,0.04)]"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-primary-fixed text-primary flex items-center justify-center">
+                <MaterialSymbol className="text-[24px]" fill>
+                  {point.icon}
+                </MaterialSymbol>
+              </div>
+              <h3 className="mt-md font-headline-2 text-headline-2 text-on-surface">
+                {point.title}
+              </h3>
+              <p className="mt-2 font-body-sub text-body-sub text-on-surface-variant">
+                {point.desc}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       {/* Features */}
       <section
         id="features"
@@ -471,10 +532,10 @@ export default function LandingPage() {
         <div className="rounded-[32px] bg-primary text-on-primary p-xl md:p-[64px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-[0_24px_48px_rgba(0,88,188,0.25)]">
           <div className="max-w-[560px]">
             <h2 className="font-editorial-large text-[32px] leading-[38px] md:text-[40px] md:leading-[46px] tracking-[-0.02em] font-extrabold">
-              Stop hunting for scrims in Discord DMs.
+              Bring Matchmake to your school esports program.
             </h2>
             <p className="mt-3 font-body-main text-body-main text-on-primary/85">
-              Spin up your team workspace in under a minute. Free for amateur orgs.
+              Request access, set up a school workspace, and start with one team before expanding.
             </p>
           </div>
           <button
@@ -482,7 +543,7 @@ export default function LandingPage() {
             onClick={() => jumpTo("signup")}
             className="bg-on-primary text-primary font-label-bold text-label-bold px-6 py-3 rounded-full hover:bg-on-primary/90 active:scale-95 transition-all shadow-[0_8px_24px_rgba(0,0,0,0.12)] whitespace-nowrap"
           >
-            {"Get started — it's free"}
+            Request school access
           </button>
         </div>
       </section>

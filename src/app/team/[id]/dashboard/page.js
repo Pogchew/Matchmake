@@ -14,6 +14,7 @@ import TopBar from "@/components/TopBar";
 import { getDashboardConfig } from "@/lib/dashboard/game-dashboard-configs";
 import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
+import { classifyExtractionFailure, trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
 import {
   HONOR_OF_KINGS_HERO_OPTIONS,
@@ -147,6 +148,7 @@ function formatDate(value) {
 
 function normalizeReviewForForm(review, gameTitle) {
   const base = createBlankReview(gameTitle);
+  const playedAtInput = toDateInputValue(review?.played_at);
   return {
     ...base,
     ...review,
@@ -154,7 +156,7 @@ function normalizeReviewForForm(review, gameTitle) {
     final_score: formatScore(review?.team_score, review?.opponent_score) || review?.final_score || "",
     team_score: review?.team_score ?? "",
     opponent_score: review?.opponent_score ?? "",
-    played_at: toDateInputValue(review?.played_at || new Date()),
+    played_at: playedAtInput || toDateInputValue(new Date()),
     team_comp: review?.team_comp?.length ? review.team_comp : base.team_comp,
     opponent_comp: review?.opponent_comp?.length ? review.opponent_comp : base.opponent_comp,
     team_stats: review?.team_stats || {},
@@ -1165,7 +1167,7 @@ function resizeImageForExtraction(file) {
       URL.revokeObjectURL(objectUrl);
       const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
 
-      if (scale === 1 && file.size < 1_200_000) {
+      if (file.size < 1_200_000) {
         resolve(file);
         return;
       }
@@ -1602,11 +1604,42 @@ export default function TeamDashboardPage() {
       setSuccessMessage(
         `Stats extracted into the Game ${selectedGameNumber} review form. Check the fields before saving.${extractionUsedFallback ? " Fallback row-only mode was used, so character fields may need extra review." : ""}`
       );
+      await trackLaunchAnalyticsEvent({
+        eventName: "extraction_completed",
+        status: "success",
+        targetLabel: `${team.game_title} extraction`,
+        entityId: team.id,
+        details: extractionUsedFallback ? "Extraction completed with fallback" : "Extraction completed",
+        metadata: {
+          game_title: team.game_title,
+          team_id: team.id,
+          scrim_request_id: scrimId || null,
+          scrim_game_number: selectedGameNumber,
+          used_fallback: extractionUsedFallback,
+          team_rows: extracted?.team_comp?.length || 0,
+          opponent_rows: extracted?.opponent_comp?.length || 0,
+        },
+      });
     } catch (error) {
+      const failureCategory = classifyExtractionFailure(error);
       console.warn("Post-game extraction fell back to manual entry", error);
       setExtractionIssue(error.message || "We could not extract this screenshot.");
       setExtractionStatus("Extraction stopped. Manual entry is still available.");
       setErrorMessage(error.message || "We could not extract this screenshot.");
+      await trackLaunchAnalyticsEvent({
+        eventName: "extraction_failed",
+        status: "failed",
+        targetLabel: `${team.game_title} extraction`,
+        entityId: team.id,
+        details: failureCategory,
+        metadata: {
+          game_title: team.game_title,
+          team_id: team.id,
+          scrim_request_id: scrimId || null,
+          scrim_game_number: selectedGameNumber,
+          failure_category: failureCategory,
+        },
+      });
     } finally {
       setExtracting(false);
     }
@@ -2327,19 +2360,19 @@ function UniversalGameDashboard(props) {
   const isMarvelRivals = team.game_title === "Marvel Rivals";
   const isHonorOfKings = team.game_title === "Honor of Kings" || team.game_title === "HOK";
   const isDeadlock = team.game_title === "Deadlock";
-  const isCompactSix = isMarvelRivals || isDeadlock;
+  const isCompactHeroShooter = isCompactHeroShooterGame(team.game_title);
   const heroReviewNeeded = isMarvelRivals
     ? (displayReview?.team_stats?.hero_fields_nulled || []).length > 0
     : isHonorOfKings
       ? [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])].some((row) => row.needs_hero_review || row.needs_manual_review)
       : false;
   const groupingNeedsReview = hasTeamGroupingReview && (displayReview?.team_stats?.team_grouping_needs_review || displayReview?.manual_edit_required);
-  const performanceRows = isCompactSix
+  const performanceRows = isCompactHeroShooter
     ? [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])]
     : displayReview?.team_comp || [];
 
   return (
-    <GameDashboardShell compact={isCompactSix}>
+    <GameDashboardShell compact={isCompactHeroShooter}>
       <GameSeriesControl {...props} />
       <ReviewDashboardTabs activeTab={activeTab} onChange={setActiveTab} />
 
@@ -2379,7 +2412,7 @@ function UniversalGameDashboard(props) {
             />
             <PerformanceTable game={team.game_title} rows={performanceRows} />
 
-            {!isCompactSix && (
+            {!isCompactHeroShooter && (
               <aside className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-lg">
                 <h2 className="font-headline-2 text-headline-2 text-on-surface">Screenshot Stats</h2>
                 <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
@@ -2720,12 +2753,15 @@ function getDeadlockHeroImagePath(game, pick) {
   return `/deadlock/heroes/${toDeadlockHeroFileStem(pick)}.png`;
 }
 
+function isCompactHeroShooterGame(game = "") {
+  return game === "Marvel Rivals" || game === "Deadlock" || game === "Overwatch" || game === "Overwatch 2";
+}
+
 function CharacterTile({ game, row, index }) {
   const [imageFailed, setImageFailed] = useState(false);
   const config = getDashboardConfig(game);
   const isMarvelRivals = game === "Marvel Rivals";
-  const isDeadlock = game === "Deadlock";
-  const isCompactSix = isMarvelRivals || isDeadlock;
+  const isCompactHeroShooter = isCompactHeroShooterGame(game);
   const pick = row.hero_confirmed || row[config.pickField] || row.agent || row.champion || row.hero || row.character || row.car;
   const subtitle = isMarvelRivals && row.costume_name ? row.costume_name : row.role || config.pickLabel;
   const stat = formatCardStats(row, config);
@@ -2736,8 +2772,8 @@ function CharacterTile({ game, row, index }) {
     setImageFailed(false);
   }, [imagePath]);
 
-  if (isCompactSix) {
-    const compactStats = getCompactSixCardStats(game, row);
+  if (isCompactHeroShooter) {
+    const compactStats = getCompactHeroShooterCardStats(game, row);
 
     return (
       <div className="grid w-full grid-cols-[58px_minmax(0,1fr)_minmax(112px,auto)] items-center gap-sm rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-sm shadow-[0_8px_22px_rgba(0,0,0,0.04)]">
@@ -2806,13 +2842,22 @@ function CharacterTile({ game, row, index }) {
   );
 }
 
-function getCompactSixCardStats(game, row) {
+function getCompactHeroShooterCardStats(game, row) {
   if (game === "Deadlock") {
     return [
       { label: "KDA", value: formatStatValue(row, "kda") },
       { label: "Souls", value: formatLargeStat(row.souls) },
       { label: "DMG", value: formatLargeStat(row.player_damage) },
       { label: "Heal", value: formatLargeStat(row.healing) },
+    ];
+  }
+
+  if (game === "Overwatch" || game === "Overwatch 2") {
+    return [
+      { label: "E/A/D", value: `${row.eliminations ?? "—"}/${row.assists ?? "—"}/${row.deaths ?? "—"}` },
+      { label: "DMG", value: formatLargeStat(row.damage) },
+      { label: "Heal", value: formatLargeStat(row.healing) },
+      { label: "MIT", value: formatLargeStat(row.mitigation) },
     ];
   }
 
@@ -2841,20 +2886,18 @@ function formatCardStats(row, config) {
 }
 
 function CompositionSection({ accent = "bg-primary", game, opponentName, rows, title }) {
-  const isMarvelRivals = game === "Marvel Rivals";
-  const isDeadlock = game === "Deadlock";
-  const isCompactSix = isMarvelRivals || isDeadlock;
+  const isCompactHeroShooter = isCompactHeroShooterGame(game);
 
   return (
     <section>
-      <div className={`${isCompactSix ? "mb-sm" : "mb-md"} flex items-center justify-between`}>
-        <h2 className={`flex items-center gap-sm text-on-surface ${isCompactSix ? "font-headline-3 text-headline-3" : "font-headline-2 text-headline-2"}`}>
-          <span className={`${isCompactSix ? "h-6" : "h-8"} w-1 rounded-full ${accent}`} />
+      <div className={`${isCompactHeroShooter ? "mb-sm" : "mb-md"} flex items-center justify-between`}>
+        <h2 className={`flex items-center gap-sm text-on-surface ${isCompactHeroShooter ? "font-headline-3 text-headline-3" : "font-headline-2 text-headline-2"}`}>
+          <span className={`${isCompactHeroShooter ? "h-6" : "h-8"} w-1 rounded-full ${accent}`} />
           {title}
         </h2>
         {opponentName && <span className="font-label-small text-label-small uppercase tracking-wider text-on-surface-variant">{opponentName}</span>}
       </div>
-      <div className={isCompactSix ? "grid grid-cols-1 gap-sm lg:grid-cols-2" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
+      <div className={isCompactHeroShooter ? "grid grid-cols-1 gap-sm lg:grid-cols-2" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
         {rows.map((row, index) => <CharacterTile game={game} index={index} key={`${row.player_name}-${index}`} row={row} />)}
       </div>
     </section>
@@ -2982,8 +3025,9 @@ function ComparisonMetricCard({ helper, icon, label, left, leftLabel, right, rig
 
 function PerformanceTable({ game = "Valorant", rows }) {
   const config = getDashboardConfig(game);
-  const usesTeamTint = game === "Valorant" || game === "Marvel Rivals" || game === "Deadlock";
+  const usesTeamTint = game === "Valorant" || game === "Marvel Rivals" || game === "Deadlock" || game === "Overwatch" || game === "Overwatch 2";
   const expectedTeamSize = game === "Marvel Rivals" || game === "Deadlock" ? 6 : 5;
+  const usesHeroPickField = game === "Marvel Rivals" || game === "Deadlock" || game === "Honor of Kings" || game === "HOK" || game === "Overwatch" || game === "Overwatch 2";
 
   return (
     <section className="overflow-hidden rounded-2xl border border-outline-variant/25 bg-surface-container-lowest">
@@ -3012,7 +3056,7 @@ function PerformanceTable({ game = "Valorant", rows }) {
               return (
                 <tr className={`border-t border-outline-variant/15 transition-colors ${rowTone}`} key={`${row.player_name}-${index}`}>
                   <td className="p-md font-label-bold text-label-bold">{row.player_name || "Player TBD"}</td>
-                  <td>{(game === "Marvel Rivals" || game === "Deadlock" || game === "Honor of Kings" || game === "HOK") ? row.hero_confirmed || row[config.pickField] || row.hero_guess || "—" : row[config.pickField] || row.role || "—"}</td>
+                  <td>{usesHeroPickField ? row.hero_confirmed || row[config.pickField] || row.hero_guess || "—" : row[config.pickField] || row.role || "—"}</td>
                   {config.tableFields.map((field, fieldIndex) => (
                     <td className={fieldIndex === 0 ? `font-label-bold ${statTone}` : ""} key={field.key}>
                       {formatStatValue(row, field.key)}

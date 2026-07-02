@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic post-game completion fixtures derived from the five browser-QA scoreboard cases. Screenshot binaries are intentionally excluded; live OCR remains covered by the optional UI/API scripts.",
+  "cases": [
+    {
+      "gameTitle": "League of Legends",
+      "input": {
+        "match": {
+          "result": "Victory",
+          "game_length": "24:43",
+          "team_1_score": 23,
+          "team_2_score": 21,
+          "map_or_mode": "Ranked Solo/Duo"
+        },
+        "rows": [
+          {
+            "row_index": 1,
+            "team_key": "team_1",
+            "role": "Top",
+            "player_name": "ttv SoloSSBU",
+            "champion": "Garen",
+            "level": 18,
+            "kills": 12,
+            "deaths": 2,
+            "assists": 3,
+            "gold": 13980,
+            "damage_to_champions": 24170
+          }
+        ]
+      },
+      "expectedRows": 10,
+      "expectedTeamSizes": [5, 5],
+      "expectedMatch": {
+        "result": "Victory",
+        "game_length": "24:43",
+        "final_score": "23-21",
+        "map_or_mode": "Ranked Solo/Duo"
+      },
+      "requiredRowFields": ["role", "player_name", "champion", "level", "kills", "deaths", "assists", "kda_text", "gold", "damage_to_champions", "character_build"],
+      "exactRows": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "role": "Top",
+          "player_name": "ttv SoloSSBU",
+          "champion": "Garen",
+          "level": 18,
+          "kills": 12,
+          "deaths": 2,
+          "assists": 3,
+          "gold": 13980,
+          "damage_to_champions": 24170
+        }
+      ]
+    },
+    {
+      "gameTitle": "Valorant",
+      "input": {
+        "match": {
+          "result": "victory",
+          "team_1_score": 13,
+          "team_2_score": 6,
+          "map": "Split"
+        },
+        "rows": [
+          {
+            "row_index": 1,
+            "team_key": "team_1",
+            "player_name": "Goodseed",
+            "agent": "Raze",
+            "avg_combat_score": 271,
+            "kills": 45,
+            "deaths": 35,
+            "assists": 18,
+            "kda_text": "45/35/18",
+            "econ_rating": 50,
+            "first_bloods": 4,
+            "plants": 5,
+            "defuses": 1
+          }
+        ]
+      },
+      "expectedRows": 10,
+      "expectedTeamSizes": [5, 5],
+      "expectedMatch": {
+        "result": "victory",
+        "map": "Split"
+      },
+      "requiredRowFields": ["player_name", "agent", "avg_combat_score", "kills", "deaths", "assists", "kda_text", "econ_rating", "first_bloods", "plants", "defuses", "character_build"],
+      "exactRows": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "player_name": "Goodseed",
+          "agent": "Raze",
+          "avg_combat_score": 271,
+          "kills": 45,
+          "deaths": 35,
+          "assists": 18,
+          "kda_text": "45/35/18",
+          "econ_rating": 50,
+          "first_bloods": 4,
+          "plants": 5,
+          "defuses": 1
+        }
+      ]
+    },
+    {
+      "gameTitle": "Marvel Rivals",
+      "input": {
+        "match": {
+          "result": "defeat",
+          "map": "KLYNTAR: SYMBIOTIC SURFACE",
+          "objective_or_mode": "CONVERGENCE",
+          "duration": "00:07:05"
+        },
+        "rows": [
+          {
+            "row_index": 1,
+            "team_key": "team_1",
+            "player_name": "Lucnif",
+            "hero_guess": "The Punisher",
+            "hero_guess_confidence": 0.72,
+            "hero_confirmed": null,
+            "kills": 6,
+            "deaths": 9,
+            "assists": 0,
+            "kda_text": "6/9/0",
+            "final_hits": 3,
+            "damage": 4554,
+            "damage_blocked": 3237,
+            "healing": 0,
+            "accuracy_percent": 33
+          }
+        ]
+      },
+      "expectedRows": 12,
+      "expectedTeamSizes": [6, 6],
+      "expectedMatch": {
+        "result": "defeat",
+        "map": "KLYNTAR: SYMBIOTIC SURFACE",
+        "objective_or_mode": "CONVERGENCE",
+        "duration": "00:07:05"
+      },
+      "requiredRowFields": ["player_name", "hero_guess", "kills", "deaths", "assists", "kda_text", "final_hits", "damage", "damage_blocked", "healing", "accuracy_percent", "character_build"],
+      "exactRows": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "player_name": "Lucnif",
+          "hero_guess": "The Punisher",
+          "kills": 6,
+          "deaths": 9,
+          "assists": 0,
+          "final_hits": 3,
+          "damage": 4554,
+          "damage_blocked": 3237,
+          "healing": 0,
+          "accuracy_percent": 33
+        }
+      ]
+    },
+    {
+      "gameTitle": "Overwatch 2",
+      "input": {
+        "match": {
+          "map": "Circuit Royal",
+          "mode": "Escort",
+          "duration": "2:48"
+        },
+        "rows": [
+          {
+            "row_index": 1,
+            "team_key": "team_1",
+            "player_name": "Technoknight",
+            "hero": "Junkrat",
+            "role": "Damage",
+            "eliminations": 7,
+            "assists": 3,
+            "deaths": 2,
+            "damage": 2241,
+            "healing": 0,
+            "mitigation": 0
+          }
+        ]
+      },
+      "expectedRows": 10,
+      "expectedTeamSizes": [5, 5],
+      "expectedMatch": {
+        "map": "Circuit Royal",
+        "mode": "Escort",
+        "duration": "2:48"
+      },
+      "requiredRowFields": ["player_name", "hero", "role", "eliminations", "assists", "deaths", "damage", "healing", "mitigation", "final_blows", "objective_kills", "character_build"],
+      "exactRows": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "player_name": "Technoknight",
+          "hero": "Junkrat",
+          "role": "Damage",
+          "eliminations": 7,
+          "assists": 3,
+          "deaths": 2,
+          "damage": 2241,
+          "healing": 0,
+          "mitigation": 0
+        }
+      ]
+    },
+    {
+      "gameTitle": "Deadlock",
+      "input": {
+        "match": {
+          "result": "victory",
+          "duration": "51:50",
+          "team_1_name": "THE SAPPHIRE FLAME",
+          "team_2_name": "THE AMBER HAND"
+        },
+        "rows": [
+          {
+            "row_index": 1,
+            "team_key": "team_1",
+            "player_name": "Ceejay",
+            "hero": "McGinnis",
+            "souls": 55777,
+            "kills": 14,
+            "deaths": 17,
+            "assists": 18,
+            "kda_text": "14/17/18",
+            "player_damage": 62114,
+            "objective_damage": 15164,
+            "healing": 14617
+          }
+        ]
+      },
+      "expectedRows": 12,
+      "expectedTeamSizes": [6, 6],
+      "expectedMatch": {
+        "result": "victory",
+        "duration": "51:50",
+        "team_1_name": "THE SAPPHIRE FLAME",
+        "team_2_name": "THE AMBER HAND"
+      },
+      "requiredRowFields": ["player_name", "hero", "souls", "kills", "deaths", "assists", "kda_text", "player_damage", "objective_damage", "healing", "character_build"],
+      "exactRows": [
+        {
+          "row_index": 1,
+          "team_key": "team_1",
+          "player_name": "Ceejay",
+          "hero": "McGinnis",
+          "souls": 55777,
+          "kills": 14,
+          "deaths": 17,
+          "assists": 18,
+          "kda_text": "14/17/18",
+          "player_damage": 62114,
+          "objective_damage": 15164,
+          "healing": 14617
+        }
+      ]
+    }
+  ]
+}

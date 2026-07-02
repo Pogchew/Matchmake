@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
@@ -69,6 +69,32 @@ function formatDateTime(value) {
 function formatGameCount(value) {
   const count = Number(value || 3);
   return `${count} ${count === 1 ? "Game" : "Games"}`;
+}
+
+const MAX_PROFILE_URL_LENGTH = 500;
+
+function getProfileUrlError(value = "") {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return "";
+  if (trimmedValue.length > MAX_PROFILE_URL_LENGTH) {
+    return `Profile links must be ${MAX_PROFILE_URL_LENGTH} characters or fewer.`;
+  }
+
+  try {
+    const profileUrl = new URL(trimmedValue);
+    if (profileUrl.protocol !== "https:") return "Profile links must use HTTPS.";
+    if (profileUrl.username || profileUrl.password) {
+      return "Profile links cannot include embedded sign-in information.";
+    }
+  } catch {
+    return "Enter a complete HTTPS profile link.";
+  }
+
+  return "";
+}
+
+function getSafeProfileUrl(value = "") {
+  return getProfileUrlError(value) ? "" : value.trim();
 }
 
 function isMissingRosterNamesError(error) {
@@ -255,6 +281,7 @@ function TeamPageContent() {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingTeam, setDeletingTeam] = useState(false);
+  const rosterTeamContextRef = useRef("");
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) || teams[0] || null,
@@ -489,6 +516,9 @@ function TeamPageContent() {
 
   useEffect(() => {
     if (!selectedTeam) return;
+    const nextRosterContext = `${selectedTeam.id}:${selectedTeam.game_title}`;
+    if (rosterTeamContextRef.current === nextRosterContext) return;
+    rosterTeamContextRef.current = nextRosterContext;
     setRosterPlayers(normalizeRosterProfiles(selectedTeam));
     setNewPlayer(createRosterPlayer(selectedTeam.game_title));
     setRosterError("");
@@ -513,6 +543,11 @@ function TeamPageContent() {
     event.preventDefault();
     const trimmedName = newPlayer.name.trim();
     if (!trimmedName) return;
+    const profileUrlError = getProfileUrlError(newPlayer.profile_url);
+    if (profileUrlError) {
+      setRosterError(profileUrlError);
+      return;
+    }
     setRosterPlayers((current) => [...current, {
       name: trimmedName,
       rank: newPlayer.rank || getDefaultRankForGame(selectedTeam?.game_title),
@@ -531,6 +566,12 @@ function TeamPageContent() {
 
   async function handleSaveRoster() {
     if (!selectedTeam) return;
+
+    const playerWithUnsafeProfileUrl = rosterPlayers.find((player) => getProfileUrlError(player.profile_url));
+    if (playerWithUnsafeProfileUrl) {
+      setRosterError(`${playerWithUnsafeProfileUrl.name || "Player"}: ${getProfileUrlError(playerWithUnsafeProfileUrl.profile_url)}`);
+      return;
+    }
 
     const cleanedRoster = rosterPlayers
       .map((player) => ({
@@ -878,17 +919,18 @@ function RosterManagementSection({
                     </select>
                     <input
                       className="min-w-0 rounded-lg border-none bg-surface-container-lowest px-sm py-2 font-label-small text-label-small text-on-surface focus:ring-2 focus:ring-primary"
+                      maxLength={MAX_PROFILE_URL_LENGTH}
                       onChange={(event) => onRosterPlayerChange(index, "profile_url", event.target.value)}
-                      placeholder="Profile link optional"
+                      placeholder="HTTPS profile link (optional)"
                       type="url"
                       value={player.profile_url}
                     />
                   </div>
-                  {player.profile_url && (
+                  {getSafeProfileUrl(player.profile_url) && (
                     <a
                       className="font-label-small text-label-small text-primary underline"
-                      href={player.profile_url}
-                      rel="noreferrer"
+                      href={getSafeProfileUrl(player.profile_url)}
+                      rel="noopener noreferrer"
                       target="_blank"
                     >
                       View profile
@@ -908,6 +950,9 @@ function RosterManagementSection({
         </div>
 
         <form className="mt-md grid gap-sm" onSubmit={onAddPlayer}>
+          <p className="rounded-lg bg-surface-container-low px-md py-sm font-label-small text-label-small text-on-surface-variant">
+            Optional links must use HTTPS and point to a coach-approved game, ranking, or tournament profile. Do not add personal social media, contact details, private accounts, or unrelated pages. Saved roster links are not included on the public Scrim Board.
+          </p>
           <input
             className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
             onChange={(event) => onNewPlayerChange("name", event.target.value)}
@@ -926,8 +971,9 @@ function RosterManagementSection({
             </select>
             <input
               className="min-w-0 rounded-lg border-none bg-surface-container-low px-md py-sm font-body-sub text-body-sub text-on-surface focus:ring-2 focus:ring-primary"
+              maxLength={MAX_PROFILE_URL_LENGTH}
               onChange={(event) => onNewPlayerChange("profile_url", event.target.value)}
-              placeholder="Profile link optional"
+              placeholder="HTTPS profile link (optional)"
               type="url"
               value={newPlayer.profile_url}
             />
@@ -1016,7 +1062,7 @@ function formatSignedStat(value, decimals = 1) {
   if (!Number.isFinite(value)) return "—";
   const abs = Math.abs(value);
   const formatted = abs >= 10_000
-    ? formatDeepStatValue(value)
+    ? formatDeepStatValue(abs)
     : new Intl.NumberFormat("en-US", {
       maximumFractionDigits: decimals,
       minimumFractionDigits: decimals,
@@ -2550,7 +2596,7 @@ function LeagueCoachRead({ damageDiff, goldDiff, killDiff }) {
       label: "Watch",
       icon: "visibility",
       value: Number.isFinite(killDiff) && killDiff < 0
-        ? `Opponent is winning fights by ${formatSignedValue(killDiff, 1)} kills.`
+        ? `Opponent is winning fights by ${Math.abs(killDiff).toFixed(1)} kills.`
         : Number.isFinite(goldDiff?.diff) && goldDiff.diff < 0
           ? `Resource control is behind (${formatSignedValue(goldDiff.diff, 0)} gold).`
           : "No major warning from saved scoreboard data.",
@@ -3550,7 +3596,7 @@ function DamageConversionCard({ objectiveDamage, playerDamage }) {
         <div className="grid gap-md">
           {[
             { label: "Player Damage", value: player, tone: "bg-primary", text: "text-primary" },
-            { label: "Objective Damage", value: objective, tone: "bg-[#D97706]", text: "text-[#D97706]" },
+            { label: "Objective Damage", value: objective, tone: "bg-tertiary", text: "text-tertiary" },
           ].map((row) => (
             <div key={row.label}>
               <div className="mb-xs flex justify-between gap-sm">

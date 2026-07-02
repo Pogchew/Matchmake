@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useOwnerAccess } from "@/lib/use-owner-access";
 import MaterialSymbol from "./MaterialSymbol";
 
 const navItems = [
@@ -11,12 +12,19 @@ const navItems = [
   { label: "Calendar", icon: "calendar_month",  href: "/calendar" },
 ];
 
+const adminNavItem = {
+  label: "Admin",
+  icon: "admin_panel_settings",
+  href: "/admin",
+};
+
 export default function BottomNav() {
   const pathname = usePathname();
+  const isOwner = useOwnerAccess();
 
   return (
     <nav className="md:hidden bg-surface/90 backdrop-blur-lg fixed bottom-0 w-full rounded-t-2xl border-t border-surface-container shadow-[0_-4px_20px_0_rgba(0,0,0,0.14)] z-30 flex justify-around items-center px-4 pt-3 pb-6">
-      {navItems.map((item) => {
+      {(isOwner ? [...navItems, adminNavItem] : navItems).map((item) => {
         const isActive =
           item.href === "/"
             ? pathname === "/"

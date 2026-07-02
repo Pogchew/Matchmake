@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { storeAuthSession } from "@/lib/auth-session";
+import { GAME_OPTIONS } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
 const painPoints = [
@@ -20,10 +21,52 @@ const practiceTools = [
   { icon: "manage_search", title: "Open Listings", body: "Find matches" },
   { icon: "swap_horiz", title: "Request States", body: "Track replies" },
   { icon: "event", title: "Shared Calendar", body: "Know times" },
-  { icon: "auto_awesome", title: "Screenshot Parser", body: "Pull stats" },
+  { icon: "auto_awesome", title: "Screenshot Drafts", body: "Review stats" },
   { icon: "query_stats", title: "Form Trends", body: "Spot patterns" },
   { icon: "notifications", title: "Team Updates", body: "Stay synced" },
 ];
+
+const extractionNotes = [
+  {
+    icon: "upload_file",
+    title: "Upload the scoreboard",
+    body: "Use a post-game scoreboard screenshot after the match. Crop out unrelated windows, chats, and personal information before upload.",
+  },
+  {
+    icon: "auto_awesome",
+    title: "Get a stats draft",
+    body: "Matchmake reads visible rows, scores, characters, maps, and match details, then places them into an editable review.",
+  },
+  {
+    icon: "fact_check",
+    title: "Coach reviews before saving",
+    body: "Extraction can miss or misread details. Coaches should check the fields, fix mistakes, and keep the source screenshot until the saved review looks right.",
+  },
+];
+
+const schoolSafetyNotes = [
+  {
+    icon: "admin_panel_settings",
+    title: "Coach-led workspaces",
+    body: "Team setup, rosters, scrims, chat, and match reviews are organized around school and coach-admin workflows.",
+  },
+  {
+    icon: "visibility",
+    title: "Limited public details",
+    body: "Public scrim listings focus on matchup details. Private roster, chat, and match-review work stays in the appropriate team workflow.",
+  },
+  {
+    icon: "block",
+    title: "No student-data ads",
+    body: "Launch privacy language commits student data to the school-authorized Matchmake service, not targeted ads, data sales, or unrelated commercial profiles.",
+  },
+];
+
+const gameDisplayNames = {
+  SSBU: "Super Smash Bros. Ultimate",
+};
+
+const supportedGames = GAME_OPTIONS.map((game) => gameDisplayNames[game] || game);
 
 function PreviewCard({ children, className = "", icon, title }) {
   return (
@@ -118,15 +161,49 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const emailInputRef = useRef(null);
+  const loginDialogRef = useRef(null);
+  const loginTriggerRef = useRef(null);
 
   useEffect(() => {
-    function closeOnEscape(event) {
-      if (event.key === "Escape") setIsLoginOpen(false);
+    if (!isLoginOpen) return;
+
+    emailInputRef.current?.focus();
+
+    function handleDialogKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsLoginOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = Array.from(
+        loginDialogRef.current?.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) || []
+      ).filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true");
+
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
     }
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, []);
+    window.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeyDown);
+      loginTriggerRef.current?.focus?.();
+    };
+  }, [isLoginOpen]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -151,6 +228,7 @@ export default function LoginPage() {
 
   function openLogin() {
     setErrorMessage("");
+    loginTriggerRef.current = document.activeElement;
     setIsLoginOpen(true);
   }
 
@@ -164,7 +242,7 @@ export default function LoginPage() {
           <nav className="hidden items-center gap-lg font-label-bold text-label-bold text-on-surface md:flex">
             <button className="hover:text-primary" onClick={openLogin} type="button">Login</button>
             <Link className="rounded-lg bg-primary px-md py-sm text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
-              Get Started
+              Request school access
             </Link>
           </nav>
           <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary md:hidden" onClick={openLogin} type="button">
@@ -176,15 +254,15 @@ export default function LoginPage() {
       <section className="mx-auto grid max-w-[1200px] gap-xl px-margin-mobile py-xl md:grid-cols-[1fr_560px] md:px-lg md:py-[72px]">
         <div className="flex flex-col justify-center">
           <h1 className="max-w-[650px] font-editorial-large text-[42px] font-black leading-[1.05] text-on-surface md:text-[58px]">
-            Find better scrims.<br />
+            Find better high school scrims.<br />
             <span className="text-primary">Learn from every game.</span>
           </h1>
           <p className="mt-md max-w-[520px] font-body-main text-body-main text-on-surface-variant md:text-[18px] md:leading-7">
-            Schedule scrims, manage requests, and turn post-game screenshots into team performance dashboards.
+            Matchmake helps high school esports teams schedule scrims, manage requests, and turn post-game screenshots into team performance dashboards.
           </p>
           <div className="mt-lg flex flex-col gap-sm sm:flex-row">
             <Link className="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-xl font-label-bold text-label-bold text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
-              Get Started
+              Request school access
             </Link>
             <button className="inline-flex h-12 items-center justify-center rounded-lg border border-primary bg-surface-container-lowest px-xl font-label-bold text-label-bold text-primary" onClick={openLogin} type="button">
               Log In
@@ -192,16 +270,80 @@ export default function LoginPage() {
           </div>
           <p className="mt-lg flex items-center gap-sm font-label-bold text-label-bold text-on-surface-variant">
             <MaterialSymbol className="text-[20px] text-outline" fill>shield</MaterialSymbol>
-            Built for high school, college, and amateur teams.
+            Built for high school esports programs.
           </p>
         </div>
 
         <ProductPreview />
       </section>
 
+      <section className="border-y border-outline-variant/25 bg-surface-container-lowest px-margin-mobile py-lg md:px-lg">
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-md md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Supported games</p>
+            <h2 className="mt-xs font-headline-3 text-headline-3 text-on-surface">
+              Built for the games high school teams are already scheduling.
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-xs md:max-w-[680px] md:justify-end">
+            {supportedGames.map((game) => (
+              <span className="rounded-full border border-outline-variant/35 bg-surface-container-low px-sm py-1 font-label-bold text-label-bold text-on-surface" key={game}>
+                {game}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-margin-mobile py-xl md:px-lg">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="max-w-[680px]">
+            <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Screenshot extraction</p>
+            <h2 className="mt-xs font-headline-2 text-headline-2 text-on-surface">
+              A faster starting point, not an official scorebook.
+            </h2>
+            <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">
+              Matchmake turns visible scoreboard screenshots into editable match-review drafts. Coaches stay responsible for checking the data before saving or using it for team decisions.
+            </p>
+          </div>
+          <div className="mt-md grid grid-cols-1 gap-sm md:grid-cols-3">
+            {extractionNotes.map((item) => (
+              <article className="rounded-[14px] border border-outline-variant/35 bg-surface-container-lowest p-md shadow-[0_8px_24px_rgba(15,35,70,0.03)]" key={item.title}>
+                <MaterialSymbol className="text-[28px] text-primary">{item.icon}</MaterialSymbol>
+                <h3 className="mt-sm font-headline-3 text-headline-3 text-on-surface">{item.title}</h3>
+                <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-outline-variant/25 bg-surface-container-lowest/80 px-margin-mobile py-xl md:px-lg">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="max-w-[720px]">
+            <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">School-safe privacy</p>
+            <h2 className="mt-xs font-headline-2 text-headline-2 text-on-surface">
+              Built for coach-supervised esports programs.
+            </h2>
+            <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">
+              Matchmake is positioned for school-authorized team operations: clear coach ownership, limited public scrim details, and student-data commitments that avoid advertising or resale.
+            </p>
+          </div>
+          <div className="mt-md grid grid-cols-1 gap-sm md:grid-cols-3">
+            {schoolSafetyNotes.map((item) => (
+              <article className="rounded-[14px] border border-outline-variant/35 bg-surface-container-lowest p-md shadow-[0_8px_24px_rgba(15,35,70,0.03)]" key={item.title}>
+                <MaterialSymbol className="text-[28px] text-primary">{item.icon}</MaterialSymbol>
+                <h3 className="mt-sm font-headline-3 text-headline-3 text-on-surface">{item.title}</h3>
+                <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="border-y border-outline-variant/25 bg-surface-container-lowest/80 px-margin-mobile py-lg md:px-lg" id="features">
         <div className="mx-auto max-w-[1200px]">
-          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">The usual scrim problems are easy to miss.</h2>
+          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">The usual high school scrim problems are easy to miss.</h2>
           <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-5">
             {painPoints.map((item) => <FeatureTile key={item.title} {...item} />)}
           </div>
@@ -210,17 +352,34 @@ export default function LoginPage() {
 
       <section className="px-margin-mobile pb-xl pt-lg md:px-lg" id="practice">
         <div className="mx-auto max-w-[1200px]">
-          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">Small tools for the whole practice loop.</h2>
+          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">Small tools for the whole high school practice loop.</h2>
           <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-6">
             {practiceTools.map((item) => <FeatureTile key={item.title} {...item} />)}
           </div>
         </div>
       </section>
 
+      <section className="border-y border-outline-variant/25 bg-primary px-margin-mobile py-xl text-on-primary md:px-lg">
+        <div className="mx-auto flex max-w-[1200px] flex-col gap-md md:flex-row md:items-center md:justify-between">
+          <div className="max-w-[700px]">
+            <p className="font-label-bold text-label-bold uppercase tracking-wider text-on-primary/75">Fall pilot access</p>
+            <h2 className="mt-xs font-headline-2 text-headline-2 text-on-primary">
+              Bring Matchmake to your school esports program.
+            </h2>
+            <p className="mt-sm font-body-sub text-body-sub text-on-primary/85">
+              Coaches and school esports leads can request access, set up a school workspace, and start with one team before expanding.
+            </p>
+          </div>
+          <Link className="inline-flex h-12 items-center justify-center rounded-lg bg-on-primary px-xl font-label-bold text-label-bold text-primary shadow-[0_8px_24px_rgba(0,0,0,0.18)]" href="/signup">
+            Request school access
+          </Link>
+        </div>
+      </section>
+
       {isLoginOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07162f]/45 px-margin-mobile py-lg backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="login-title">
           <button className="absolute inset-0 cursor-default" aria-label="Close login" onClick={() => setIsLoginOpen(false)} type="button" />
-          <section className="relative w-full max-w-[440px] rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_22px_70px_rgba(0,20,60,0.28)]">
+          <section className="relative w-full max-w-[440px] rounded-[18px] border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-[0_22px_70px_rgba(0,20,60,0.28)]" ref={loginDialogRef}>
             <button
               className="absolute right-md top-md flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
               onClick={() => setIsLoginOpen(false)}
@@ -243,6 +402,7 @@ export default function LoginPage() {
                   className="h-[48px] rounded-xl border-none bg-surface-container-low px-md font-body-main text-body-main text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary"
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@example.com"
+                  ref={emailInputRef}
                   required
                   type="email"
                   value={email}

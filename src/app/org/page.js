@@ -114,7 +114,7 @@ function TeamProgramRow({ scrims, team }) {
   const openCount = counts.open || 0;
   const secondaryStats = [
     { label: "Mode", value: getDisplayModeForTeam(team), icon: "stadia_controller" },
-    { label: "Location", value: normalizeTeamLocation(team.region) || "Not set", icon: "location_on" },
+    { label: "Location", value: normalizeTeamLocation(team.region) || "Not set", icon: "location_city" },
     { label: "Pending", value: counts.pending || 0, icon: "hourglass_top" },
     { label: "Matched", value: counts.matched || 0, icon: "handshake" },
     { label: "Confirmed", value: counts.confirmed || 0, icon: "event_available" },
@@ -616,6 +616,7 @@ export default function OrgPage() {
                     </span>
                     <div className="relative">
                       <select
+                        aria-label="Filter programs"
                         className="w-full appearance-none rounded-lg border-none bg-surface-container-low px-md py-sm pr-xl font-label-bold text-label-bold text-on-surface focus:ring-2 focus:ring-primary disabled:opacity-60"
                         disabled={activeGames.length === 0}
                         onChange={(event) => setSelectedGame(event.target.value)}

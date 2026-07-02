@@ -1,4 +1,11 @@
 import "./globals.css";
+import { Inter } from "next/font/google";
+
+const inter = Inter({
+  display: "swap",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
 
 export const metadata = {
   title: "Matchmake - Scrim Board",
@@ -24,16 +31,8 @@ export default function RootLayout({ children }) {
     <html className="light" lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-          rel="stylesheet"
-        />
       </head>
-      <body className="min-h-screen bg-background pb-24 font-['Inter'] text-on-background antialiased md:pb-0">
+      <body className={`${inter.className} min-h-screen bg-background pb-24 text-on-background antialiased md:pb-0`}>
         {children}
       </body>
     </html>

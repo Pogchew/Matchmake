@@ -1,3 +1,114 @@
+const MATERIAL_SYMBOL_CODEPOINTS = {
+  add: "e145",
+  add_chart: "e97b",
+  add_link: "e178",
+  add_task: "f23a",
+  admin_panel_settings: "ef3d",
+  apartment: "ea40",
+  arrow_back: "e5c4",
+  arrow_forward: "e5c8",
+  auto_awesome: "e65f",
+  bolt: "ea0b",
+  calendar_month: "ebcc",
+  calendar_today: "e935",
+  campaign: "ef49",
+  chat: "e0b7",
+  chat_bubble: "e0ca",
+  check_circle: "e86c",
+  chevron_left: "e408",
+  chevron_right: "e409",
+  close: "e14c",
+  content_copy: "e14d",
+  corporate_fare: "f1d0",
+  dashboard: "e871",
+  dark_mode: "e51c",
+  delete: "e872",
+  diamond: "ead5",
+  dns: "e875",
+  edit_calendar: "e742",
+  edit_note: "e745",
+  error: "e000",
+  event: "e24f",
+  event_available: "e614",
+  event_busy: "e615",
+  event_upcoming: "f238",
+  expand_less: "e5ce",
+  expand_more: "e5cf",
+  filter_alt: "ef4f",
+  filter_list_off: "eb57",
+  flag: "e153",
+  format_list_numbered: "e242",
+  forum: "e0bf",
+  group: "e7ef",
+  group_add: "e7f0",
+  groups: "f233",
+  handshake: "ebcb",
+  history: "e28e",
+  home: "e88a",
+  hourglass_top: "ea5b",
+  hub: "e9f4",
+  image: "e251",
+  info: "e88e",
+  ios_share: "e6b8",
+  keyboard_arrow_down: "e313",
+  light_mode: "e518",
+  lock: "e88d",
+  location_city: "e7f1",
+  logout: "e9ba",
+  manage_search: "f02f",
+  military_tech: "ea3f",
+  move_to_inbox: "e168",
+  notes: "e26c",
+  notifications: "e7f4",
+  notifications_off: "e7f6",
+  outbox: "ef5f",
+  pause: "e034",
+  pending_actions: "f1bb",
+  person: "e7fd",
+  play_arrow: "e037",
+  psychology: "ea4a",
+  public: "e80b",
+  query_stats: "e4fc",
+  refresh: "e5d5",
+  reviews: "efb5",
+  rule: "f1c2",
+  schedule: "e192",
+  school: "e80c",
+  scoreboard: "ebd0",
+  search: "e8b6",
+  send: "e163",
+  sentiment_dissatisfied: "e811",
+  shield: "e75b",
+  shield_lock: "f686",
+  smart_toy: "f06c",
+  sports_esports: "e6ec",
+  stadia_controller: "f135",
+  star: "e838",
+  swap_horiz: "e8d4",
+  swap_vert: "e0c3",
+  swords: "f889",
+  sync: "e627",
+  team_dashboard: "e013",
+  toggle_off: "e9f5",
+  toggle_on: "e9f6",
+  tune: "e429",
+  upload: "e2c6",
+  verified: "e031",
+  view_list: "e8ef",
+  visibility: "e417",
+  warning: "e002",
+  webhook: "eb92",
+};
+
+function materialSymbolContent(children) {
+  if (typeof children !== "string") {
+    return children;
+  }
+
+  const codepoint = MATERIAL_SYMBOL_CODEPOINTS[children.trim()];
+  return codepoint ? String.fromCodePoint(parseInt(codepoint, 16)) : children;
+}
+
 export default function MaterialSymbol({ children, className = "", fill = false }) {
   return (
     <span
@@ -5,7 +116,7 @@ export default function MaterialSymbol({ children, className = "", fill = false 
       className={`material-symbols-outlined ${className}`}
       style={fill ? { fontVariationSettings: "'FILL' 1" } : undefined}
     >
-      {children}
+      {materialSymbolContent(children)}
     </span>
   );
 }
