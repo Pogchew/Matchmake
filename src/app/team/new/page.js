@@ -6,6 +6,7 @@ import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
+import { getCurrentUser } from "@/lib/auth-session";
 import { GAME_OPTIONS, TEAM_LOCATION_OPTIONS, getDefaultModeForGame, getDefaultRankForGame, getModesForGame, getRanksForGame } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
@@ -61,7 +62,7 @@ export default function NewTeamPage() {
     setErrorMessage("");
 
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         router.push("/login");

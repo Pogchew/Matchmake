@@ -6,6 +6,7 @@ import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import LandingPage from "@/components/LandingPage";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { AUTH_CHANGED_EVENT, getCurrentUser } from "@/lib/auth-session";
 import { trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import {
   GAME_OPTIONS,
@@ -1122,17 +1123,20 @@ export default function RootPage() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!active) return;
-      setAuthState(data?.user ? "authed" : "guest");
-    });
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      setAuthState(session?.user ? "authed" : "guest");
-    });
+
+    function refreshAuthState() {
+      getCurrentUser().then(({ data }) => {
+        if (!active) return;
+        setAuthState(data?.user ? "authed" : "guest");
+      });
+    }
+
+    refreshAuthState();
+    window.addEventListener(AUTH_CHANGED_EVENT, refreshAuthState);
+
     return () => {
       active = false;
-      subscription?.subscription?.unsubscribe?.();
+      window.removeEventListener(AUTH_CHANGED_EVENT, refreshAuthState);
     };
   }, []);
 
@@ -1246,7 +1250,7 @@ function ScrimBoardPage() {
     const activeSince = new Date(Date.now() - SCRIM_DURATION_HOURS * 60 * 60 * 1000).toISOString();
     const userTeamIds = [];
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCurrentUser();
 
     if (userData?.user) {
       const { data: profile, error: profileError } = await supabase
@@ -1395,7 +1399,7 @@ function ScrimBoardPage() {
       setIsLoadingTeams(true);
       setPostError("");
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         setPostingTeams([]);
@@ -1583,7 +1587,7 @@ function ScrimBoardPage() {
     setPostError("");
 
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         setPostError("Log in before posting a scrim.");

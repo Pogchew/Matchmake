@@ -62,6 +62,7 @@ For the current MOSEF launch database, verify these repo SQL/runbook pieces are 
    - `supabase_calendar_feed_tokens.sql`
 4. Owner/admin and launch analytics:
    - `supabase_admin_dashboard.sql`
+   - `supabase_report_queue.sql`
    - Production migrations already applied for launch analytics: `add_launch_analytics_event_rpc` and `secure_launch_analytics_event_rpc`.
 
 After applying SQL, run Supabase security advisors. The expected current non-blocking notices are `private.owner_accounts` RLS enabled with no policies and leaked password protection disabled; investigate any new RLS, grant, or security-definer warnings before launch.

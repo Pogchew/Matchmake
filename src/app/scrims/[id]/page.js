@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
+import { getCurrentUser } from "@/lib/auth-session";
 import { getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
 
 // ─── helpers (mirrored from page.js) ────────────────────────────────────────
@@ -280,7 +281,7 @@ export default function ScrimDetailPage() {
       setIsLoadingRequestingTeams(true);
       setRequestError("");
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         setRequestingTeams([]);
@@ -421,7 +422,7 @@ export default function ScrimDetailPage() {
     setRequestSuccess("");
 
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         router.push("/login");
@@ -550,7 +551,7 @@ export default function ScrimDetailPage() {
     setRequestSuccess("");
 
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         router.push("/login");

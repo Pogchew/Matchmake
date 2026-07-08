@@ -9,6 +9,7 @@ import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
 import { aggregateCharacterAnalytics } from "@/lib/dashboard/character-analytics";
+import { getCurrentUser } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 import { getDefaultRankForGame, getDisplayModeForTeam, getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
 
@@ -356,7 +357,7 @@ function TeamPageContent() {
     setLoading(true);
     setErrorMessage("");
 
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCurrentUser();
     if (authError || !authData.user) {
       router.push("/login");
       return;

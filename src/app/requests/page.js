@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { getCurrentUser } from "@/lib/auth-session";
 import { normalizeTeamLocation } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
@@ -219,7 +220,7 @@ export default function RequestsPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await getCurrentUser();
 
     if (userError || !userData.user) {
       router.push("/login");
@@ -380,7 +381,7 @@ export default function RequestsPage() {
     setActionSuccess("");
 
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         router.push("/login");

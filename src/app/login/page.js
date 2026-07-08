@@ -7,7 +7,7 @@ import MatchmakeLogo from "@/components/MatchmakeLogo";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { storeAuthSession } from "@/lib/auth-session";
 import { GAME_OPTIONS } from "@/lib/game-options";
-import { supabase } from "@/lib/supabase";
+import { supabaseAuth } from "@/lib/supabase";
 
 const painPoints = [
   { icon: "groups", title: "Availability is unclear", body: "Who's free?" },
@@ -210,7 +210,7 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
       email,
       password,
     });
@@ -221,7 +221,14 @@ export default function LoginPage() {
       return;
     }
 
-    storeAuthSession(data.session);
+    try {
+      await storeAuthSession(data.session);
+    } catch (sessionError) {
+      setErrorMessage(sessionError.message);
+      setIsLoading(false);
+      return;
+    }
+
     router.push("/");
     router.refresh();
   }

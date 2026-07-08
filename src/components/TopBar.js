@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import MaterialSymbol from "./MaterialSymbol";
 import MatchmakeLogo from "./MatchmakeLogo";
 import ThemeToggle from "./ThemeToggle";
-import { clearAuthSession } from "@/lib/auth-session";
-import { supabase } from "@/lib/supabase";
+import { clearAuthSession, getCurrentUser } from "@/lib/auth-session";
+import { supabase, supabaseAuth } from "@/lib/supabase";
 import { useOwnerAccess } from "@/lib/use-owner-access";
 
 const navItems = [
@@ -71,7 +71,7 @@ export default function TopBar({ actions, right }) {
     let isMounted = true;
 
     async function fetchNotifications() {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await getCurrentUser();
 
       if (!userData.user) {
         if (isMounted) setNotifications([]);
@@ -239,8 +239,8 @@ export default function TopBar({ actions, right }) {
   const notificationCount = notifications.length;
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    clearAuthSession();
+    await supabaseAuth.auth.signOut();
+    await clearAuthSession();
     router.push("/login");
     router.refresh();
   }

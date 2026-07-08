@@ -6,7 +6,7 @@ import Link from "next/link";
 import MatchmakeLogo from "./MatchmakeLogo";
 import MaterialSymbol from "./MaterialSymbol";
 import { storeAuthSession } from "@/lib/auth-session";
-import { supabase } from "@/lib/supabase";
+import { supabaseAuth } from "@/lib/supabase";
 
 const FEATURES = [
   {
@@ -121,7 +121,7 @@ export default function LandingPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
       email,
       password,
     });
@@ -132,7 +132,14 @@ export default function LandingPage() {
       return;
     }
 
-    storeAuthSession(data.session);
+    try {
+      await storeAuthSession(data.session);
+    } catch (sessionError) {
+      setErrorMessage(sessionError.message);
+      setIsLoading(false);
+      return;
+    }
+
     router.refresh();
   }
 
@@ -141,7 +148,7 @@ export default function LandingPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabaseAuth.auth.signUp({
       email,
       password,
     });
@@ -165,9 +172,7 @@ export default function LandingPage() {
       return;
     }
 
-    storeAuthSession(authData.session);
-
-    const { error: userError } = await supabase.from("users").upsert({
+    const { error: userError } = await supabaseAuth.from("users").upsert({
       id: authUser.id,
       email: authUser.email || email,
       display_name: displayName,
@@ -180,7 +185,7 @@ export default function LandingPage() {
       return;
     }
 
-    const { data: orgData, error: orgError } = await supabase
+    const { data: orgData, error: orgError } = await supabaseAuth
       .from("organizations")
       .insert({
         name: orgName,
@@ -198,10 +203,18 @@ export default function LandingPage() {
     }
 
     if (orgData?.id) {
-      await supabase
+      await supabaseAuth
         .from("users")
         .update({ org_id: orgData.id })
         .eq("id", authUser.id);
+    }
+
+    try {
+      await storeAuthSession(authData.session);
+    } catch (sessionError) {
+      setErrorMessage(sessionError.message);
+      setIsLoading(false);
+      return;
     }
 
     router.push("/team/new");

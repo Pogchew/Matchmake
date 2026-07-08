@@ -6,7 +6,7 @@ import { useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import { storeAuthSession } from "@/lib/auth-session";
 import { trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
-import { supabase } from "@/lib/supabase";
+import { supabaseAuth } from "@/lib/supabase";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function SignupPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabaseAuth.auth.signUp({
       email,
       password,
     });
@@ -47,9 +47,7 @@ export default function SignupPage() {
       return;
     }
 
-    storeAuthSession(authData.session);
-
-    const { error: userError } = await supabase.from("users").upsert({
+    const { error: userError } = await supabaseAuth.from("users").upsert({
       id: authUser.id,
       email: authUser.email || email,
       display_name: displayName,
@@ -62,7 +60,7 @@ export default function SignupPage() {
       return;
     }
 
-    const { data: orgData, error: orgError } = await supabase
+    const { data: orgData, error: orgError } = await supabaseAuth
       .from("organizations")
       .insert({
         name: orgName,
@@ -80,7 +78,7 @@ export default function SignupPage() {
     }
 
     if (orgData?.id) {
-      const { error: updateUserError } = await supabase
+      const { error: updateUserError } = await supabaseAuth
         .from("users")
         .update({ org_id: orgData.id })
         .eq("id", authUser.id);
@@ -90,6 +88,14 @@ export default function SignupPage() {
         setIsLoading(false);
         return;
       }
+    }
+
+    try {
+      await storeAuthSession(authData.session);
+    } catch (sessionError) {
+      setErrorMessage(sessionError.message);
+      setIsLoading(false);
+      return;
     }
 
     await trackLaunchAnalyticsEvent({

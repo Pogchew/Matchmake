@@ -6,7 +6,7 @@ import { useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { storeAuthSession } from "@/lib/auth-session";
-import { supabase } from "@/lib/supabase";
+import { supabaseAuth } from "@/lib/supabase";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
 
     if (error || !data.session) {
       setErrorMessage(error?.message || "We could not start an owner session.");
@@ -28,16 +28,23 @@ export default function AdminLoginPage() {
       return;
     }
 
-    const { data: ownerAccess, error: ownerError } = await supabase.rpc("is_matchmake_owner");
+    const { data: ownerAccess, error: ownerError } = await supabaseAuth.rpc("is_matchmake_owner");
 
     if (ownerError || ownerAccess !== true) {
-      await supabase.auth.signOut();
+      await supabaseAuth.auth.signOut();
       setErrorMessage("This account is not approved for Matchmake owner access.");
       setIsLoading(false);
       return;
     }
 
-    storeAuthSession(data.session);
+    try {
+      await storeAuthSession(data.session);
+    } catch (sessionError) {
+      setErrorMessage(sessionError.message);
+      setIsLoading(false);
+      return;
+    }
+
     router.push("/admin");
     router.refresh();
   }

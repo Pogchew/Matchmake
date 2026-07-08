@@ -5,6 +5,7 @@ import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
+import { getCurrentUser } from "@/lib/auth-session";
 import { TEAM_LOCATION_OPTIONS } from "@/lib/game-options";
 import { supabase } from "@/lib/supabase";
 
@@ -51,7 +52,7 @@ export default function NewOrgPage() {
     setErrorMessage("");
 
     try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         router.push("/login");

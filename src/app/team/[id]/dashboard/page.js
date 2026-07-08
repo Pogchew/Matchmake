@@ -13,6 +13,7 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
 import { getDashboardConfig } from "@/lib/dashboard/game-dashboard-configs";
 import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
+import { getCurrentUser } from "@/lib/auth-session";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
 import { classifyExtractionFailure, trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
@@ -1275,7 +1276,7 @@ export default function TeamDashboardPage() {
     setReviewSeriesId(activeReviewSeriesId);
     setIsStandaloneNewReview(activeNewReviewMode);
 
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await getCurrentUser();
     if (authError || !authData.user) {
       router.push("/login");
       return;

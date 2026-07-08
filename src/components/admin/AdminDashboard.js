@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import MaterialSymbol from "@/components/MaterialSymbol";
-import { clearAuthSession } from "@/lib/auth-session";
-import { supabase } from "@/lib/supabase";
+import { clearAuthSession, getCurrentUser } from "@/lib/auth-session";
+import { supabase, supabaseAuth } from "@/lib/supabase";
 
 const NAV_ITEMS = [
   { id: "overview", label: "Overview", icon: "home" },
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { id: "scrims", label: "Scrims", icon: "sports_esports" },
   { id: "messages", label: "Chat & Reports", icon: "chat" },
   { id: "reviews", label: "Match Reviews", icon: "reviews" },
+  { id: "reports", label: "Report Queue", icon: "flag" },
   { id: "audit", label: "Audit Log", icon: "history" },
 ];
 
@@ -24,6 +25,7 @@ const ACTIVITY_FILTERS = [
   { id: "scrims", label: "Scrims" },
   { id: "messages", label: "Messages" },
   { id: "reviews", label: "Reviews" },
+  { id: "reports", label: "Reports" },
   { id: "system", label: "System" },
 ];
 
@@ -34,10 +36,14 @@ const EMPTY_DATA = {
   scrims: [],
   messages: [],
   reviews: [],
+  reports: [],
   activity: [],
 };
 
 const SCRIM_STATUSES = ["open", "pending", "confirmed", "completed", "cancelled", "expired"];
+const REPORT_STATUSES = ["new", "triage", "waiting_on_school", "waiting_on_matchmake", "escalated", "action_pending", "verification_pending", "monitoring", "closed"];
+const AI_TRIAGE_STATUSES = ["not_requested", "queued", "in_progress", "suggested", "accepted", "rejected", "blocked"];
+const OPEN_REPORT_STATUSES = new Set(REPORT_STATUSES.filter((status) => status !== "closed"));
 
 function relativeTime(value) {
   const date = new Date(value);
@@ -86,6 +92,31 @@ function statusClass(status) {
   return "bg-[#fff1d9] text-[#ad6200]";
 }
 
+function reportStatusClass(status) {
+  if (status === "closed") return "bg-[#e5f7ec] text-[#177342]";
+  if (["escalated", "action_pending"].includes(status)) return "bg-[#ffe7e5] text-[#bd2929]";
+  if (["new", "triage", "verification_pending"].includes(status)) return "bg-[#fff1d9] text-[#ad6200]";
+  return "bg-[#eef6ff] text-[#0878eb]";
+}
+
+function severityClass(severity) {
+  if (Number(severity) === 0) return "bg-[#ffe7e5] text-[#bd2929]";
+  if (Number(severity) === 1) return "bg-[#fff1d9] text-[#ad6200]";
+  return "bg-[#eef6ff] text-[#0878eb]";
+}
+
+function severityLabel(severity) {
+  const value = Number(severity);
+  if (value === 0) return "S0 urgent";
+  if (value === 1) return "S1 high";
+  return "S2 normal";
+}
+
+function reportCaseLabel(report) {
+  if (!report?.case_number) return report?.id?.slice(0, 8) || "Report";
+  return `MM-REPORT-${String(report.case_number).padStart(4, "0")}`;
+}
+
 function formatPercent(numerator, denominator) {
   if (!denominator) return "—";
   return `${Math.round((numerator / denominator) * 100)}%`;
@@ -99,6 +130,7 @@ function activityIcon(entityType) {
     scrim_requests: "sports_esports",
     scrim_messages: "chat",
     team_match_reviews: "reviews",
+    report_cases: "flag",
     system: "settings_suggest",
   }[entityType] || "adjust";
 }
@@ -108,6 +140,7 @@ function activityCategory(entityType) {
   if (entityType === "scrim_requests") return "scrims";
   if (entityType === "scrim_messages") return "messages";
   if (entityType === "team_match_reviews") return "reviews";
+  if (entityType === "report_cases") return "reports";
   return "system";
 }
 
@@ -119,6 +152,7 @@ function sectionForEntity(entityType) {
     scrim_requests: "scrims",
     scrim_messages: "messages",
     team_match_reviews: "reviews",
+    report_cases: "reports",
     system: "audit",
   }[entityType] || "audit";
 }
@@ -174,6 +208,9 @@ export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState("overview");
   const [activityFilter, setActivityFilter] = useState("all");
   const [activityWindow, setActivityWindow] = useState("all");
+  const [reportStatusFilter, setReportStatusFilter] = useState("open");
+  const [reportSeverityFilter, setReportSeverityFilter] = useState("all");
+  const [selectedReportId, setSelectedReportId] = useState(null);
   const [globalSearch, setGlobalSearch] = useState("");
   const [data, setData] = useState(EMPTY_DATA);
   const [ownerUser, setOwnerUser] = useState(null);
@@ -187,6 +224,7 @@ export default function AdminDashboard() {
   const [isMutating, setIsMutating] = useState(false);
   const [notice, setNotice] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [reportQueueSetupError, setReportQueueSetupError] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState(() => new Date().toISOString());
   const [, setClock] = useState(0);
 
@@ -195,7 +233,7 @@ export default function AdminDashboard() {
     else setIsRefreshing(true);
     setErrorMessage("");
 
-    const { data: authData } = await supabase.auth.getUser();
+    const { data: authData } = await getCurrentUser();
     if (!authData.user) {
       router.replace("/admin/login");
       return;
@@ -213,17 +251,21 @@ export default function AdminDashboard() {
 
     setIsAuthorized(true);
 
-    const [users, organizations, teams, scrims, messages, reviews, activity] = await Promise.all([
+    const [users, organizations, teams, scrims, messages, reviews, reports, activity] = await Promise.all([
       supabase.from("users").select("id,email,display_name,account_type,org_id,team_ids,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("organizations").select("id,name,type,verified_flag,org_admin_id,school_domain,region,team_ids,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("teams").select("id,org_id,name,game_title,mode,rank_tier,region,roster_names,no_show_count,scrimgg_rating,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("scrim_requests").select("id,posting_team_id,matched_team_id,game_title,scheduled_at,games_count,status,expires_at,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("scrim_messages").select("id,scrim_request_id,sender_user_id,sender_display_name,sender_team_id,body,created_at").order("created_at", { ascending: false }).limit(250),
       supabase.from("team_match_reviews").select("id,team_id,scrim_request_id,created_by,game_title,match_type,match_result,final_score,opponent_name,map_or_mode,played_at,parser_status,parser_confidence,manual_edit_required,created_at,updated_at").order("created_at", { ascending: false }).limit(250),
+      supabase.from("report_cases").select("id,case_number,title,summary,report_type,severity,status,source,reporter_role,organization_id,team_id,scrim_request_id,scrim_message_id,match_review_id,subject_user_id,assigned_owner_id,next_update_at,closed_at,resolution,ai_triage_status,ai_triage_notes,agent_context,created_by,created_at,updated_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("admin_activity_logs").select("id,actor_user_id,entity_type,entity_id,action,target_label,status,details,metadata,created_at").order("created_at", { ascending: false }).limit(150),
     ]);
 
-    const failedResult = [users, organizations, teams, scrims, messages, reviews, activity].find((result) => result.error);
+    const reportQueueMissing = reports.error && (reports.error.code === "42P01" || String(reports.error.message || "").includes("report_cases"));
+    setReportQueueSetupError(reportQueueMissing ? "Report queue table is not installed yet. Apply supabase_report_queue.sql after supabase_admin_dashboard.sql." : "");
+
+    const failedResult = [users, organizations, teams, scrims, messages, reviews, reportQueueMissing ? null : reports, activity].filter(Boolean).find((result) => result.error);
     if (failedResult?.error) {
       setErrorMessage(failedResult.error.message || "The owner dashboard could not load all platform data.");
     }
@@ -235,6 +277,7 @@ export default function AdminDashboard() {
       scrims: scrims.data || [],
       messages: messages.data || [],
       reviews: reviews.data || [],
+      reports: reportQueueMissing || reports.error ? [] : reports.data || [],
       activity: activity.data || [],
     });
     setLastRefreshedAt(new Date().toISOString());
@@ -295,7 +338,9 @@ export default function AdminDashboard() {
     const completedMatches = data.scrims.filter((scrim) => scrim.status === "completed").length;
     const successfulReviews = data.reviews.filter((review) => !review.manual_edit_required && review.parser_status !== "failed").length;
     const reviewSuccess = data.reviews.length ? Math.round((successfulReviews / data.reviews.length) * 1000) / 10 : null;
-    return { openScrims, pendingRequests, completedMatches, reviewSuccess };
+    const openReports = data.reports.filter((report) => OPEN_REPORT_STATUSES.has(report.status)).length;
+    const urgentReports = data.reports.filter((report) => OPEN_REPORT_STATUSES.has(report.status) && Number(report.severity) <= 1).length;
+    return { openScrims, pendingRequests, completedMatches, reviewSuccess, openReports, urgentReports };
   }, [data]);
 
   const pilotTracking = useMemo(() => {
@@ -344,6 +389,15 @@ export default function AdminDashboard() {
   const attention = useMemo(() => {
     const staleBoundary = Date.now() - 48 * 60 * 60 * 1000;
     return [
+      {
+        id: "open-reports",
+        icon: "flag",
+        title: "Open reports",
+        body: "Cases awaiting owner or school follow-up",
+        count: data.reports.filter((report) => OPEN_REPORT_STATUSES.has(report.status)).length,
+        tone: "red",
+        section: "reports",
+      },
       {
         id: "manual-reviews",
         icon: "rate_review",
@@ -400,8 +454,8 @@ export default function AdminDashboard() {
   }, [activityFilter, activityWindow, data.activity, globalSearch, maps.users]);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    clearAuthSession();
+    await supabaseAuth.auth.signOut();
+    await clearAuthSession();
     router.replace("/admin/login");
   }
 
@@ -434,6 +488,116 @@ export default function AdminDashboard() {
     }
     setIsMutating(false);
     setConfirmAction(null);
+  }
+
+  function reportQueueUnavailable(message) {
+    return message && (message.includes("report_cases") || message.includes("relation"));
+  }
+
+  async function createReportCase(payload) {
+    setIsMutating(true);
+    setNotice("");
+    setErrorMessage("");
+
+    const { data: inserted, error } = await supabase
+      .from("report_cases")
+      .insert({ ...payload, created_by: ownerUser?.id || null })
+      .select("id,case_number")
+      .single();
+
+    if (error) {
+      setErrorMessage(reportQueueUnavailable(error.message) ? "Report queue is not installed yet. Apply supabase_report_queue.sql after supabase_admin_dashboard.sql, then refresh this page." : error.message);
+    } else {
+      setSelectedReportId(inserted?.id || null);
+      setActiveSection("reports");
+      setNotice(`${reportCaseLabel(inserted)} created in the report queue.`);
+      await loadData();
+    }
+
+    setIsMutating(false);
+  }
+
+  async function updateReportCase(reportId, patch, successMessage = "Report case updated.") {
+    setIsMutating(true);
+    setNotice("");
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("report_cases")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", reportId);
+
+    if (error) {
+      setErrorMessage(reportQueueUnavailable(error.message) ? "Report queue is not installed yet. Apply supabase_report_queue.sql after supabase_admin_dashboard.sql, then refresh this page." : error.message);
+    } else {
+      setNotice(successMessage);
+      await loadData();
+    }
+
+    setIsMutating(false);
+  }
+
+  function createMessageReport(message) {
+    const scrim = maps.scrims.get(message.scrim_request_id);
+    const senderTeam = maps.teams.get(message.sender_team_id);
+    createReportCase({
+      title: `Chat report: ${message.sender_display_name || maps.users.get(message.sender_user_id)?.display_name || "Unknown sender"}`,
+      summary: message.body || "Chat message flagged from the owner dashboard.",
+      report_type: "chat",
+      severity: 2,
+      status: "new",
+      source: "owner_dashboard_message",
+      reporter_role: "owner",
+      organization_id: senderTeam?.org_id || null,
+      team_id: message.sender_team_id || null,
+      scrim_request_id: message.scrim_request_id || null,
+      scrim_message_id: message.id,
+      subject_user_id: message.sender_user_id || null,
+      agent_context: {
+        source_table: "scrim_messages",
+        source_id: message.id,
+        sender_display_name: message.sender_display_name || null,
+        sender_team_name: senderTeam?.name || null,
+        scrim_game_title: scrim?.game_title || null,
+        message_body: message.body || "",
+        sent_at: message.created_at,
+      },
+    });
+  }
+
+  function createReviewReport(review) {
+    const team = maps.teams.get(review.team_id);
+    createReportCase({
+      title: `Match review report: ${team?.name || review.game_title || "Saved review"}`,
+      summary: [
+        review.manual_edit_required ? "Review was flagged for manual correction." : "Match review flagged from the owner dashboard.",
+        review.opponent_name ? `Opponent: ${review.opponent_name}.` : "",
+        review.parser_status ? `Parser status: ${review.parser_status}.` : "",
+      ].filter(Boolean).join(" "),
+      report_type: "match_review",
+      severity: review.manual_edit_required || review.parser_status === "failed" ? 1 : 2,
+      status: "new",
+      source: "owner_dashboard_review",
+      reporter_role: "owner",
+      organization_id: team?.org_id || null,
+      team_id: review.team_id || null,
+      scrim_request_id: review.scrim_request_id || null,
+      match_review_id: review.id,
+      subject_user_id: review.created_by || null,
+      agent_context: {
+        source_table: "team_match_reviews",
+        source_id: review.id,
+        team_name: team?.name || null,
+        game_title: review.game_title || null,
+        match_type: review.match_type || null,
+        match_result: review.match_result || null,
+        final_score: review.final_score || null,
+        opponent_name: review.opponent_name || null,
+        parser_status: review.parser_status || null,
+        parser_confidence: review.parser_confidence,
+        manual_edit_required: Boolean(review.manual_edit_required),
+      },
+    });
   }
 
   function resourceSearch(rows, fields) {
@@ -509,7 +673,7 @@ export default function AdminDashboard() {
           <SectionTitle title="Chat activity" body="Review scrim conversations and remove inappropriate messages." count={rows.length} />
           <div className="overflow-x-auto"><table className="min-w-[900px] w-full text-left text-[13px]"><thead className="bg-[#f8fafc] text-[#526174]"><tr><th className="px-md py-sm">Sender</th><th className="px-md py-sm">Message</th><th className="px-md py-sm">Scrim</th><th className="px-md py-sm">Sent</th><th className="px-md py-sm text-right">Action</th></tr></thead><tbody className="divide-y divide-[#e5eaf1]">
             {rows.length === 0 && <EmptyRows columns={5} label="No messages match this search." />}
-            {rows.map((message) => <tr key={message.id} className="hover:bg-[#f8fbff]"><td className="px-md py-sm"><p className="font-semibold text-[#172033]">{message.sender_display_name || maps.users.get(message.sender_user_id)?.display_name || "Unknown"}</p><p className="text-[11px] text-[#78869a]">{maps.teams.get(message.sender_team_id)?.name || "No team"}</p></td><td className="max-w-[420px] px-md py-sm text-[#526174]"><p className="line-clamp-2">{message.body}</p></td><td className="px-md py-sm text-[#526174]">{maps.scrims.get(message.scrim_request_id)?.game_title || message.scrim_request_id.slice(0, 8)}</td><td className="px-md py-sm text-[#526174]">{relativeTime(message.created_at)}</td><td className="px-md py-sm text-right"><button className="rounded-lg border border-[#f0b9b5] px-sm py-xs font-semibold text-[#bd2929] hover:bg-[#fff3f2]" onClick={() => setConfirmAction({ type: "delete-message", id: message.id, title: "Remove this chat message?", body: "The message will be permanently removed from the scrim conversation and the action will appear in the owner audit log.", confirmLabel: "Remove message", tone: "danger", successMessage: "Chat message removed." })} type="button">Remove</button></td></tr>)}
+            {rows.map((message) => <tr key={message.id} className="hover:bg-[#f8fbff]"><td className="px-md py-sm"><p className="font-semibold text-[#172033]">{message.sender_display_name || maps.users.get(message.sender_user_id)?.display_name || "Unknown"}</p><p className="text-[11px] text-[#78869a]">{maps.teams.get(message.sender_team_id)?.name || "No team"}</p></td><td className="max-w-[420px] px-md py-sm text-[#526174]"><p className="line-clamp-2">{message.body}</p></td><td className="px-md py-sm text-[#526174]">{maps.scrims.get(message.scrim_request_id)?.game_title || message.scrim_request_id.slice(0, 8)}</td><td className="px-md py-sm text-[#526174]">{relativeTime(message.created_at)}</td><td className="px-md py-sm text-right"><div className="flex justify-end gap-xs"><button className="rounded-lg border border-[#b8d5f5] px-sm py-xs font-semibold text-[#0878eb] hover:bg-[#eef6ff]" disabled={isMutating} onClick={() => createMessageReport(message)} type="button">Report</button><button className="rounded-lg border border-[#f0b9b5] px-sm py-xs font-semibold text-[#bd2929] hover:bg-[#fff3f2]" onClick={() => setConfirmAction({ type: "delete-message", id: message.id, title: "Remove this chat message?", body: "The message will be permanently removed from the scrim conversation and the action will appear in the owner audit log.", confirmLabel: "Remove message", tone: "danger", successMessage: "Chat message removed." })} type="button">Remove</button></div></td></tr>)}
           </tbody></table></div>
         </section>
       );
@@ -522,8 +686,81 @@ export default function AdminDashboard() {
           <SectionTitle title="Match reviews" body="Inspect saved review output and remove invalid records." count={rows.length} />
           <div className="overflow-x-auto"><table className="min-w-[980px] w-full text-left text-[13px]"><thead className="bg-[#f8fafc] text-[#526174]"><tr><th className="px-md py-sm">Review</th><th className="px-md py-sm">Team</th><th className="px-md py-sm">Opponent</th><th className="px-md py-sm">Result</th><th className="px-md py-sm">Parser</th><th className="px-md py-sm">Played</th><th className="px-md py-sm text-right">Action</th></tr></thead><tbody className="divide-y divide-[#e5eaf1]">
             {rows.length === 0 && <EmptyRows columns={7} label="No match reviews match this search." />}
-            {rows.map((review) => <tr key={review.id} className="hover:bg-[#f8fbff]"><td className="px-md py-sm"><p className="font-semibold text-[#172033]">{review.game_title}</p><p className="text-[11px] text-[#78869a]">{review.map_or_mode || review.match_type}</p></td><td className="px-md py-sm text-[#526174]">{maps.teams.get(review.team_id)?.name || "Unknown"}</td><td className="px-md py-sm text-[#526174]">{review.opponent_name || "—"}</td><td className="px-md py-sm text-[#526174]">{review.match_result || review.final_score || "—"}</td><td className="px-md py-sm"><span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${statusClass(review.manual_edit_required ? "pending" : "success")}`}>{review.manual_edit_required ? "Needs review" : titleCase(review.parser_status)}</span></td><td className="px-md py-sm text-[#526174]">{formatDate(review.played_at || review.created_at, { time: false })}</td><td className="px-md py-sm text-right"><button className="rounded-lg border border-[#f0b9b5] px-sm py-xs font-semibold text-[#bd2929] hover:bg-[#fff3f2]" onClick={() => setConfirmAction({ type: "delete-review", id: review.id, title: "Remove this match review?", body: "This permanently removes the saved review and its derived analytics. Use this only for invalid or duplicate records.", confirmLabel: "Remove review", tone: "danger", successMessage: "Match review removed." })} type="button">Remove</button></td></tr>)}
+            {rows.map((review) => <tr key={review.id} className="hover:bg-[#f8fbff]"><td className="px-md py-sm"><p className="font-semibold text-[#172033]">{review.game_title}</p><p className="text-[11px] text-[#78869a]">{review.map_or_mode || review.match_type}</p></td><td className="px-md py-sm text-[#526174]">{maps.teams.get(review.team_id)?.name || "Unknown"}</td><td className="px-md py-sm text-[#526174]">{review.opponent_name || "—"}</td><td className="px-md py-sm text-[#526174]">{review.match_result || review.final_score || "—"}</td><td className="px-md py-sm"><span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${statusClass(review.manual_edit_required ? "pending" : "success")}`}>{review.manual_edit_required ? "Needs review" : titleCase(review.parser_status)}</span></td><td className="px-md py-sm text-[#526174]">{formatDate(review.played_at || review.created_at, { time: false })}</td><td className="px-md py-sm text-right"><div className="flex justify-end gap-xs"><button className="rounded-lg border border-[#b8d5f5] px-sm py-xs font-semibold text-[#0878eb] hover:bg-[#eef6ff]" disabled={isMutating} onClick={() => createReviewReport(review)} type="button">Report</button><button className="rounded-lg border border-[#f0b9b5] px-sm py-xs font-semibold text-[#bd2929] hover:bg-[#fff3f2]" onClick={() => setConfirmAction({ type: "delete-review", id: review.id, title: "Remove this match review?", body: "This permanently removes the saved review and its derived analytics. Use this only for invalid or duplicate records.", confirmLabel: "Remove review", tone: "danger", successMessage: "Match review removed." })} type="button">Remove</button></div></td></tr>)}
           </tbody></table></div>
+        </section>
+      );
+    }
+
+    if (activeSection === "reports") {
+      const query = globalSearch.trim().toLowerCase();
+      const rows = data.reports.filter((report) => {
+        if (reportStatusFilter === "open" && !OPEN_REPORT_STATUSES.has(report.status)) return false;
+        if (reportStatusFilter !== "open" && reportStatusFilter !== "all" && report.status !== reportStatusFilter) return false;
+        if (reportSeverityFilter !== "all" && Number(report.severity) !== Number(reportSeverityFilter)) return false;
+        if (!query) return true;
+        return [report.title, report.summary, report.report_type, report.status, report.source, report.resolution, report.ai_triage_notes, reportCaseLabel(report)]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      });
+      const selectedReport = rows.find((report) => report.id === selectedReportId) || rows[0] || data.reports.find((report) => report.id === selectedReportId);
+      const openCount = data.reports.filter((report) => OPEN_REPORT_STATUSES.has(report.status)).length;
+      const urgentCount = data.reports.filter((report) => OPEN_REPORT_STATUSES.has(report.status) && Number(report.severity) <= 1).length;
+      const aiReadyCount = data.reports.filter((report) => OPEN_REPORT_STATUSES.has(report.status) && ["queued", "in_progress", "suggested"].includes(report.ai_triage_status)).length;
+      const linkedSummary = selectedReport ? [
+        selectedReport.organization_id ? `Org ${maps.organizations.get(selectedReport.organization_id)?.name || selectedReport.organization_id.slice(0, 8)}` : "",
+        selectedReport.team_id ? `Team ${maps.teams.get(selectedReport.team_id)?.name || selectedReport.team_id.slice(0, 8)}` : "",
+        selectedReport.scrim_request_id ? `Scrim ${maps.scrims.get(selectedReport.scrim_request_id)?.game_title || selectedReport.scrim_request_id.slice(0, 8)}` : "",
+        selectedReport.scrim_message_id ? `Message ${selectedReport.scrim_message_id.slice(0, 8)}` : "",
+        selectedReport.match_review_id ? `Review ${selectedReport.match_review_id.slice(0, 8)}` : "",
+      ].filter(Boolean) : [];
+
+      return (
+        <section className="overflow-hidden rounded-[14px] border border-[#dce3ee] bg-white">
+          <SectionTitle title="Report queue" body="Review, triage, and close owner-visible cases from one scrollable queue." count={rows.length} />
+          {reportQueueSetupError && <div className="mx-md mt-md flex items-start gap-sm rounded-lg border border-[#f0c77a] bg-[#fff8e8] px-md py-sm text-[13px] leading-5 text-[#8a5400]"><MaterialSymbol className="mt-0.5 text-[18px]" fill>warning</MaterialSymbol><span>{reportQueueSetupError}</span></div>}
+          <div className="grid grid-cols-2 border-b border-[#dce3ee] md:grid-cols-4">
+            {[{ label: "Total", value: data.reports.length, icon: "inventory_2" }, { label: "Open", value: openCount, icon: "flag" }, { label: "S0/S1 Open", value: urgentCount, icon: "priority_high", alert: urgentCount > 0 }, { label: "AI Triage", value: aiReadyCount, icon: "auto_awesome" }].map((metric) => <div className="border-r border-[#dce3ee] px-md py-sm" key={metric.label}><div className="flex items-center gap-xs text-[11px] font-semibold text-[#526174]"><MaterialSymbol className={`text-[18px] ${metric.alert ? "text-[#bd2929]" : "text-[#0878eb]"}`}>{metric.icon}</MaterialSymbol>{metric.label}</div><p className="mt-1 text-[24px] font-semibold text-[#101828]">{metric.value}</p></div>)}
+          </div>
+          <div className="flex flex-col gap-sm border-b border-[#dce3ee] px-md py-sm md:flex-row md:items-center">
+            <label className="flex items-center gap-xs text-[12px] font-semibold text-[#526174]">Status<select className="h-9 rounded-lg border border-[#cfd8e6] bg-white px-sm text-[12px] text-[#172033]" onChange={(event) => setReportStatusFilter(event.target.value)} value={reportStatusFilter}><option value="open">Open reports</option><option value="all">All reports</option>{REPORT_STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></label>
+            <label className="flex items-center gap-xs text-[12px] font-semibold text-[#526174]">Severity<select className="h-9 rounded-lg border border-[#cfd8e6] bg-white px-sm text-[12px] text-[#172033]" onChange={(event) => setReportSeverityFilter(event.target.value)} value={reportSeverityFilter}><option value="all">All severities</option><option value="0">S0 urgent</option><option value="1">S1 high</option><option value="2">S2 normal</option></select></label>
+            <span className="text-[12px] text-[#78869a] md:ml-auto">{rows.length} visible of {data.reports.length} total</span>
+          </div>
+          <div className="grid min-h-[560px] lg:grid-cols-[minmax(300px,390px)_minmax(0,1fr)]">
+            <div className="max-h-[70vh] overflow-y-auto border-b border-[#dce3ee] lg:border-b-0 lg:border-r">
+              {rows.length === 0 && <div className="px-md py-xl text-center text-[13px] text-[#718096]">No report cases match these filters.</div>}
+              {rows.map((report) => (
+                <button className={`block w-full border-b border-[#e5eaf1] px-md py-sm text-left hover:bg-[#f8fbff] ${selectedReport?.id === report.id ? "bg-[#eef6ff]" : ""}`} key={report.id} onClick={() => setSelectedReportId(report.id)} type="button">
+                  <div className="flex items-start gap-sm">
+                    <span className={`mt-0.5 rounded-md px-2 py-1 text-[10px] font-bold ${severityClass(report.severity)}`}>{severityLabel(report.severity).split(" ")[0]}</span>
+                    <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-[#0878eb]">{reportCaseLabel(report)}</span><span className="mt-1 block truncate text-[13px] font-semibold text-[#172033]">{report.title}</span><span className="mt-1 line-clamp-2 text-[12px] leading-5 text-[#637083]">{report.summary || "No summary yet."}</span><span className="mt-2 flex flex-wrap gap-xs"><span className={`rounded-md px-2 py-1 text-[10px] font-semibold ${reportStatusClass(report.status)}`}>{titleCase(report.status)}</span><span className="rounded-md bg-[#f1f4f8] px-2 py-1 text-[10px] font-semibold text-[#526174]">{titleCase(report.report_type)}</span></span></span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="min-w-0 p-md">
+              {!selectedReport ? (
+                <div className="grid min-h-[420px] place-items-center rounded-lg border border-dashed border-[#cfd8e6] text-center text-[13px] text-[#718096]">Select a report case to review it.</div>
+              ) : (
+                <article className="space-y-md">
+                  <div className="flex flex-col gap-sm border-b border-[#dce3ee] pb-md md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0"><p className="text-[12px] font-semibold text-[#0878eb]">{reportCaseLabel(selectedReport)}</p><h3 className="mt-1 text-[22px] font-semibold text-[#101828]">{selectedReport.title}</h3><p className="mt-xs text-[13px] text-[#637083]">Created {formatDate(selectedReport.created_at, { year: true })} - Updated {relativeTime(selectedReport.updated_at || selectedReport.created_at)}</p></div>
+                    <div className="flex flex-wrap gap-xs"><span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${severityClass(selectedReport.severity)}`}>{severityLabel(selectedReport.severity)}</span><span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${reportStatusClass(selectedReport.status)}`}>{titleCase(selectedReport.status)}</span></div>
+                  </div>
+                  <div className="grid gap-sm md:grid-cols-3">
+                    <label className="text-[12px] font-semibold text-[#526174]">Status<select className="mt-xs h-10 w-full rounded-lg border border-[#cfd8e6] bg-white px-sm text-[13px] text-[#172033]" disabled={isMutating} onChange={(event) => { const nextStatus = event.target.value; updateReportCase(selectedReport.id, { status: nextStatus, closed_at: nextStatus === "closed" ? new Date().toISOString() : null }, "Report status updated."); }} value={selectedReport.status}>{REPORT_STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></label>
+                    <label className="text-[12px] font-semibold text-[#526174]">Severity<select className="mt-xs h-10 w-full rounded-lg border border-[#cfd8e6] bg-white px-sm text-[13px] text-[#172033]" disabled={isMutating} onChange={(event) => updateReportCase(selectedReport.id, { severity: Number(event.target.value) }, "Report severity updated.")} value={selectedReport.severity}><option value={0}>S0 urgent</option><option value={1}>S1 high</option><option value={2}>S2 normal</option></select></label>
+                    <label className="text-[12px] font-semibold text-[#526174]">AI triage<select className="mt-xs h-10 w-full rounded-lg border border-[#cfd8e6] bg-white px-sm text-[13px] text-[#172033]" disabled={isMutating} onChange={(event) => updateReportCase(selectedReport.id, { ai_triage_status: event.target.value }, "AI triage status updated.")} value={selectedReport.ai_triage_status || "not_requested"}>{AI_TRIAGE_STATUSES.map((status) => <option key={status} value={status}>{titleCase(status)}</option>)}</select></label>
+                  </div>
+                  <section className="rounded-lg border border-[#dce3ee] p-md"><h4 className="text-[13px] font-semibold text-[#172033]">Report summary</h4><p className="mt-xs whitespace-pre-wrap text-[13px] leading-6 text-[#526174]">{selectedReport.summary || "No summary recorded."}</p></section>
+                  <section className="rounded-lg border border-[#dce3ee] p-md"><h4 className="text-[13px] font-semibold text-[#172033]">Linked records</h4><div className="mt-sm flex flex-wrap gap-xs">{linkedSummary.length ? linkedSummary.map((item) => <span className="rounded-md bg-[#f1f4f8] px-2 py-1 text-[11px] font-semibold text-[#526174]" key={item}>{item}</span>) : <span className="text-[12px] text-[#718096]">No linked records.</span>}</div></section>
+                  <section className="rounded-lg border border-[#dce3ee] p-md"><h4 className="text-[13px] font-semibold text-[#172033]">AI/agent context</h4><p className="mt-1 text-[12px] text-[#718096]">Structured snapshot for later automation. Keep secrets and private contact info out of this field.</p><pre className="mt-sm max-h-[260px] overflow-auto rounded-lg bg-[#0b1220] p-md text-[11px] leading-5 text-[#dbeafe]">{JSON.stringify(selectedReport.agent_context || {}, null, 2)}</pre></section>
+                  <section className="rounded-lg border border-[#dce3ee] p-md"><h4 className="text-[13px] font-semibold text-[#172033]">Resolution</h4><p className="mt-xs whitespace-pre-wrap text-[13px] leading-6 text-[#526174]">{selectedReport.resolution || "No resolution recorded yet."}</p><div className="mt-sm flex flex-wrap gap-xs"><button className="rounded-lg border border-[#cfd8e6] px-sm py-xs text-[12px] font-semibold text-[#334155] hover:bg-[#f5f7fa]" disabled={isMutating} onClick={() => updateReportCase(selectedReport.id, { status: "triage" }, "Report moved to triage.")} type="button">Move to triage</button><button className="rounded-lg border border-[#cfd8e6] px-sm py-xs text-[12px] font-semibold text-[#334155] hover:bg-[#f5f7fa]" disabled={isMutating} onClick={() => updateReportCase(selectedReport.id, { status: "waiting_on_school" }, "Report marked waiting on school.")} type="button">Waiting on school</button><button className="rounded-lg border border-[#bde2cc] px-sm py-xs text-[12px] font-semibold text-[#177342] hover:bg-[#edf9f2]" disabled={isMutating} onClick={() => updateReportCase(selectedReport.id, { status: "closed", closed_at: new Date().toISOString(), resolution: selectedReport.resolution || "Closed from the owner dashboard." }, "Report closed.")} type="button">Close case</button></div></section>
+                </article>
+              )}
+            </div>
+          </div>
         </section>
       );
     }
@@ -569,6 +806,7 @@ export default function AdminDashboard() {
     { label: "Pending Requests", value: summary.pendingRequests, icon: "schedule", note: "Awaiting action", alert: summary.pendingRequests > 0 },
     { label: "Completed Matches", value: summary.completedMatches, icon: "check_circle", note: "All time" },
     { label: "Review Success", value: summary.reviewSuccess === null ? "—" : `${summary.reviewSuccess}%`, icon: "database", note: data.reviews.length ? `${data.reviews.length} reviews` : "No reviews yet" },
+    { label: "Open Reports", value: summary.openReports, icon: "flag", note: `${summary.urgentReports} urgent/high`, alert: summary.urgentReports > 0 },
   ];
 
   const pilotMetricCards = [
@@ -638,7 +876,7 @@ export default function AdminDashboard() {
             <>
               <section className="flex min-h-12 items-center gap-sm rounded-[10px] border border-[#dce3ee] bg-white px-md text-[13px] text-[#526174]"><span className={`h-2 w-2 rounded-full ${liveStatus === "error" ? "bg-[#d33a36]" : "bg-[#0878eb]"}`} /><strong className="font-semibold text-[#172033]">{liveStatus === "error" ? "Live activity connection needs attention." : "All systems operational."}</strong><span className="hidden sm:inline">Owner data is connected and activity logging is enabled.</span><span className="ml-auto text-[11px] text-[#78869a]">Updated {relativeTime(lastRefreshedAt)}</span></section>
 
-              <section className="mt-md grid grid-cols-2 border-l border-t border-[#dce3ee] bg-white sm:grid-cols-3 xl:grid-cols-7">{kpis.map((kpi) => <div className="min-w-0 border-b border-r border-[#dce3ee] px-sm py-md sm:px-md" key={kpi.label}><div className="flex items-center gap-xs text-[11px] font-medium text-[#334155] sm:text-[12px]"><MaterialSymbol className={`text-[19px] ${kpi.alert ? "text-[#e54b45]" : "text-[#0878eb]"}`}>{kpi.icon}</MaterialSymbol><span className="truncate">{kpi.label}</span></div><p className="mt-xs text-[23px] font-semibold tracking-tight text-[#111827] sm:text-[25px]">{kpi.value}</p><p className={`mt-1 truncate text-[10px] sm:text-[11px] ${kpi.alert ? "text-[#d33a36]" : "text-[#24834f]"}`}>{kpi.note}</p></div>)}</section>
+              <section className="mt-md grid grid-cols-2 border-l border-t border-[#dce3ee] bg-white sm:grid-cols-4 xl:grid-cols-8">{kpis.map((kpi) => <div className="min-w-0 border-b border-r border-[#dce3ee] px-sm py-md sm:px-md" key={kpi.label}><div className="flex items-center gap-xs text-[11px] font-medium text-[#334155] sm:text-[12px]"><MaterialSymbol className={`text-[19px] ${kpi.alert ? "text-[#e54b45]" : "text-[#0878eb]"}`}>{kpi.icon}</MaterialSymbol><span className="truncate">{kpi.label}</span></div><p className="mt-xs text-[23px] font-semibold tracking-tight text-[#111827] sm:text-[25px]">{kpi.value}</p><p className={`mt-1 truncate text-[10px] sm:text-[11px] ${kpi.alert ? "text-[#d33a36]" : "text-[#24834f]"}`}>{kpi.note}</p></div>)}</section>
 
               <section className="mt-md overflow-hidden rounded-[12px] border border-[#dce3ee] bg-white">
                 <div className="border-b border-[#dce3ee] px-md py-sm">

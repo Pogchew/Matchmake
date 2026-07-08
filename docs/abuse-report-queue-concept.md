@@ -31,18 +31,19 @@ The queue is not an emergency service, school discipline system, legal case-mana
 
 ## Current Baseline
 
-Matchmake does not currently provide a dedicated in-app report form or abuse queue.
+Matchmake now has an owner-only report queue section in `/admin` backed by `public.report_cases` from `supabase_report_queue.sql`.
 
 Current operating pieces are:
 
 - School-first reporting and Matchmake escalation in `docs/inappropriate-behavior-reporting-escalation.md`.
 - Routine support intake in `docs/mosef-support-contact-process.md`.
-- Owner-only inspection and moderation controls in `/admin`.
+- Owner-only inspection, moderation, and report review controls in `/admin`.
 - Chat message removal, match review removal, scrim status changes, team removal, organization verification changes, and user membership clearing in the owner dashboard.
+- One-click owner case creation from chat messages and saved match reviews.
 - Admin action history in `admin_activity_logs`.
-- A required restricted case log outside the app until a dedicated queue exists.
+- A restricted external case log for school/legal records that should not live inside the app.
 
-The first abuse/report queue should replace scattered manual tracking, not weaken the current safety boundary. The existing school-first reporting path remains the source of truth for emergency and student-safety routing.
+The first abuse/report queue reduces scattered manual tracking, but does not weaken the current safety boundary. The existing school-first reporting path remains the source of truth for emergency and student-safety routing.
 
 ## Primary Users
 

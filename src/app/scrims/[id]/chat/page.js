@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
+import { getCurrentUser } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 
 const MAX_MESSAGE_LENGTH = 1000;
@@ -74,7 +75,7 @@ export default function ScrimChatPage() {
       setErrorMessage("");
       setAccessMessage("");
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await getCurrentUser();
 
       if (userError || !userData.user) {
         router.push("/login");
