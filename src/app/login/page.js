@@ -39,16 +39,16 @@ const extractionNotes = [
   },
   {
     icon: "fact_check",
-    title: "Coach reviews before saving",
-    body: "Extraction can miss or misread details. Coaches should check the fields, fix mistakes, and keep the source screenshot until the saved review looks right.",
+    title: "Team review before saving",
+    body: "Extraction can miss or misread details. Team admins should check the fields, fix mistakes, and keep the source screenshot until the saved review looks right.",
   },
 ];
 
 const schoolSafetyNotes = [
   {
     icon: "admin_panel_settings",
-    title: "Coach-led workspaces",
-    body: "Team setup, rosters, scrims, chat, and match reviews are organized around school and coach-admin workflows.",
+    title: "Admin-led workspaces",
+    body: "Team setup, rosters, scrims, chat, and match reviews are organized around clear team-admin workflows.",
   },
   {
     icon: "visibility",
@@ -57,8 +57,8 @@ const schoolSafetyNotes = [
   },
   {
     icon: "block",
-    title: "No student-data ads",
-    body: "Launch privacy language commits student data to the school-authorized Matchmake service, not targeted ads, data sales, or unrelated commercial profiles.",
+    title: "No player-data ads",
+    body: "Player data stays tied to the Matchmake service, not targeted ads, data sales, or unrelated commercial profiles.",
   },
 ];
 
@@ -249,7 +249,7 @@ export default function LoginPage() {
           <nav className="hidden items-center gap-lg font-label-bold text-label-bold text-on-surface md:flex">
             <button className="hover:text-primary" onClick={openLogin} type="button">Login</button>
             <Link className="rounded-lg bg-primary px-md py-sm text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
-              Request school access
+              Create account
             </Link>
           </nav>
           <button className="rounded-lg bg-primary px-md py-sm font-label-bold text-label-bold text-on-primary md:hidden" onClick={openLogin} type="button">
@@ -261,15 +261,15 @@ export default function LoginPage() {
       <section className="mx-auto grid max-w-[1200px] gap-xl px-margin-mobile py-xl md:grid-cols-[1fr_560px] md:px-lg md:py-[72px]">
         <div className="flex flex-col justify-center">
           <h1 className="max-w-[650px] font-editorial-large text-[42px] font-black leading-[1.05] text-on-surface md:text-[58px]">
-            Find better high school scrims.<br />
+            Find better esports scrims.<br />
             <span className="text-primary">Learn from every game.</span>
           </h1>
           <p className="mt-md max-w-[520px] font-body-main text-body-main text-on-surface-variant md:text-[18px] md:leading-7">
-            Matchmake helps high school esports teams schedule scrims, manage requests, and turn post-game screenshots into team performance dashboards.
+            Matchmake helps competitive esports teams schedule scrims, manage requests, and turn post-game screenshots into performance dashboards.
           </p>
           <div className="mt-lg flex flex-col gap-sm sm:flex-row">
             <Link className="inline-flex h-12 items-center justify-center rounded-lg bg-primary px-xl font-label-bold text-label-bold text-on-primary shadow-[0_6px_18px_rgba(0,88,188,0.25)]" href="/signup">
-              Request school access
+              Create your team
             </Link>
             <button className="inline-flex h-12 items-center justify-center rounded-lg border border-primary bg-surface-container-lowest px-xl font-label-bold text-label-bold text-primary" onClick={openLogin} type="button">
               Log In
@@ -277,7 +277,7 @@ export default function LoginPage() {
           </div>
           <p className="mt-lg flex items-center gap-sm font-label-bold text-label-bold text-on-surface-variant">
             <MaterialSymbol className="text-[20px] text-outline" fill>shield</MaterialSymbol>
-            Built for high school esports programs.
+            Built for school, club, collegiate, and independent teams.
           </p>
         </div>
 
@@ -289,7 +289,7 @@ export default function LoginPage() {
           <div>
             <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Supported games</p>
             <h2 className="mt-xs font-headline-3 text-headline-3 text-on-surface">
-              Built for the games high school teams are already scheduling.
+              Built for the games competitive teams are already scheduling.
             </h2>
           </div>
           <div className="flex flex-wrap gap-xs md:max-w-[680px] md:justify-end">
@@ -310,7 +310,7 @@ export default function LoginPage() {
               A faster starting point, not an official scorebook.
             </h2>
             <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">
-              Matchmake turns visible scoreboard screenshots into editable match-review drafts. Coaches stay responsible for checking the data before saving or using it for team decisions.
+              Matchmake turns visible scoreboard screenshots into editable match-review drafts. Team admins stay responsible for checking the data before saving or using it for team decisions.
             </p>
           </div>
           <div className="mt-md grid grid-cols-1 gap-sm md:grid-cols-3">
@@ -328,12 +328,12 @@ export default function LoginPage() {
       <section className="border-y border-outline-variant/25 bg-surface-container-lowest/80 px-margin-mobile py-xl md:px-lg">
         <div className="mx-auto max-w-[1200px]">
           <div className="max-w-[720px]">
-            <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">School-safe privacy</p>
+            <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Program-ready privacy</p>
             <h2 className="mt-xs font-headline-2 text-headline-2 text-on-surface">
-              Built for coach-supervised esports programs.
+              Built for organized, supervised esports programs.
             </h2>
             <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">
-              Matchmake is positioned for school-authorized team operations: clear coach ownership, limited public scrim details, and student-data commitments that avoid advertising or resale.
+              Matchmake supports school, club, collegiate, and independent teams with clear admin ownership, limited public scrim details, and player-data commitments that avoid advertising or resale.
             </p>
           </div>
           <div className="mt-md grid grid-cols-1 gap-sm md:grid-cols-3">
@@ -350,7 +350,7 @@ export default function LoginPage() {
 
       <section className="border-y border-outline-variant/25 bg-surface-container-lowest/80 px-margin-mobile py-lg md:px-lg" id="features">
         <div className="mx-auto max-w-[1200px]">
-          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">The usual high school scrim problems are easy to miss.</h2>
+          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">The usual scrim problems are easy to miss.</h2>
           <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-5">
             {painPoints.map((item) => <FeatureTile key={item.title} {...item} />)}
           </div>
@@ -359,7 +359,7 @@ export default function LoginPage() {
 
       <section className="px-margin-mobile pb-xl pt-lg md:px-lg" id="practice">
         <div className="mx-auto max-w-[1200px]">
-          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">Small tools for the whole high school practice loop.</h2>
+          <h2 className="text-center font-headline-2 text-headline-2 text-on-surface">Small tools for the whole practice loop.</h2>
           <div className="mt-md grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-6">
             {practiceTools.map((item) => <FeatureTile key={item.title} {...item} />)}
           </div>
@@ -371,14 +371,14 @@ export default function LoginPage() {
           <div className="max-w-[700px]">
             <p className="font-label-bold text-label-bold uppercase tracking-wider text-on-primary/75">Fall pilot access</p>
             <h2 className="mt-xs font-headline-2 text-headline-2 text-on-primary">
-              Bring Matchmake to your school esports program.
+              Bring Matchmake to your esports program.
             </h2>
             <p className="mt-sm font-body-sub text-body-sub text-on-primary/85">
-              Coaches and school esports leads can request access, set up a school workspace, and start with one team before expanding.
+              Coaches, managers, and organization leads can create an account, set up a workspace, and start with one team before expanding.
             </p>
           </div>
           <Link className="inline-flex h-12 items-center justify-center rounded-lg bg-on-primary px-xl font-label-bold text-label-bold text-primary shadow-[0_8px_24px_rgba(0,0,0,0.18)]" href="/signup">
-            Request school access
+            Get started
           </Link>
         </div>
       </section>

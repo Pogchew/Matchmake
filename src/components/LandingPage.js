@@ -12,7 +12,7 @@ const FEATURES = [
   {
     icon: "scoreboard",
     title: "Scrim Board",
-    desc: "Browse open scrims from high school teams in your rank window. Filter by game, time, and region. Post your own in under a minute.",
+    desc: "Browse open scrims from competitive teams in your rank window. Filter by game, time, and region. Post your own in under a minute.",
   },
   {
     icon: "auto_awesome",
@@ -22,7 +22,7 @@ const FEATURES = [
   {
     icon: "groups",
     title: "Team & Org Workspace",
-    desc: "Manage rosters, ranks, and school team verification in one place. Coaches see everything; players see only what matters to them.",
+    desc: "Manage rosters, ranks, and team verification in one place. Team admins see everything; players see only what matters to them.",
   },
   {
     icon: "insights",
@@ -35,7 +35,7 @@ const STEPS = [
   {
     n: 1,
     title: "Post or browse",
-    desc: "List your high school team's availability or scroll the board for matchups in your rank range.",
+    desc: "List your team's availability or scroll the board for matchups in your rank range.",
   },
   {
     n: 2,
@@ -52,8 +52,8 @@ const STEPS = [
 const SCHOOL_SAFETY_POINTS = [
   {
     icon: "admin_panel_settings",
-    title: "Coach-led setup",
-    desc: "Organizations, teams, rosters, and match reviews are built around school and coach-admin workflows.",
+    title: "Admin-led setup",
+    desc: "Organizations, teams, rosters, and match reviews are built around clear team-admin workflows.",
   },
   {
     icon: "visibility",
@@ -62,8 +62,8 @@ const SCHOOL_SAFETY_POINTS = [
   },
   {
     icon: "block",
-    title: "No student-data ads",
-    desc: "Launch privacy language keeps student data tied to the school-authorized service, not targeted ads, data sales, or unrelated commercial profiles.",
+    title: "No player-data ads",
+    desc: "Player data stays tied to the Matchmake service, not targeted ads, data sales, or unrelated commercial profiles.",
   },
 ];
 
@@ -262,13 +262,13 @@ export default function LandingPage() {
               <MaterialSymbol className="text-[16px]" fill>
                 bolt
               </MaterialSymbol>
-              Built for high school esports teams
+              Built for competitive esports teams
             </span>
             <h1 className="mt-6 font-editorial-large text-[40px] leading-[1.05] md:text-[60px] md:leading-[1.02] tracking-[-0.025em] font-extrabold text-on-surface">
-              The scrim board for high school esports teams.
+              The scrim board for teams that want better practice.
             </h1>
             <p className="mt-5 font-body-main text-body-main md:text-[19px] md:leading-[28px] text-on-surface-variant max-w-[560px]">
-              Help coaches and school teams find opponents at the right level,
+              Help teams find opponents at the right level,
               lock matches in minutes, and turn post-game screenshots into stats
               without another spreadsheet.
             </p>
@@ -278,7 +278,7 @@ export default function LandingPage() {
                 onClick={() => jumpTo("signup")}
                 className="bg-primary text-on-primary font-label-bold text-label-bold px-6 py-3 rounded-full hover:bg-on-primary-fixed-variant active:scale-95 transition-all shadow-[0_8px_24px_rgba(0,88,188,0.3)]"
               >
-                Request school access
+                Create your team
               </button>
               <a
                 href="#features"
@@ -294,7 +294,7 @@ export default function LandingPage() {
               <MaterialSymbol className="text-[16px] text-primary" fill>
                 verified
               </MaterialSymbol>
-              {"Free for high school esports programs · No credit card required"}
+              {"Free to get started · No credit card required"}
             </div>
           </div>
 
@@ -440,15 +440,15 @@ export default function LandingPage() {
       <section className="max-w-[1200px] mx-auto px-margin-mobile md:px-lg py-20">
         <div className="max-w-[720px]">
           <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline mb-2">
-            School-safe privacy
+            Program-ready privacy
           </p>
           <h2 className="font-editorial-large text-[36px] leading-[42px] md:text-[44px] md:leading-[50px] tracking-[-0.02em] font-extrabold text-on-surface">
-            Built for coach-supervised esports programs.
+            Built for organized, supervised esports programs.
           </h2>
           <p className="mt-4 font-body-main text-body-main text-on-surface-variant">
-            Matchmake is positioned for school-authorized team operations:
-            clear coach ownership, limited public scrim details, and
-            student-data commitments that avoid advertising or resale.
+            Matchmake supports school, club, collegiate, and independent
+            teams with clear admin ownership, limited public scrim details,
+            and player-data commitments that avoid advertising or resale.
           </p>
         </div>
         <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-md">
@@ -545,10 +545,10 @@ export default function LandingPage() {
         <div className="rounded-[32px] bg-primary text-on-primary p-xl md:p-[64px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-[0_24px_48px_rgba(0,88,188,0.25)]">
           <div className="max-w-[560px]">
             <h2 className="font-editorial-large text-[32px] leading-[38px] md:text-[40px] md:leading-[46px] tracking-[-0.02em] font-extrabold">
-              Bring Matchmake to your school esports program.
+              Bring Matchmake to your esports program.
             </h2>
             <p className="mt-3 font-body-main text-body-main text-on-primary/85">
-              Request access, set up a school workspace, and start with one team before expanding.
+              Create an account, set up your organization, and start with one team before expanding.
             </p>
           </div>
           <button
@@ -556,7 +556,7 @@ export default function LandingPage() {
             onClick={() => jumpTo("signup")}
             className="bg-on-primary text-primary font-label-bold text-label-bold px-6 py-3 rounded-full hover:bg-on-primary/90 active:scale-95 transition-all shadow-[0_8px_24px_rgba(0,0,0,0.12)] whitespace-nowrap"
           >
-            Request school access
+            Get started
           </button>
         </div>
       </section>
