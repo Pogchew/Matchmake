@@ -43,6 +43,8 @@ const HEROES = [
   ["wolverine", "Wolverine"],
 ];
 
+export const MARVEL_RIVALS_HERO_OPTIONS = HEROES.map(([, heroName]) => heroName);
+
 export const MARVEL_RIVALS_HERO_ASSETS = HEROES.map(([heroId, heroName]) => ({
   hero_id: heroId,
   hero_name: heroName,

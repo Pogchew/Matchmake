@@ -16,7 +16,9 @@ import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
 import { getCurrentUser } from "@/lib/auth-session";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
 import { classifyExtractionFailure, trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
+import { getPickImagePath } from "@/lib/game-assets/asset-paths";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
+import { MARVEL_RIVALS_HERO_OPTIONS } from "@/lib/game-assets/marvel-rivals-hero-assets";
 import {
   HONOR_OF_KINGS_HERO_OPTIONS,
   LEAGUE_CHAMPION_OPTIONS,
@@ -47,51 +49,6 @@ const SERVER_EXTRACTOR_GAMES = new Set([
   "Rocket League",
   "Valorant",
 ]);
-
-const MARVEL_RIVALS_HERO_OPTIONS = [
-  "Adam Warlock",
-  "Angela",
-  "Black Panther",
-  "Black Widow",
-  "Blade",
-  "Captain America",
-  "Cloak & Dagger",
-  "Doctor Strange",
-  "Emma Frost",
-  "Groot",
-  "Hawkeye",
-  "Hela",
-  "Hulk",
-  "Human Torch",
-  "Invisible Woman",
-  "Iron Fist",
-  "Iron Man",
-  "Jeff the Land Shark",
-  "Loki",
-  "Luna Snow",
-  "Magik",
-  "Magneto",
-  "Mantis",
-  "Mister Fantastic",
-  "Moon Knight",
-  "Namor",
-  "Peni Parker",
-  "Phoenix",
-  "Psylocke",
-  "Rocket Raccoon",
-  "Scarlet Witch",
-  "Spider-Man",
-  "Squirrel Girl",
-  "Star-Lord",
-  "Storm",
-  "The Punisher",
-  "The Thing",
-  "Thor",
-  "Ultron",
-  "Venom",
-  "Winter Soldier",
-  "Wolverine",
-];
 
 function createBlankReview(gameTitle, matchType = "scrim") {
   const config = getDashboardConfig(gameTitle);
@@ -2639,121 +2596,6 @@ function ResultBadge({ result }) {
   );
 }
 
-const LEAGUE_CHAMPION_FILE_ALIASES = {
-  "aurelionsol": "AurelionSol",
-  "belveth": "Belveth",
-  "chogath": "Chogath",
-  "drmundo": "DrMundo",
-  "jarvaniv": "JarvanIV",
-  "kaisa": "Kaisa",
-  "khazix": "Khazix",
-  "kogmaw": "KogMaw",
-  "ksante": "KSante",
-  "leesin": "LeeSin",
-  "masteryi": "MasterYi",
-  "missfortune": "MissFortune",
-  "monkeyking": "MonkeyKing",
-  "nunuandwillump": "Nunu",
-  "reksai": "RekSai",
-  "renataglasc": "Renata",
-  "tahmkench": "TahmKench",
-  "twistedfate": "TwistedFate",
-  "velkoz": "Velkoz",
-  "wukong": "MonkeyKing",
-  "xinzhao": "XinZhao",
-};
-
-function normalizeChampionKey(name = "") {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function toChampionFileStem(name = "") {
-  const key = normalizeChampionKey(name);
-  if (!key) return "";
-  if (LEAGUE_CHAMPION_FILE_ALIASES[key]) return LEAGUE_CHAMPION_FILE_ALIASES[key];
-  return key.charAt(0).toUpperCase() + key.slice(1);
-}
-
-function getChampionImagePath(game, pick) {
-  if (game !== "League of Legends" || !pick) return "";
-  return `/lol/champions/${toChampionFileStem(pick)}.png`;
-}
-
-const VALORANT_AGENT_FILE_ALIASES = {
-  kayo: "kayo",
-  "kay/o": "kayo",
-};
-
-function toAgentFileStem(name = "") {
-  const key = name.toLowerCase().replace(/[^a-z0-9/]/g, "");
-  if (!key) return "";
-  return VALORANT_AGENT_FILE_ALIASES[key] || key.replace(/\//g, "");
-}
-
-function getAgentImagePath(game, pick) {
-  if (game !== "Valorant" || !pick) return "";
-  return `/valorant/agents/${toAgentFileStem(pick)}.png`;
-}
-
-const MARVEL_HERO_FILE_ALIASES = {
-  blackcat: "black_cat",
-  cloakdagger: "cloak-and-dagger",
-  cloakanddagger: "cloak-and-dagger",
-  doctorstrange: "doctor-strange",
-  elsabloodstone: "elsa_bloodstone",
-  humantorch: "human-torch",
-  invisiblewoman: "invisible-woman",
-  ironfist: "iron-fist",
-  ironman: "iron-man",
-  jeff: "jeff-the-land-shark",
-  jeffthelandshark: "jeff-the-land-shark",
-  misterfantastic: "mister-fantastic",
-  moonknight: "moon-knight",
-  peniparker: "peni-parker",
-  rocket: "rocket-raccoon",
-  rocketraccoon: "rocket-raccoon",
-  scarletwitch: "scarlet-witch",
-  spiderman: "spider-man",
-  starlord: "star-lord",
-  thepunisher: "the-punisher",
-  thething: "the-thing",
-  whitefox: "white_fox",
-  wintersoldier: "winter-soldier",
-};
-
-function toMarvelHeroFileStem(name = "") {
-  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (!key) return "";
-  return MARVEL_HERO_FILE_ALIASES[key] || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function getMarvelHeroImagePath(game, pick) {
-  if (game !== "Marvel Rivals" || !pick) return "";
-  return `/marvel-rivals/heroes/${toMarvelHeroFileStem(pick)}_avatar.png`;
-}
-
-const DEADLOCK_HERO_FILE_ALIASES = {
-  graytalon: "grey-talon",
-  greytalon: "grey-talon",
-  ladygeist: "lady-geist",
-  mcginnis: "mcginnis",
-  moandkrill: "mo-krill",
-  mokrill: "mo-krill",
-  theboss: "the-boss",
-  thedoorman: "the-doorman",
-};
-
-function toDeadlockHeroFileStem(name = "") {
-  const key = name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
-  if (!key) return "";
-  return DEADLOCK_HERO_FILE_ALIASES[key] || name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function getDeadlockHeroImagePath(game, pick) {
-  if (game !== "Deadlock" || !pick) return "";
-  return `/deadlock/heroes/${toDeadlockHeroFileStem(pick)}.png`;
-}
-
 function isCompactHeroShooterGame(game = "") {
   return game === "Marvel Rivals" || game === "Deadlock" || game === "Overwatch" || game === "Overwatch 2";
 }
@@ -2766,7 +2608,7 @@ function CharacterTile({ game, row, index }) {
   const pick = row.hero_confirmed || row[config.pickField] || row.agent || row.champion || row.hero || row.character || row.car;
   const subtitle = isMarvelRivals && row.costume_name ? row.costume_name : row.role || config.pickLabel;
   const stat = formatCardStats(row, config);
-  const imagePath = getChampionImagePath(game, pick) || getAgentImagePath(game, pick) || getMarvelHeroImagePath(game, pick) || getDeadlockHeroImagePath(game, pick);
+  const imagePath = getPickImagePath(game, pick, { marvelVariant: "dashboard" });
   const showImage = Boolean(imagePath && !imageFailed);
 
   useEffect(() => {

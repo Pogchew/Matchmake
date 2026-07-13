@@ -9,67 +9,28 @@ import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
 import { aggregateCharacterAnalytics } from "@/lib/dashboard/character-analytics";
+import { calculateReviewKpis } from "@/lib/dashboard/team-review-kpis";
 import { getCurrentUser } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
 import { getDefaultRankForGame, getDisplayModeForTeam, getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
+import { getPickImagePath } from "@/lib/game-assets/asset-paths";
+import {
+  formatGamesCount as formatGameCount,
+  formatScrimStandardDateTime as formatDateTime,
+  getInitials,
+  getScrimEndAt,
+} from "@/lib/scrim-utils";
 
-const SCRIM_DURATION_HOURS = 3;
 const STATS_TIMELINE_OPTIONS = [
   { label: "Last 5", value: "last5", limit: 5 },
   { label: "Last 20", value: "last20", limit: 20 },
   { label: "All time", value: "all", limit: null },
 ];
-const REVIEW_PICK_FIELDS = {
-  "League of Legends": { field: "champion", label: "Champion" },
-  Valorant: { field: "agent", label: "Agent" },
-  "Counter-Strike 2": { field: "role", label: "Role" },
-  "Rocket League": { field: "car", label: "Car / Role" },
-  "Overwatch 2": { field: "hero", label: "Hero" },
-  "Marvel Rivals": { field: "hero", label: "Hero" },
-  Deadlock: { field: "hero", label: "Hero" },
-  SSBU: { field: "character", label: "Character" },
-  "Honor of Kings": { field: "hero", label: "Hero" },
-};
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
-function getScrimEndAt(value) {
-  if (!value) return null;
-  const endAt = new Date(value);
-  if (Number.isNaN(endAt.getTime())) return null;
-  endAt.setHours(endAt.getHours() + SCRIM_DURATION_HOURS);
-  return endAt;
-}
-
 function isPastScrim(scrim) {
   if (scrim.status === "completed") return true;
   if (["cancelled", "declined", "expired"].includes(scrim.status)) return true;
   const endAt = getScrimEndAt(scrim.scheduled_at);
   return endAt ? endAt < new Date() : false;
-}
-
-function formatDateTime(value) {
-  if (!value) return "Time TBD";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(value));
-}
-
-function formatGameCount(value) {
-  const count = Number(value || 3);
-  return `${count} ${count === 1 ? "Game" : "Games"}`;
 }
 
 const MAX_PROFILE_URL_LENGTH = 500;
@@ -168,88 +129,10 @@ function StatusBadge({ status }) {
   );
 }
 
-function formatSignedAverage(values, { decimals = 1 } = {}) {
-  if (!values.length) return "—";
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const rounded = Number(average.toFixed(decimals));
-  const formatted = new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: decimals,
-    minimumFractionDigits: decimals,
-  }).format(Math.abs(rounded));
-  if (rounded > 0) return `+${formatted}`;
-  if (rounded < 0) return `-${formatted}`;
-  return decimals ? "0.0" : "0";
-}
-
-function getNumericStat(source, key) {
-  const value = source?.[key];
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
 function normalizeExtractedNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(String(value).replace(/,/g, "").replace("%", ""));
   return Number.isFinite(number) ? number : null;
-}
-
-function getAverageStatDiff(reviews, leftKey, rightKey = leftKey) {
-  return reviews
-    .map((review) => {
-      const left = getNumericStat(review.team_stats, leftKey);
-      const right = getNumericStat(review.opponent_stats, rightKey);
-      return left === null || right === null ? null : left - right;
-    })
-    .filter((value) => value !== null);
-}
-
-function calculateReviewKpis(reviews, gameTitle) {
-  const total = reviews.length;
-  const wins = reviews.filter((review) => review.match_result === "victory").length;
-  const losses = reviews.filter((review) => review.match_result === "defeat").length;
-  const winRate = total ? Math.round((wins / total) * 100) : 0;
-  const margins = reviews
-    .filter((review) => Number.isFinite(Number(review.team_score)) && Number.isFinite(Number(review.opponent_score)))
-    .map((review) => Number(review.team_score) - Number(review.opponent_score));
-  const avgMargin = margins.length ? (margins.reduce((sum, margin) => sum + margin, 0) / margins.length).toFixed(1) : "—";
-  const pickConfig = REVIEW_PICK_FIELDS[gameTitle] || { field: "hero", label: "Pick" };
-  const pickCounts = new Map();
-  const mapCounts = new Map();
-
-  for (const review of reviews) {
-    for (const row of review.team_comp || []) {
-      const pick = row?.[pickConfig.field] || row?.agent || row?.champion || row?.hero || row?.character || row?.car || row?.role;
-      if (pick) pickCounts.set(pick, (pickCounts.get(pick) || 0) + 1);
-    }
-    if (review.map_or_mode) mapCounts.set(review.map_or_mode, (mapCounts.get(review.map_or_mode) || 0) + 1);
-  }
-
-  const mostUsed = [...pickCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
-  const bestMap = [...mapCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
-
-  const baseKpis = [
-    { label: "Reviews", value: total },
-    { label: "Wins", value: wins },
-    { label: "Losses", value: losses },
-    { label: "Win Rate", value: `${winRate}%` },
-  ];
-
-  if (gameTitle === "League of Legends") {
-    return [
-      ...baseKpis,
-      { label: "Avg Kill Diff", value: formatSignedAverage(margins) },
-      { label: "Avg Gold Diff", value: formatSignedAverage(getAverageStatDiff(reviews, "total_gold"), { decimals: 0 }) },
-      { label: "Avg Damage Diff", value: formatSignedAverage(getAverageStatDiff(reviews, "total_damage_to_champions"), { decimals: 0 }) },
-      { label: `Most Used ${pickConfig.label}`, value: mostUsed },
-    ];
-  }
-
-  return [
-    ...baseKpis,
-    { label: "Avg Margin", value: avgMargin },
-    { label: `Most Used ${pickConfig.label}`, value: mostUsed },
-    { label: "Best Map/Mode", value: bestMap },
-  ];
 }
 
 export default function TeamPage() {
@@ -1088,105 +971,6 @@ function splitFeatureValue(value = "") {
     primary: primary || "—",
     meta: metaParts.join(" · "),
   };
-}
-
-const LEAGUE_CHAMPION_FILE_ALIASES = {
-  aurelionsol: "AurelionSol",
-  belveth: "Belveth",
-  chogath: "Chogath",
-  drmundo: "DrMundo",
-  jarvaniv: "JarvanIV",
-  kaisa: "Kaisa",
-  khazix: "Khazix",
-  kogmaw: "KogMaw",
-  ksante: "KSante",
-  leesin: "LeeSin",
-  masteryi: "MasterYi",
-  missfortune: "MissFortune",
-  monkeyking: "MonkeyKing",
-  nunuandwillump: "Nunu",
-  reksai: "RekSai",
-  renataglasc: "Renata",
-  tahmkench: "TahmKench",
-  twistedfate: "TwistedFate",
-  velkoz: "Velkoz",
-  wukong: "MonkeyKing",
-  xinzhao: "XinZhao",
-};
-
-function compactPickKey(value = "") {
-  return String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function toChampionFileStem(name = "") {
-  const key = compactPickKey(name);
-  if (!key) return "";
-  return LEAGUE_CHAMPION_FILE_ALIASES[key] || key.charAt(0).toUpperCase() + key.slice(1);
-}
-
-const VALORANT_AGENT_FILE_ALIASES = {
-  kayo: "kayo",
-  "kay/o": "kayo",
-};
-
-function toAgentFileStem(name = "") {
-  const key = String(name).toLowerCase().replace(/[^a-z0-9/]/g, "");
-  if (!key) return "";
-  return VALORANT_AGENT_FILE_ALIASES[key] || key.replace(/\//g, "");
-}
-
-const MARVEL_HERO_FILE_ALIASES = {
-  cloakdagger: "cloak-and-dagger",
-  cloakanddagger: "cloak-and-dagger",
-  doctorstrange: "doctor-strange",
-  humantorch: "human-torch",
-  invisiblewoman: "invisible-woman",
-  ironfist: "iron-fist",
-  ironman: "iron-man",
-  jeff: "jeff-the-land-shark",
-  jeffthelandshark: "jeff-the-land-shark",
-  misterfantastic: "mister-fantastic",
-  moonknight: "moon-knight",
-  peniparker: "peni-parker",
-  rocketraccoon: "rocket-raccoon",
-  scarletwitch: "scarlet-witch",
-  spiderman: "spider-man",
-  starlord: "star-lord",
-  thepunisher: "the-punisher",
-  thething: "the-thing",
-  wintersoldier: "winter-soldier",
-};
-
-function toMarvelHeroFileStem(name = "") {
-  const key = compactPickKey(name);
-  if (!key) return "";
-  return MARVEL_HERO_FILE_ALIASES[key] || String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-const DEADLOCK_HERO_FILE_ALIASES = {
-  graytalon: "grey-talon",
-  greytalon: "grey-talon",
-  ladygeist: "lady-geist",
-  mcginnis: "mcginnis",
-  moandkrill: "mo-krill",
-  mokrill: "mo-krill",
-  theboss: "the-boss",
-  thedoorman: "the-doorman",
-};
-
-function toDeadlockHeroFileStem(name = "") {
-  const key = compactPickKey(String(name).replace(/&/g, "and"));
-  if (!key) return "";
-  return DEADLOCK_HERO_FILE_ALIASES[key] || String(name).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function getPickImagePath(gameTitle, pick) {
-  if (!pick) return "";
-  if (gameTitle === "League of Legends") return `/lol/champions/${toChampionFileStem(pick)}.png`;
-  if (gameTitle === "Valorant") return `/valorant/agents/${toAgentFileStem(pick)}.png`;
-  if (gameTitle === "Marvel Rivals") return `/marvel-rivals/heroes/${toMarvelHeroFileStem(pick)}_avatar.png`;
-  if (gameTitle === "Deadlock") return `/deadlock/heroes/${toDeadlockHeroFileStem(pick)}.png`;
-  return "";
 }
 
 function splitCompPicks(value = "") {

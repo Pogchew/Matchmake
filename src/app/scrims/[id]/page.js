@@ -8,30 +8,15 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
 import { getCurrentUser } from "@/lib/auth-session";
 import { getRanksForGame, normalizeTeamLocation } from "@/lib/game-options";
-
-// ─── helpers (mirrored from page.js) ────────────────────────────────────────
-
-const SCRIM_DURATION_HOURS = 3;
-
-function getScrimEndAt(value) {
-  if (!value) return null;
-
-  const endAt = new Date(value);
-  if (Number.isNaN(endAt.getTime())) return null;
-
-  endAt.setHours(endAt.getHours() + SCRIM_DURATION_HOURS);
-  return endAt;
-}
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
+import {
+  formatGamesCount,
+  formatScrimDetailDateTime as formatDateTime,
+  getDateInputValue,
+  getInitials,
+  getScrimEndAt,
+  getTimeInputValue,
+  parseScheduledAt,
+} from "@/lib/scrim-utils";
 
 function getRankColor(rank = "") {
   if (rank.includes("Immortal") || rank.includes("Radiant")) return "#ff2d55";
@@ -39,45 +24,6 @@ function getRankColor(rank = "") {
   if (rank.includes("Platinum")) return "#2979ff";
   if (rank.includes("Faceit")) return "#ff6d00";
   return "#717786";
-}
-
-function formatDateTime(value) {
-  if (!value) return "Time TBD";
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(value));
-}
-
-function getDateInputValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function getTimeInputValue(value) {
-  if (!value) return "19:00";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "19:00";
-
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-function parseScheduledAt(dateValue, timeValue) {
-  const scheduledAt = new Date(`${dateValue}T${timeValue || "00:00"}:00`);
-  return Number.isNaN(scheduledAt.getTime()) ? null : scheduledAt.toISOString();
-}
-
-function formatGamesCount(value) {
-  const count = Number(value || 3);
-  return `${count} ${count === 1 ? "Game" : "Games"}`;
 }
 
 function isMissingGamesCountError(error) {

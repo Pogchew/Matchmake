@@ -1,4 +1,4 @@
-const SCRIM_DURATION_HOURS = 3;
+import { SCRIM_DURATION_HOURS, getScrimEndAt } from "@/lib/scrim-utils";
 
 export function formatIcsDate(value) {
   return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
@@ -10,14 +10,6 @@ export function escapeIcsText(value = "") {
     .replace(/\n/g, "\\n")
     .replace(/,/g, "\\,")
     .replace(/;/g, "\\;");
-}
-
-export function getScrimEndAt(value) {
-  const start = new Date(value);
-  if (Number.isNaN(start.getTime())) return null;
-  const end = new Date(start);
-  end.setHours(end.getHours() + SCRIM_DURATION_HOURS);
-  return end;
 }
 
 export function formatRankRange(scrim) {

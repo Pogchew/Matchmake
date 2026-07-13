@@ -9,6 +9,14 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 import { AUTH_CHANGED_EVENT, getCurrentUser } from "@/lib/auth-session";
 import { trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import {
+  formatGamesCount,
+  formatScrimTimeWithZone as formatScrimTime,
+  getDateInputValue,
+  getInitials,
+  getScrimEndAt,
+  parseScheduledAtWithMeridiem as parseScheduledAt,
+} from "@/lib/scrim-utils";
+import {
   GAME_OPTIONS,
   TEAM_LOCATION_OPTIONS,
   getDefaultRankForGame,
@@ -41,28 +49,13 @@ const TIME_FILTER_OPTIONS = [
   { label: "Evening", value: "evening" },
 ];
 
-const SCRIM_DURATION_HOURS = 3;
 const COMPACT_BOARD_THRESHOLD = 12;
-
-function getScrimEndAt(value) {
-  if (!value) return null;
-
-  const endAt = new Date(value);
-  if (Number.isNaN(endAt.getTime())) return null;
-
-  endAt.setHours(endAt.getHours() + SCRIM_DURATION_HOURS);
-  return endAt;
-}
 
 function parseGamesCount(value) {
   const count = Number.parseInt(String(value || ""), 10);
   return Number.isFinite(count) ? count : 3;
 }
 
-function formatGamesCount(value) {
-  const count = Number(value || 3);
-  return `${count} ${count === 1 ? "Game" : "Games"}`;
-}
 
 function isMissingGamesCountError(error) {
   return error?.code === "42703" || error?.code === "PGRST204" || error?.message?.includes("games_count");
@@ -73,15 +66,6 @@ function isScrimPast(value) {
   return endAt ? endAt < new Date() : false;
 }
 
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
 
 function getRankColor(rank = "") {
   if (rank.includes("Immortal") || rank.includes("Radiant")) return "#ff2d55";
@@ -195,23 +179,6 @@ function abbreviateRank(rank = "") {
   return rankMap[rank] || rank;
 }
 
-function formatScrimTime(value) {
-  if (!value) return "Time TBD";
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(value));
-}
-
-function getDateInputValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
 
 function getUserTimeZoneLabel() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "your local time zone";
@@ -840,25 +807,6 @@ function OpponentRankRangePicker({ gameTitle, maxRank, minRank, onChange }) {
       </div>
     </FormPanel>
   );
-}
-
-function parseScheduledAt(dateValue, timeValue) {
-  const timeMatch = timeValue.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
-  const scheduledAt = new Date(`${dateValue}T00:00:00`);
-
-  if (Number.isNaN(scheduledAt.getTime()) || !timeMatch) {
-    return null;
-  }
-
-  let hours = Number(timeMatch[1]);
-  const minutes = Number(timeMatch[2] || 0);
-  const meridiem = timeMatch[3]?.toUpperCase();
-
-  if (meridiem === "PM" && hours < 12) hours += 12;
-  if (meridiem === "AM" && hours === 12) hours = 0;
-
-  scheduledAt.setHours(hours, minutes, 0, 0);
-  return scheduledAt.toISOString();
 }
 
 function PostScrimModal({

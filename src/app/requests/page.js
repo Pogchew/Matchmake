@@ -8,29 +8,8 @@ import BottomNav from "@/components/BottomNav";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import { getCurrentUser } from "@/lib/auth-session";
 import { normalizeTeamLocation } from "@/lib/game-options";
+import { formatScrimStandardDateTime as formatScrimTime, getInitials } from "@/lib/scrim-utils";
 import { supabase } from "@/lib/supabase";
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
-function formatScrimTime(value) {
-  if (!value) return "Time TBD";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(value));
-}
 
 function formatRankRange(request) {
   if (request.opponent_rank_min && request.opponent_rank_max) {

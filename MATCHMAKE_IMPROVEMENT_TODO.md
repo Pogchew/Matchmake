@@ -147,3 +147,72 @@ Implementation note:
 - [ ] Smoke test scrim posting, requests, calendar, team page, org page, and match review save flow.
 - [ ] Review accessibility: keyboard navigation, focus states, labels, contrast, and responsive text fitting.
 - [ ] Remove unused components, dead helpers, and stale dashboard code after migration.
+
+## 13. P1 — Behavior-Preserving Codebase Cleanup
+
+Working rules:
+
+- Complete one unchecked item at a time. Do not combine extraction, dashboard, dependency, and tooling work in one change.
+- Before moving code, add or extend focused coverage for the behavior being moved.
+- For every completed item, run its focused checks, `npx eslint src scripts --max-warnings 0`, and `npm run build`, then add a short completion note beneath the item.
+- Leave an item unchecked and record the blocker if its expected behavior cannot be verified locally.
+
+### Tooling and verification baseline
+
+- [x] Ignore `.claude/**` in `eslint.config.mjs` so `npm run lint` does not scan nested worktrees or their generated `.next` output.
+  - Completed 2026-07-09: added the ignore; `npm run lint` now completes with no worktree/generated-output errors.
+- [x] Add an `npm test` command that runs the existing post-game completion and fixture regression checks.
+  - Completed 2026-07-09: `npm test` runs the deterministic field-completion assertions and five-game regression fixtures; live API/browser checks remain opt-in verification commands.
+- [x] Add focused tests for shared scrim/date/formatting utilities before extracting them from page files.
+  - Completed 2026-07-09: added deterministic UTC characterization coverage for scrim duration, initials, game-count labels, date/time inputs, and scheduled-time serialization. The new utility module is not wired into pages yet; page migration remains the next shared-helper task.
+- [x] Add focused tests for game asset path/alias resolution before deduplicating it.
+  - Completed 2026-07-09: added asset-stem and path tests for League, Valorant, Marvel Rivals, and Deadlock, including the existing Team/Dashboard Marvel alias difference. No page imports changed; the deduplication task must preserve each page's current variant.
+- [ ] Add focused tests for extraction-to-review mapping and review-payload construction.
+  - Deferred 2026-07-09: the mapping and payload helpers are private functions inside the JSX client page, so a deterministic Node test cannot import them without first completing the later mapping-extraction task. Existing screenshot verification checks raw extractor output rather than the page's mapping behavior. When that module is extracted, add these tests in the same change before replacing the page calls.
+- [x] Set `outputFileTracingRoot` in `next.config.mjs` to this repository root and confirm the production build no longer selects the parent lockfile.
+  - Completed 2026-07-09: configured the root relative to `next.config.mjs`; the production build now traces from this repository and no longer emits the parent-lockfile workspace warning.
+
+### Shared helpers and assets
+
+- [x] Extract the repeated scrim end-time, initials, game-count, and date formatting helpers into a small shared `src/lib` module; preserve all current page output.
+  - Completed 2026-07-09: `src/lib/scrim-utils.js` now contains the shared behavior and tested detail, standard, and time-only display formats. The existing page calls remain untouched until the following migration task.
+- [x] Replace the duplicated calls in Scrim Board, Scrim Detail, Team, Calendar, Requests, and Scrim Chat with the shared helpers.
+  - Completed 2026-07-09: migrated all listed pages and the ICS generator to `src/lib/scrim-utils.js`, retaining their prior date-format and time-parser variants through named imports.
+- [x] Extract League, Valorant, Marvel Rivals, and Deadlock asset aliases and image-path construction from the Team and Match Review pages into a shared game-assets module.
+  - Completed 2026-07-09: both pages now use `src/lib/game-assets/asset-paths.js`; the Match Review page passes its existing dashboard Marvel variant, while the Team page retains its existing default variant.
+- [x] Replace the dashboard's locally maintained Marvel Rivals hero options with the canonical game-assets source.
+  - Completed 2026-07-09: the dashboard now imports the hero option list from `marvel-rivals-hero-assets.js`; its source data also drives the asset metadata and is covered by the asset test.
+
+### Team page decomposition
+
+- [ ] Extract pure Team Page analytics calculations and stat-formatting helpers from `src/app/team/page.js` without changing the rendered values.
+  - [x] Extract and test the review-summary KPI calculation used at the top of Team Stats.
+    - Completed 2026-07-09: moved `calculateReviewKpis` and its formatting helpers to `src/lib/dashboard/team-review-kpis.js`; Valorant and League regression cases now run in `npm test`.
+  - [ ] Extract and test the aggregate/deep-stat calculation engine (`buildGameAggregateStats` and supporting helpers).
+- [ ] Extract roster-profile validation and roster-management UI from `src/app/team/page.js` into focused modules/components.
+- [ ] Extract Team Page review history and scrim list presentation components from `src/app/team/page.js`.
+- [ ] Extract game-specific Team Stats and Deep Stats presentation components from `src/app/team/page.js`.
+- [ ] Extract Team Page data loading and mutation handlers into a focused hook while retaining the same Supabase queries and error states.
+- [ ] Verify the refactored Team Page on desktop and mobile: roster save, review history, Team Stats, Deep Stats, and team deletion.
+
+### Match Review dashboard decomposition
+
+- [ ] Move game-specific extraction-to-review mapping functions from `src/app/team/[id]/dashboard/page.js` into a tested server-safe utility module.
+- [ ] Extract screenshot resizing/upload and extraction-status UI from the Match Review page into focused modules/components.
+- [ ] Extract review editor fields and player-row editing components from the Match Review page.
+- [ ] Extract comparison, overview, and game-specific presentation components that still live in the Match Review page.
+- [ ] Extract Match Review data loading, save, and deletion handlers into a focused hook while retaining the same Supabase payloads and URL behavior.
+- [ ] Verify the refactored Match Review flow for all five priority games: upload/manual fallback, edit, save, reload, comparison, and mobile layout.
+
+### Extractor and API organization
+
+- [ ] Split game-specific extraction prompts from `src/lib/postgame-extraction.js` into dedicated modules while preserving exact prompt selection.
+- [ ] Split post-extraction normalization/completion rules from prompt definitions and extend fixture coverage for every moved game.
+- [ ] Extract API image validation, reference-asset loading, Gemini request/retry logic, and response normalization from `src/app/api/postgame/extract/route.js` into focused server modules.
+- [ ] Re-run extractor API verification and all regression fixtures after each extractor/API extraction.
+
+### Dependency and runtime hygiene
+
+- [ ] Update Next.js to the latest compatible 15.5 patch release and re-run lint, build, and extractor checks; do not use `npm audit fix --force`.
+- [ ] Reassess the PostCSS audit finding after the controlled Next.js update and document the remaining status.
+- [ ] Resolve the Node ESM warning from direct test imports without breaking the CommonJS Tailwind configuration.

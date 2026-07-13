@@ -6,29 +6,11 @@ import { useParams, useRouter } from "next/navigation";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
 import { getCurrentUser } from "@/lib/auth-session";
+import { formatMessageTime, getInitials } from "@/lib/scrim-utils";
 import { supabase } from "@/lib/supabase";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const CHAT_ENABLED_STATUSES = new Set(["pending", "confirmed"]);
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
-function formatMessageTime(value) {
-  if (!value) return "";
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 function getScrimTitle(scrim) {
   const postingTeam = scrim?.posting_team?.name || "Posting Team";

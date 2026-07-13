@@ -8,6 +8,7 @@
     "start": "next start",
     "fetch:mr-costumes": "node scripts/fetch-marvel-rivals-costumes.mjs",
     "download:mr-icons": "node scripts/download-marvel-rivals-costume-icons.mjs",
+    "test": "TZ=UTC node scripts/test-scrim-utils.mjs && node scripts/test-game-asset-paths.mjs && node scripts/test-team-review-kpis.mjs && node scripts/test-postgame-field-completion.mjs && node scripts/verify-postgame-regression-fixtures.mjs",
     "verify:postgame-extract-api": "node scripts/verify-postgame-extract-api.mjs",
     "verify:postgame-regression": "node scripts/verify-postgame-regression-fixtures.mjs",
     "lint": "eslint"

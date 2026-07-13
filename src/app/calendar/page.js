@@ -9,6 +9,7 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 import { getCurrentUser } from "@/lib/auth-session";
 import { buildIcsCalendar, formatRankRange } from "@/lib/calendar-ics";
 import { normalizeTeamLocation } from "@/lib/game-options";
+import { formatScrimTime, getDateInputValue, getInitials } from "@/lib/scrim-utils";
 import { supabase } from "@/lib/supabase";
 
 const MONTHS = [
@@ -24,37 +25,10 @@ const DISCORD_LOOKAHEAD_OPTIONS = [
   { label: "Next 30 days", value: 30 },
 ];
 
-function getDateInputValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function getInitials(name = "") {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-}
-
 function getLocalTimeZoneLabel() {
   return new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
     .formatToParts(new Date())
     .find((part) => part.type === "timeZoneName")?.value || "Local";
-}
-
-function formatScrimTime(value) {
-  if (!value) return "Time TBD";
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 function getScrimUrl(scrimId) {
