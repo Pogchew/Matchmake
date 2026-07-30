@@ -1114,16 +1114,11 @@ function averageByOutcome(reviews, outcome, getValue) {
 }
 
 function buildLeagueInsights(sortedReviews = []) {
-  const chronologicalReviews = [...sortedReviews].reverse();
   const getDiff = (review, statKeys, rowKeys) => {
     const ours = getReviewStat(review, statKeys, rowKeys);
     const theirs = getReviewStat(review, statKeys, rowKeys, { side: "opponent" });
     return ours === null || theirs === null ? null : ours - theirs;
   };
-  const trend = (statKeys, rowKeys) => chronologicalReviews
-    .map((review) => getDiff(review, statKeys, rowKeys))
-    .filter((value) => value !== null)
-    .slice(-6);
   const roles = ["Top", "Jungle", "Mid", "ADC", "Support"];
   const roleStats = roles.map((role) => {
     const rows = sortedReviews.flatMap((review) => getReviewRows(review).filter((row) => row.role === role));
@@ -1140,12 +1135,6 @@ function buildLeagueInsights(sortedReviews = []) {
   });
 
   return {
-    trends: [
-      { label: "Kill Diff", values: trend(["total_kills", "team_kills"], ["kills", "k"]) },
-      { label: "Gold Diff", values: trend("total_gold", "gold") },
-      { label: "Damage Diff", values: trend("total_damage_to_champions", "damage_to_champions") },
-      { label: "Death Diff", values: trend(["total_deaths", "team_deaths"], ["deaths", "d"]) },
-    ],
     roleStats,
     winLoss: [
       {
@@ -1724,7 +1713,38 @@ function GameOverviewStats({ stats }) {
           wins={stats.wins}
         />
       </section>
+
+      {stats.gameTitle === "League of Legends" && (
+        <ChampionUsagePortraits analytics={stats.characterComfort} gameTitle={stats.gameTitle} />
+      )}
     </div>
+  );
+}
+
+function ChampionUsagePortraits({ analytics, gameTitle }) {
+  const champions = analytics?.ourTopCharacters?.slice(0, 5) || [];
+
+  return (
+    <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+      <p className="font-label-small text-label-small text-on-surface-variant">Champion usage</p>
+      {champions.length ? (
+        <div
+          aria-label={champions.map((champion) => `${champion.name}, ${champion.games} picks`).join("; ")}
+          className="mt-sm flex flex-wrap gap-sm"
+        >
+          {champions.map((champion) => (
+            <div className="relative" key={champion.name} title={`${champion.name} · ${champion.games} picks`}>
+              <PickAvatar gameTitle={gameTitle} name={champion.name} />
+              <span className="absolute -bottom-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 font-label-small text-[10px] text-on-primary">
+                {champion.games}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-sm font-body-sub text-body-sub text-on-surface-variant">No saved champion picks yet.</p>
+      )}
+    </section>
   );
 }
 
@@ -2287,43 +2307,6 @@ function ImpactDifferentialCard({ stat }) {
   );
 }
 
-function TrendSparkline({ label, values }) {
-  const hasValues = values.length > 0;
-  const min = hasValues ? Math.min(...values) : 0;
-  const max = hasValues ? Math.max(...values) : 1;
-  const range = Math.max(1, max - min);
-  const direction = values.length >= 2 ? values.at(-1) - values[0] : null;
-
-  return (
-    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
-      <div className="mb-sm flex items-center justify-between">
-        <div>
-          <p className="font-label-bold text-label-bold text-on-surface">{label}</p>
-          <p className="mt-0.5 font-label-small text-label-small text-on-surface-variant">
-            {Number.isFinite(direction) ? (direction >= 0 ? "Improving" : "Declining") : "Needs more games"}
-          </p>
-        </div>
-        <p className="font-label-bold text-label-bold text-primary">{hasValues ? formatSignedValue(values.at(-1), 0) : "—"}</p>
-      </div>
-      <div className="flex h-14 items-end gap-xs">
-        {hasValues ? values.map((value, index) => (
-          <div
-            className={`flex-1 rounded-t-md ${value >= 0 ? "bg-primary" : "bg-error"}`}
-            key={`${label}-${index}`}
-            style={{ height: `${22 + ((value - min) / range) * 34}px` }}
-            title={`${label}: ${formatSignedValue(value, 0)}`}
-          />
-        )) : (
-          <div className="flex h-full w-full items-center justify-center rounded-xl bg-surface-container-lowest font-body-sub text-body-sub text-on-surface-variant">
-            Save more reviews
-          </div>
-        )}
-      </div>
-      <p className="mt-xs font-label-small text-label-small text-on-surface-variant">Last {values.length || 0} reviewed games</p>
-    </div>
-  );
-}
-
 function LeagueRoleCard({ role }) {
   return (
     <div className="grid grid-cols-[76px_1fr] items-center gap-sm rounded-2xl border border-outline-variant/25 bg-surface-container-low p-sm">
@@ -2655,12 +2638,6 @@ function LeagueDeepStats({ stats }) {
   const damageStat = stats.teamOutput.find((stat) => stat.label === "Damage to Champions");
   const goldDiff = stats.differentials.find((stat) => stat.label === "Average Gold Differential");
   const damageDiff = stats.differentials.find((stat) => stat.label === "Average Damage Differential");
-  const leagueTrendLabels = {
-    "Kill Diff": "Fighting Trend",
-    "Gold Diff": "Economy Trend",
-    "Damage Diff": "Pressure Trend",
-    "Death Diff": "Cleanliness Trend",
-  };
 
   return (
     <div className="grid gap-lg">
@@ -2704,15 +2681,6 @@ function LeagueDeepStats({ stats }) {
         <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
           <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
           <StatKpiCard label="Gold / Min" value={formatDeepStatValue(goldPerMinStat?.ours)} />
-        </div>
-      </section>
-
-      <section>
-        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Last Games Trend</h3>
-        <div className="grid grid-cols-1 gap-sm md:grid-cols-2 lg:grid-cols-4">
-          {stats.league?.trends.map((trend) => (
-            <TrendSparkline key={trend.label} label={leagueTrendLabels[trend.label] || trend.label} values={trend.values} />
-          ))}
         </div>
       </section>
 

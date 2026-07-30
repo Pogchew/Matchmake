@@ -13,6 +13,7 @@ const LEAGUE_CHAMPION_FILE_ALIASES = {
   missfortune: "MissFortune",
   monkeyking: "MonkeyKing",
   nunuandwillump: "Nunu",
+  nunuwillump: "Nunu",
   reksai: "RekSai",
   renataglasc: "Renata",
   tahmkench: "TahmKench",

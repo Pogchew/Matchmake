@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { signInWithPasswordSafely } from "@/lib/auth-login";
 import { storeAuthSession } from "@/lib/auth-session";
 import { supabaseAuth } from "@/lib/supabase";
 
@@ -20,7 +21,7 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabaseAuth.auth.signInWithPassword({ email, password });
+    const { data, error } = await signInWithPasswordSafely(supabaseAuth, { email, password });
 
     if (error || !data.session) {
       setErrorMessage(error?.message || "We could not start an owner session.");

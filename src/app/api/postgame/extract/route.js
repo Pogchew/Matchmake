@@ -3,7 +3,9 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { completePostgameExtractionFields, getCounterStrikeExtractionPrompt, getDeadlockExtractionPrompt, getHonorOfKingsExtractionPrompt, getLeagueExtractionPrompt, getMarvelRivalsExtractionPrompt, getOverwatchExtractionPrompt, getRocketLeagueExtractionPrompt, getValorantExtractionPrompt, normalizeMarvelRivalsExtraction } from "@/lib/postgame-extraction";
-import { VALORANT_AGENT_OPTIONS } from "@/lib/game-assets/generated-character-options";
+import { LEAGUE_CHAMPION_OPTIONS, VALORANT_AGENT_OPTIONS } from "@/lib/game-assets/generated-character-options";
+import { getLeagueChampionReferenceText, normalizeLeagueChampionName } from "@/lib/game-assets/league-champions";
+import { getLeagueChampionRecognitionPrompt, mergeLeagueChampionRecognition } from "@/lib/league-champion-recognition";
 import { matchMarvelRivalsCostumeIcons } from "@/lib/server/marvel-rivals-costume-matcher";
 
 export const runtime = "nodejs";
@@ -18,13 +20,17 @@ const GEMINI_MODELS = [
 
 const PRIMARY_MAX_OUTPUT_TOKENS = 12000;
 const FALLBACK_MAX_OUTPUT_TOKENS = 8000;
-const SERVER_TIME_BUDGET_MS = 70000;
+const LEAGUE_CHAMPION_MAX_OUTPUT_TOKENS = 2500;
+const SERVER_TIME_BUDGET_MS = 57000;
 const MODEL_REQUEST_TIMEOUT_MS = 52000;
 const MINIMUM_ATTEMPT_TIME_MS = 5000;
 const MAX_PRIMARY_MODEL_ATTEMPTS = 2;
 const MAX_FALLBACK_MODEL_ATTEMPTS = 2;
 const GEMINI_MAX_IMAGE_SIDE = 1400;
 const GEMINI_IMAGE_QUALITY = 72;
+const LEAGUE_CHAMPION_MAX_IMAGE_SIDE = 2400;
+const LEAGUE_CHAMPION_IMAGE_QUALITY = 90;
+const LEAGUE_CHAMPION_MINIMUM_TIME_MS = 8000;
 const AUTH_ACCESS_TOKEN_COOKIE = "matchmake-access-token";
 const DEFAULT_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const MULTIPART_UPLOAD_OVERHEAD_BYTES = 256 * 1024;
@@ -51,13 +57,16 @@ Matchmake extraction priority:
 - Preserve row order and team grouping exactly as shown.
 - Return only stats visible in the uploaded scoreboard screenshot.
 - Every returned player row must include a non-empty champion, agent, hero, or character/build identity field for that game.
-- If a champion, agent, hero, or character identity is uncertain, return the best visible guess; if no identity can be read, use "Unidentified <character type> <row number>", keep the player stats, and add that field to fields_needing_manual_review.
 - Do not leave saved row stat fields empty. If a visible stat is unreadable, use "Needs review" and add that field to fields_needing_manual_review. Use numeric 0 only when the screenshot visibly shows 0.
 - Return compact valid JSON only. Do not explain.
 `.trim();
 
-function buildPrimaryPrompt(basePrompt) {
-  return `${ROW_FIRST_EXTRACTION_RULES}\n\n${basePrompt}`;
+function buildPrimaryPrompt(basePrompt, gameTitle) {
+  const identityRule = gameTitle === "League of Legends"
+    ? "League statistics-pass override: do not identify champions. Use the required unidentified champion placeholders so the separate portrait-recognition pass can merge by row."
+    : "If character identity is uncertain, return the best visible guess; if no identity can be read, use the game's unidentified placeholder and add that field to fields_needing_manual_review.";
+
+  return `${ROW_FIRST_EXTRACTION_RULES}\n${identityRule}\n\n${basePrompt}`;
 }
 
 function getFallbackExtractionPrompt(gameTitle) {
@@ -75,6 +84,9 @@ function getFallbackExtractionPrompt(gameTitle) {
   };
 
   const rowFields = rowFieldsByGame[gameTitle] || "player_name, character, kills, deaths, assists";
+  const identityRule = gameTitle === "League of Legends"
+    ? "- This is the statistics pass only. Do not identify champions. Set champion to \"Unidentified champion <global row number>\" for every row and add each champion field path to fields_needing_manual_review."
+    : "- If character identity is uncertain, return the best visible guess; if no identity can be read, use \"Unidentified character <row number>\" and add the field path to fields_needing_manual_review.";
 
   return `
 Extract only match metadata, team grouping, and visible player rows from this ${gameTitle} post-game screenshot.
@@ -87,7 +99,7 @@ Fallback mode rules:
 - Preserve team grouping when visually clear.
 - If team grouping is unclear, still return rows[] and set manual_review_required=true.
 - Every returned row must include a non-empty champion, agent, hero, or character/build identity field for this game.
-- If character identity is uncertain, return the best visible guess; if no identity can be read, use "Unidentified character <row number>" and add the field path to fields_needing_manual_review.
+${identityRule}
 - Do not leave saved row stat fields empty. If a visible stat is unreadable, use "Needs review" and add the field path to fields_needing_manual_review. Use numeric 0 only when the screenshot visibly shows 0.
 - Only use values visible in the screenshot.
 - Convert comma numbers to integers and percentages to numbers.
@@ -348,6 +360,7 @@ const MARVEL_RIVALS_HERO_REFERENCE_FILE = "marvel-rivals-hero-reference.png";
 const MARVEL_RIVALS_COSTUME_DATA_PATH = path.join(process.cwd(), "data", "marvel-rivals-costumes.json");
 const MARVEL_RIVALS_API_ORIGIN = "https://marvelrivalsapi.com";
 const VALORANT_AGENT_DIR = path.join(process.cwd(), "public", "valorant", "agents");
+const LEAGUE_CHAMPION_REFERENCE_PATH = path.join(process.cwd(), "public", "lol", "reference", "league-champion-reference.png");
 const DEADLOCK_REFERENCE_DIR = path.join(process.cwd(), "public", "deadlock", "reference");
 // Reference sheets are sent in priority order. Each entry is { file, mimeType, label }.
 // The labeled grid sheet is the primary lookup; the in-game roster sheet provides
@@ -507,6 +520,28 @@ async function buildLabeledIconReferencePart({ title, entries, columns = 5, icon
       data: buffer.toString("base64"),
     },
   };
+}
+
+async function getLeagueReferenceParts(gameTitle) {
+  if (gameTitle !== "League of Legends") return [];
+
+  const parts = [{
+    text: [
+      "League champion portrait reference metadata:",
+      `The attached labeled sheet and this exact ${LEAGUE_CHAMPION_OPTIONS.length}-champion list match the champion selector in Matchmake.`,
+      "Identify each row champion from its small portrait, not from role, player name, items, stats, or color.",
+      "Return only an exact name from this list. If no portrait match is confident, return null and mark the row for manual review.",
+      getLeagueChampionReferenceText(),
+    ].join("\n"),
+  }];
+
+  try {
+    parts.push(await imageReferencePart(LEAGUE_CHAMPION_REFERENCE_PATH, "image/png"));
+  } catch (error) {
+    console.warn("League champion reference sheet is unavailable; continuing with the exact text list.", error);
+  }
+
+  return parts;
 }
 
 async function getValorantReferenceParts(gameTitle) {
@@ -722,7 +757,11 @@ async function callGeminiModels({ apiKey, requestBody, requestStartedAt, attempt
   let geminiResponse = null;
   let lastErrorText = "";
   let attempted = 0;
-  const maxAttempts = mode === "fallback_row_only" ? MAX_FALLBACK_MODEL_ATTEMPTS : MAX_PRIMARY_MODEL_ATTEMPTS;
+  const maxAttempts = mode === "fallback_row_only"
+    ? MAX_FALLBACK_MODEL_ATTEMPTS
+    : mode === "league_champion_recognition"
+      ? 1
+      : MAX_PRIMARY_MODEL_ATTEMPTS;
 
   for (const model of [...new Set(GEMINI_MODELS)]) {
     if (attempted >= maxAttempts) {
@@ -784,11 +823,12 @@ async function callGeminiModels({ apiKey, requestBody, requestStartedAt, attempt
 }
 
 function getPrimaryReferencePartsForGame(gameTitle, referenceParts) {
+  if (gameTitle === "League of Legends") return [];
   return referenceParts;
 }
 
 function getReferenceDebugMeta(gameTitle, referenceParts, primaryReferenceParts, costumeMetadataPart, deadlockHeroMetadataPart) {
-  if (gameTitle !== "Marvel Rivals" && gameTitle !== "Deadlock" && gameTitle !== "Valorant") return {};
+  if (gameTitle !== "Marvel Rivals" && gameTitle !== "Deadlock" && gameTitle !== "Valorant" && gameTitle !== "League of Legends") return {};
 
   return {
     referencePartsAvailable: referenceParts.length,
@@ -808,6 +848,48 @@ let valorantAgentIconReferenceCache = null;
 
 function addManualReviewField(fields, field) {
   if (field && !fields.includes(field)) fields.push(field);
+}
+
+function normalizeLeagueExtraction(rawJson = {}) {
+  const manualReviewFields = Array.isArray(rawJson.fields_needing_manual_review)
+    ? [...rawJson.fields_needing_manual_review]
+    : [];
+
+  const normalizeRow = (row = {}, rowIndex, pathPrefix) => {
+    const canonicalChampion = normalizeLeagueChampionName(row.champion);
+    if (canonicalChampion) return { ...row, champion: canonicalChampion };
+
+    addManualReviewField(manualReviewFields, `${pathPrefix}.champion`);
+    return {
+      ...row,
+      champion: `Unidentified champion ${rowIndex}`,
+      needs_manual_review: true,
+    };
+  };
+
+  const rows = Array.isArray(rawJson.rows)
+    ? rawJson.rows.map((row, index) => normalizeRow(row, Number(row?.row_index) || index + 1, `rows[${index}]`))
+    : rawJson.rows;
+  let flatIndex = 0;
+  const teams = Array.isArray(rawJson.teams)
+    ? rawJson.teams.map((team, teamIndex) => ({
+      ...team,
+      players: Array.isArray(team?.players)
+        ? team.players.map((row, playerIndex) => {
+          flatIndex += 1;
+          return normalizeRow(row, Number(row?.row_index) || flatIndex, `teams[${teamIndex}].players[${playerIndex}]`);
+        })
+        : team?.players,
+    }))
+    : rawJson.teams;
+
+  return {
+    ...rawJson,
+    rows,
+    teams,
+    fields_needing_manual_review: manualReviewFields,
+    manual_review_required: Boolean(rawJson.manual_review_required || manualReviewFields.length),
+  };
 }
 
 function compactValorantAgentKey(value = "") {
@@ -1068,6 +1150,7 @@ async function readGeminiText(geminiResponse) {
 
 async function normalizeExtractionResult({ gameTitle, parsedJson, imageBuffer }) {
   let normalizedJson = gameTitle === "Valorant" ? normalizeValorantExtraction(parsedJson) : parsedJson;
+  normalizedJson = gameTitle === "League of Legends" ? normalizeLeagueExtraction(normalizedJson) : normalizedJson;
   normalizedJson = gameTitle === "Marvel Rivals" ? normalizeMarvelRivalsExtraction(normalizedJson) : normalizedJson;
 
   if (gameTitle === "Marvel Rivals") {
@@ -1114,6 +1197,176 @@ async function optimizeImageForGemini(imageBuffer, originalMimeType) {
       mimeType: originalMimeType,
     };
   }
+}
+
+function getExtractionRowCount(extraction = {}) {
+  const rows = Array.isArray(extraction.rows) ? extraction.rows.length : 0;
+  if (rows) return rows;
+  return Array.isArray(extraction.teams)
+    ? extraction.teams.reduce((total, team) => total + (Array.isArray(team?.players) ? team.players.length : 0), 0)
+    : 0;
+}
+
+async function optimizeImageForLeagueChampionRecognition(imageBuffer, originalMimeType) {
+  try {
+    const optimized = await sharp(imageBuffer, { failOn: "none" })
+      .rotate()
+      .resize({
+        width: LEAGUE_CHAMPION_MAX_IMAGE_SIDE,
+        height: LEAGUE_CHAMPION_MAX_IMAGE_SIDE,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .sharpen()
+      .jpeg({ quality: LEAGUE_CHAMPION_IMAGE_QUALITY, mozjpeg: true })
+      .toBuffer();
+
+    return { buffer: optimized, mimeType: "image/jpeg" };
+  } catch (error) {
+    console.warn("Could not optimize the League screenshot for champion recognition; using the original image.", {
+      mimeType: originalMimeType,
+      error: error.message,
+    });
+    return { buffer: imageBuffer, mimeType: originalMimeType };
+  }
+}
+
+async function runLeagueChampionRecognition({
+  apiKey,
+  extraction,
+  imageBuffer,
+  sourceMimeType,
+  referenceParts,
+  requestStartedAt,
+  attempts,
+}) {
+  const rowCount = getExtractionRowCount(extraction);
+  const remainingMs = SERVER_TIME_BUDGET_MS - (Date.now() - requestStartedAt);
+  if (!rowCount) {
+    return {
+      data: extraction,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "skipped_no_rows",
+          attemptedRows: 0,
+        },
+      },
+    };
+  }
+  if (remainingMs < LEAGUE_CHAMPION_MINIMUM_TIME_MS) {
+    return {
+      data: extraction,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "skipped_time_budget",
+          attemptedRows: rowCount,
+        },
+      },
+    };
+  }
+
+  const recognitionImage = await optimizeImageForLeagueChampionRecognition(imageBuffer, sourceMimeType);
+  const recognitionParts = buildPromptParts({
+    prompt: getLeagueChampionRecognitionPrompt(rowCount),
+    referenceParts,
+    imageType: recognitionImage.mimeType,
+    base64Image: recognitionImage.buffer.toString("base64"),
+    includeReferences: true,
+  });
+  const recognitionBody = buildGeminiRequestBody(recognitionParts, LEAGUE_CHAMPION_MAX_OUTPUT_TOKENS);
+  const { geminiResponse, lastErrorText } = await callGeminiModels({
+    apiKey,
+    requestBody: recognitionBody,
+    requestStartedAt,
+    attempts,
+    mode: "league_champion_recognition",
+  });
+
+  if (!geminiResponse?.ok) {
+    return {
+      data: extraction,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "request_failed",
+          attemptedRows: rowCount,
+          responseStatus: geminiResponse?.status || null,
+          errorCode: lastErrorText.includes("request_timeout") ? "request_timeout" : "request_failed",
+        },
+      },
+    };
+  }
+
+  const rawText = await readGeminiText(geminiResponse);
+  if (!rawText) {
+    return {
+      data: extraction,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "empty_response",
+          attemptedRows: rowCount,
+        },
+      },
+    };
+  }
+
+  try {
+    const recognition = parseGeminiJson(rawText);
+    const merged = mergeLeagueChampionRecognition(extraction, recognition);
+    return {
+      data: merged.data,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "completed",
+          rawTextLength: rawText.length,
+          referencePartsSent: referenceParts.length,
+          ...merged.summary,
+        },
+      },
+    };
+  } catch (error) {
+    console.error("League champion recognition returned unparseable JSON", {
+      error: error.message,
+      rawTextLength: rawText.length,
+    });
+    return {
+      data: extraction,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "parse_failed",
+          attemptedRows: rowCount,
+          rawTextLength: rawText.length,
+        },
+      },
+    };
+  }
+}
+
+async function applyPostExtractionRecognition({
+  apiKey,
+  gameTitle,
+  extraction,
+  imageBuffer,
+  sourceMimeType,
+  leagueReferenceParts,
+  requestStartedAt,
+  attempts,
+}) {
+  if (gameTitle !== "League of Legends") return { data: extraction, meta: {} };
+  return runLeagueChampionRecognition({
+    apiKey,
+    extraction,
+    imageBuffer,
+    sourceMimeType,
+    referenceParts: leagueReferenceParts,
+    requestStartedAt,
+    attempts,
+  });
 }
 
 async function getDeadlockSupplementalParts(gameTitle, imageBuffer) {
@@ -1163,14 +1416,15 @@ async function getDeadlockSupplementalParts(gameTitle, imageBuffer) {
   }
 }
 
-async function runFallbackExtraction({ apiKey, gameTitle, imageType, base64Image, imageBuffer, requestStartedAt, attempts, fallbackReason }) {
+async function runFallbackExtraction({ apiKey, gameTitle, imageType, base64Image, imageBuffer, referenceParts = [], requestStartedAt, attempts, fallbackReason }) {
   const supplementalParts = await getDeadlockSupplementalParts(gameTitle, imageBuffer);
   const fallbackParts = buildPromptParts({
     prompt: getFallbackExtractionPrompt(gameTitle),
+    referenceParts,
     supplementalParts,
     imageType,
     base64Image,
-    includeReferences: false,
+    includeReferences: referenceParts.length > 0,
   });
   const fallbackBody = buildGeminiRequestBody(fallbackParts, FALLBACK_MAX_OUTPUT_TOKENS);
   const { geminiResponse, lastErrorText } = await callGeminiModels({
@@ -1310,6 +1564,7 @@ export async function POST(request) {
     const optimizedImage = await optimizeImageForGemini(imageBuffer, sourceMimeType);
     const base64Image = optimizedImage.buffer.toString("base64");
     const referenceParts = [
+      ...(await getLeagueReferenceParts(gameTitle)),
       ...(await getValorantReferenceParts(gameTitle)),
       ...(await getMarvelRivalsReferenceParts(gameTitle)),
       ...(await getDeadlockReferenceParts(gameTitle)),
@@ -1321,7 +1576,7 @@ export async function POST(request) {
     const referenceDebugMeta = getReferenceDebugMeta(gameTitle, referenceParts, primaryReferenceParts, costumeMetadataPart, deadlockHeroMetadataPart);
     const modelAttempts = [];
     const promptParts = buildPromptParts({
-      prompt: buildPrimaryPrompt(getPrompt()),
+      prompt: buildPrimaryPrompt(getPrompt(), gameTitle),
       referenceParts: primaryReferenceParts,
       costumeMetadataPart,
       deadlockHeroMetadataPart,
@@ -1362,19 +1617,31 @@ export async function POST(request) {
           imageType: optimizedImage.mimeType,
           base64Image,
           imageBuffer,
+          referenceParts: gameTitle === "League of Legends" ? primaryReferenceParts : [],
           requestStartedAt,
           attempts: modelAttempts,
           fallbackReason: "model_overloaded",
         });
 
         if (fallback.ok) {
+          const recognition = await applyPostExtractionRecognition({
+            apiKey,
+            gameTitle,
+            extraction: fallback.data,
+            imageBuffer,
+            sourceMimeType,
+            leagueReferenceParts: referenceParts,
+            requestStartedAt,
+            attempts: modelAttempts,
+          });
           return NextResponse.json({
-            data: fallback.data,
+            data: recognition.data,
             meta: {
               durationMs: Date.now() - requestStartedAt,
               attempts: modelAttempts,
               ...referenceDebugMeta,
               ...fallback.meta,
+              ...recognition.meta,
             },
           });
         }
@@ -1404,19 +1671,31 @@ export async function POST(request) {
         imageType: optimizedImage.mimeType,
         base64Image,
         imageBuffer,
+        referenceParts: gameTitle === "League of Legends" ? primaryReferenceParts : [],
         requestStartedAt,
         attempts: modelAttempts,
         fallbackReason: "empty_response",
       });
 
       if (fallback.ok) {
+        const recognition = await applyPostExtractionRecognition({
+          apiKey,
+          gameTitle,
+          extraction: fallback.data,
+          imageBuffer,
+          sourceMimeType,
+          leagueReferenceParts: referenceParts,
+          requestStartedAt,
+          attempts: modelAttempts,
+        });
         return NextResponse.json({
-          data: fallback.data,
+          data: recognition.data,
           meta: {
             durationMs: Date.now() - requestStartedAt,
             attempts: modelAttempts,
             ...referenceDebugMeta,
             ...fallback.meta,
+            ...recognition.meta,
           },
         });
       }
@@ -1440,6 +1719,16 @@ export async function POST(request) {
     try {
       const parsedJson = parseGeminiJson(rawText);
       const normalizedJson = await normalizeExtractionResult({ gameTitle, parsedJson, imageBuffer });
+      const recognition = await applyPostExtractionRecognition({
+        apiKey,
+        gameTitle,
+        extraction: normalizedJson,
+        imageBuffer,
+        sourceMimeType,
+        leagueReferenceParts: referenceParts,
+        requestStartedAt,
+        attempts: modelAttempts,
+      });
 
       if (gameTitle === "Marvel Rivals") {
         extractorDebugLog("Marvel Rivals extraction normalized", {
@@ -1473,7 +1762,7 @@ export async function POST(request) {
       }
 
       return NextResponse.json({
-        data: normalizedJson,
+        data: recognition.data,
         meta: {
           durationMs: Date.now() - requestStartedAt,
           attempts: modelAttempts,
@@ -1481,6 +1770,7 @@ export async function POST(request) {
           usedFallback: false,
           fallbackReason: null,
           extractionMode: "primary_row_first",
+          ...recognition.meta,
         },
       });
     } catch (parseError) {
@@ -1498,19 +1788,31 @@ export async function POST(request) {
         imageType: optimizedImage.mimeType,
         base64Image,
         imageBuffer,
+        referenceParts: gameTitle === "League of Legends" ? primaryReferenceParts : [],
         requestStartedAt,
         attempts: modelAttempts,
         fallbackReason: "parse_failed",
       });
 
       if (fallback.ok) {
+        const recognition = await applyPostExtractionRecognition({
+          apiKey,
+          gameTitle,
+          extraction: fallback.data,
+          imageBuffer,
+          sourceMimeType,
+          leagueReferenceParts: referenceParts,
+          requestStartedAt,
+          attempts: modelAttempts,
+        });
         return NextResponse.json({
-          data: fallback.data,
+          data: recognition.data,
           meta: {
             durationMs: Date.now() - requestStartedAt,
             attempts: modelAttempts,
             ...referenceDebugMeta,
             ...fallback.meta,
+            ...recognition.meta,
           },
         });
       }

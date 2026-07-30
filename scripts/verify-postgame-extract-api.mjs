@@ -164,6 +164,12 @@ async function verifyValidImageRequest(authCookie) {
 
   assert.equal(response.status, EXPECT_VALID_STATUS, `valid image request status: ${payload.error || response.statusText}`);
   assert.ok(response.status !== 400 && response.status !== 401 && response.status !== 413, "valid image request passed upload/auth guards");
+  if (response.status === 200 && VALID_GAME_TITLE === "League of Legends") {
+    const recognition = payload?.meta?.leagueChampionRecognition;
+    assert.equal(recognition?.mode, "separate_pass", "League extraction reports the separate champion-recognition pass");
+    assert.equal(payload?.meta?.referencePartsSent, 0, "League statistics pass does not receive champion reference images");
+    console.log(`League champion recognition: ${recognition.status} (${recognition.accepted_rows ?? 0} accepted, ${recognition.review_rows ?? 0} review)`);
+  }
   console.log(`valid image request: ${response.status} ${response.statusText || "OK"}`);
 }
 

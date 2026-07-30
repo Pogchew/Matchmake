@@ -853,21 +853,23 @@ parser_confidence, manual_edit_required.
 
 export function getLeagueExtractionPrompt() {
   return `
-Analyze this League of Legends post-game scoreboard screenshot and extract only visible scoreboard data into valid JSON.
+Analyze this League of Legends post-game scoreboard screenshot and extract only visible match, team, and player statistics into valid JSON.
+Champion portrait recognition runs in a separate second pass.
 
 Rules:
 - Return JSON only.
 - Do not explain.
 - Do not guess hidden stats.
-- Do not use external League API knowledge.
+- Do not identify, infer, or guess champion names in this statistics pass.
+- Set every player row's champion to "Unidentified champion <global row number>" and add that champion field path to fields_needing_manual_review. The separate recognition pass will replace confident matches.
 - Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
-- Every player row must include a non-empty champion value. If the champion cannot be identified, use "Unidentified champion <row number>" and add the champion field path to fields_needing_manual_review.
+- Every player row must include the unidentified champion placeholder above so row alignment is preserved for the recognition pass.
 - Preserve both teams separately.
 - Extract all visible player rows.
 - Split K/D/A into kills, deaths, assists. For example "12 / 2 / 3" means kills=12, deaths=2, assists=3.
 - Convert numbers like "12,234" into integers.
 - Only extract objectives, items, spells, damage, or gold if clearly visible.
-- If uncertain, use "Needs review" or the unidentified champion placeholder above and add the field to fields_needing_manual_review.
+- If a statistic is uncertain, use "Needs review" and add the field to fields_needing_manual_review.
 - Keep the response compact. Do not include fields that are not in the schema below.
 - The screenshot may show "TEAM 1" and "TEAM 2"; keep those as separate team rows.
 - In the common League post-game scoreboard style, the first large numeric column under the crossed-swords icon is damage to champions, and the second large numeric column under the gold/coin icon is gold. Do not swap these columns.

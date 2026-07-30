@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import MatchmakeLogo from "@/components/MatchmakeLogo";
 import MaterialSymbol from "@/components/MaterialSymbol";
+import { signInWithPasswordSafely } from "@/lib/auth-login";
 import { storeAuthSession } from "@/lib/auth-session";
 import { GAME_OPTIONS } from "@/lib/game-options";
 import { supabaseAuth } from "@/lib/supabase";
@@ -210,7 +211,7 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabaseAuth.auth.signInWithPassword({
+    const { data, error } = await signInWithPasswordSafely(supabaseAuth, {
       email,
       password,
     });

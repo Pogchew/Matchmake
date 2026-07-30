@@ -9,6 +9,7 @@ import MaterialSymbol from "@/components/MaterialSymbol";
 import { AUTH_CHANGED_EVENT, getCurrentUser } from "@/lib/auth-session";
 import { trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import {
+  SCRIM_DURATION_HOURS,
   formatGamesCount,
   formatScrimTimeWithZone as formatScrimTime,
   getDateInputValue,

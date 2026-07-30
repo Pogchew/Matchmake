@@ -8,17 +8,18 @@
     "start": "next start",
     "fetch:mr-costumes": "node scripts/fetch-marvel-rivals-costumes.mjs",
     "download:mr-icons": "node scripts/download-marvel-rivals-costume-icons.mjs",
-    "test": "TZ=UTC node scripts/test-scrim-utils.mjs && node scripts/test-game-asset-paths.mjs && node scripts/test-team-review-kpis.mjs && node scripts/test-postgame-field-completion.mjs && node scripts/verify-postgame-regression-fixtures.mjs",
+    "build:lol-reference": "node scripts/build-league-champion-reference-sheet.mjs",
+    "test": "TZ=UTC node scripts/test-scrim-utils.mjs && node scripts/test-auth-login.mjs && node scripts/test-game-asset-paths.mjs && node scripts/test-league-champion-recognition.mjs && node scripts/test-team-review-kpis.mjs && node scripts/test-postgame-field-completion.mjs && node scripts/verify-postgame-regression-fixtures.mjs",
     "verify:postgame-extract-api": "node scripts/verify-postgame-extract-api.mjs",
     "verify:postgame-regression": "node scripts/verify-postgame-regression-fixtures.mjs",
     "lint": "eslint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
-    "next": "^15.5.9",
+    "next": "15.5.22",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "sharp": "^0.34.5"
+    "sharp": "0.35.3"
   },
   "devDependencies": {
     "@next/swc-wasm-nodejs": "^16.2.4",
@@ -26,8 +27,15 @@
     "@tailwindcss/forms": "^0.5.11",
     "autoprefixer": "^10.5.0",
     "eslint": "^9",
-    "eslint-config-next": "^15.5.9",
-    "postcss": "^8.5.10",
+    "eslint-config-next": "15.5.22",
+    "postcss": "8.5.25",
     "tailwindcss": "^3.4.17"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9",
+    "next": {
+      "postcss": "8.5.25",
+      "sharp": "0.35.3"
+    }
   }
 }
