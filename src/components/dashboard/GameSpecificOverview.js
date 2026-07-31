@@ -1,3 +1,5 @@
+import { orderCompositionRows } from "@/lib/dashboard/composition-order";
+
 const EMPTY_VALUE = "Not available";
 
 function normalizeNumber(value) {
@@ -99,8 +101,8 @@ function getScoreDiff(review = {}) {
   return teamScore - opponentScore;
 }
 
-function getComposition(rows = [], pickField = "hero") {
-  const picks = rows
+function getComposition(rows = [], pickField = "hero", roleOrder = []) {
+  const picks = orderCompositionRows(rows, roleOrder)
     .map((row) => row?.hero_confirmed || row?.[pickField] || row?.hero || row?.agent || row?.champion || row?.character)
     .filter((pick) => typeof pick === "string" && pick.trim().length > 0)
     .map((pick) => pick.trim());
@@ -135,7 +137,7 @@ function getStatValue(definition, context) {
   }
   if (definition.type === "teamKda") return getTeamKda(teamStats, teamRows);
   if (definition.type === "killsDeaths") return getKillsDeaths(teamStats, teamRows);
-  if (definition.type === "composition") return getComposition(teamRows, definition.pickField);
+  if (definition.type === "composition") return getComposition(teamRows, definition.pickField, context.roleOrder);
   if (definition.type === "roleContribution") return getTopContribution(teamRows, definition);
   if (definition.type === "duration") return definition.keys?.map((key) => teamStats?.[key]).find(Boolean) || review?.map_or_mode || EMPTY_VALUE;
   if (definition.type === "soulsPerMinute") {
@@ -238,7 +240,14 @@ export default function GameSpecificOverview({
 }) {
   const firstScreenStats = config?.firstScreenStats || config?.highlightStats || [];
   const secondaryStats = config?.secondaryStats || [];
-  const context = { opponentRows, opponentStats, review, teamRows, teamStats };
+  const context = {
+    opponentRows,
+    opponentStats,
+    review,
+    roleOrder: config?.roles || [],
+    teamRows,
+    teamStats,
+  };
 
   if (!firstScreenStats.length && !secondaryStats.length) return null;
 

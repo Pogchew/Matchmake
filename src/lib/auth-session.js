@@ -94,6 +94,12 @@ export async function getAccessTokenForSupabase() {
   return cachedAccessToken || null;
 }
 
+export async function refreshAccessTokenForSupabase() {
+  cachedAccessToken = "";
+  cachedAccessTokenExpiresAt = 0;
+  return getAccessTokenForSupabase();
+}
+
 export async function getCurrentUser() {
   const response = await fetch("/api/auth/user", {
     method: "GET",

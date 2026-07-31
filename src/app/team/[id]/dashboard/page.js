@@ -6,17 +6,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import ExportableReport from "@/components/dashboard/ExportableReport";
 import GameDashboardShell from "@/components/dashboard/GameDashboardShell";
 import GameSpecificOverview from "@/components/dashboard/GameSpecificOverview";
+import LeagueScrimCompare from "@/components/dashboard/LeagueScrimCompare";
 import ReviewDashboardTabs from "@/components/dashboard/ReviewDashboardTabs";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
+import { orderCompositionRows } from "@/lib/dashboard/composition-order";
 import { getDashboardConfig } from "@/lib/dashboard/game-dashboard-configs";
 import { compareReviewToAverage } from "@/lib/dashboard/review-comparison";
-import { getCurrentUser } from "@/lib/auth-session";
+import { getCurrentUser, refreshAccessTokenForSupabase } from "@/lib/auth-session";
 import { extractPostGameStats, POSTGAME_SCREENSHOT_STATS } from "@/lib/postgame-extraction";
 import { classifyExtractionFailure, trackLaunchAnalyticsEvent } from "@/lib/launch-analytics";
 import { getPickImagePath } from "@/lib/game-assets/asset-paths";
+import { executeSupabaseWriteWithAuthRetry, isSupabaseAuthWriteFailure } from "@/lib/supabase-write";
 import deadlockHeroAssets from "@/lib/game-assets/deadlock-hero-assets.json";
 import { MARVEL_RIVALS_HERO_OPTIONS } from "@/lib/game-assets/marvel-rivals-hero-assets";
 import {
@@ -1634,17 +1638,25 @@ export default function TeamDashboardPage() {
       series_game_count: seriesGameCount,
     };
 
-    const saveQuery = existingReview
+    const executeSave = () => existingReview
       ? supabase.from("team_match_reviews").update(payload).eq("id", existingReview.id).select("*").single()
       : supabase.from("team_match_reviews").insert(payload).select("*").single();
 
-    const { data: savedReview, error } = await saveQuery;
+    const {
+      data: savedReview,
+      error,
+      authRefreshFailed,
+    } = await executeSupabaseWriteWithAuthRetry(executeSave, refreshAccessTokenForSupabase);
 
     if (error) {
       console.error("Failed to save match review", error);
-      setErrorMessage(error.message.includes("team_match_reviews") || isMissingReviewGameNumberError(error) || isMissingReviewSeriesError(error)
-        ? "Run supabase_team_match_reviews.sql, supabase_team_match_reviews_game_number.sql, and supabase_team_match_reviews_series_id.sql in Supabase before saving reviews."
-        : error.message);
+      setErrorMessage(
+        authRefreshFailed || isSupabaseAuthWriteFailure({ error })
+          ? "Your session expired before this review could be saved. Sign in again; the extracted fields will stay on this page until you leave."
+          : error.message.includes("team_match_reviews") || isMissingReviewGameNumberError(error) || isMissingReviewSeriesError(error)
+            ? "Run supabase_team_match_reviews.sql, supabase_team_match_reviews_game_number.sql, and supabase_team_match_reviews_series_id.sql in Supabase before saving reviews."
+            : error.message
+      );
       setSaving(false);
       return;
     }
@@ -1754,6 +1766,7 @@ export default function TeamDashboardPage() {
     scrim,
     successMessage,
     team,
+    teamId: id,
     updateComp,
     updateField,
     updateStat,
@@ -1962,6 +1975,7 @@ function GameSeriesControl({
   seriesLosses,
   seriesWins,
   scrim,
+  teamId,
 }) {
   const isStandaloneSeries = !scrim && (isStandaloneNewReview || reviewId || reviewSeriesId);
 
@@ -1983,6 +1997,14 @@ function GameSeriesControl({
         </div>
 
         <div className="flex flex-wrap items-center gap-sm">
+          <Link
+            aria-label="Back to team page"
+            className="inline-flex h-10 items-center justify-center gap-xs rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-md font-label-bold text-label-bold text-on-surface-variant transition-colors hover:border-primary/40 hover:bg-surface-container-low hover:text-primary active:scale-95"
+            href={`/team?id=${teamId}`}
+          >
+            <MaterialSymbol className="text-[18px]">arrow_back</MaterialSymbol>
+            Back to team
+          </Link>
           <button
             className={`flex h-10 w-10 items-center justify-center rounded-full bg-surface-container text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-40 ${seriesGameCount === 1 ? "hidden sm:flex" : ""}`}
             disabled={selectedGameNumber === 1}
@@ -2173,12 +2195,11 @@ function CompareTab({ currentReview, gameTitle, historicalReviews }) {
 }
 
 function LeagueDashboard(props) {
-  const { form, historicalReviews, selectedReview, team } = props;
+  const { form, historicalReviews, selectedReview } = props;
   const [activeTab, setActiveTab] = useState("overview");
   const displayReview = form || selectedReview;
   const patch = displayReview?.team_stats?.patch;
   const combinedRows = [...(displayReview?.team_comp || []), ...(displayReview?.opponent_comp || [])];
-  const config = getDashboardConfig("League of Legends");
 
   return (
     <GameDashboardShell>
@@ -2213,23 +2234,16 @@ function LeagueDashboard(props) {
       )}
 
       {activeTab === "compare" && (
-        <>
-          <GameSpecificOverview
-            config={config}
-            opponentRows={displayReview?.opponent_comp || []}
-            opponentStats={displayReview?.opponent_stats || {}}
-            review={displayReview}
-            teamRows={displayReview?.team_comp || []}
-            teamStats={displayReview?.team_stats || {}}
-          />
-          <LeagueComparisonPanel
-            opponentName={displayReview?.opponent_name || "Opponent"}
-            opponentStats={displayReview?.opponent_stats || {}}
-            teamName={team.name}
-            teamStats={displayReview?.team_stats || {}}
-          />
-          <CompareTab currentReview={displayReview} gameTitle="League of Legends" historicalReviews={historicalReviews} />
-        </>
+        <ExportableReport
+          buttonLabel="Export PNG report pack"
+          exportMode="pack"
+          filename={`${props.team.name}-${props.team.game_title}-game-${props.selectedGameNumber}-comparison`}
+          reportClassName="rounded-3xl p-sm sm:p-md"
+          reportSubtitle={`Game ${props.selectedGameNumber} · Game baseline, scrim trajectory, and champion pool`}
+          reportTitle={`${props.team.name} · ${props.team.game_title} Comparison`}
+        >
+          <LeagueScrimCompare currentReview={displayReview} historicalReviews={historicalReviews} />
+        </ExportableReport>
       )}
     </GameDashboardShell>
   );
@@ -2277,7 +2291,13 @@ function ValorantDashboard(props) {
       )}
 
       {activeTab === "compare" && (
-        <>
+        <ExportableReport
+          buttonLabel="Export comparison PNG"
+          filename={`${team.name}-${team.game_title}-game-${props.selectedGameNumber}-comparison`}
+          reportClassName="grid gap-lg rounded-3xl p-sm sm:p-md"
+          reportSubtitle={`Game ${props.selectedGameNumber} · Saved scoreboard fields only`}
+          reportTitle={`${team.name} · ${team.game_title} Comparison`}
+        >
           <GameSpecificOverview
             config={config}
             opponentRows={displayReview?.opponent_comp || []}
@@ -2302,7 +2322,7 @@ function ValorantDashboard(props) {
             title="Opponent Comparison"
           />
           <CompareTab currentReview={displayReview} gameTitle="Valorant" historicalReviews={historicalReviews} />
-        </>
+        </ExportableReport>
       )}
     </GameDashboardShell>
   );
@@ -2391,7 +2411,13 @@ function UniversalGameDashboard(props) {
       )}
 
       {activeTab === "compare" && (
-        <>
+        <ExportableReport
+          buttonLabel="Export comparison PNG"
+          filename={`${team.name}-${team.game_title}-game-${props.selectedGameNumber}-comparison`}
+          reportClassName="grid gap-lg rounded-3xl p-sm sm:p-md"
+          reportSubtitle={`Game ${props.selectedGameNumber} · Saved scoreboard fields only`}
+          reportTitle={`${team.name} · ${team.game_title} Comparison`}
+        >
           <GameSpecificOverview
             config={config}
             opponentRows={displayReview?.opponent_comp || []}
@@ -2413,7 +2439,7 @@ function UniversalGameDashboard(props) {
             />
           )}
           <CompareTab currentReview={displayReview} gameTitle={team.game_title} historicalReviews={historicalReviews} />
-        </>
+        </ExportableReport>
       )}
     </GameDashboardShell>
   );
@@ -2730,6 +2756,8 @@ function formatCardStats(row, config) {
 
 function CompositionSection({ accent = "bg-primary", game, opponentName, rows, title }) {
   const isCompactHeroShooter = isCompactHeroShooterGame(game);
+  const config = getDashboardConfig(game);
+  const orderedRows = orderCompositionRows(rows, config.roles);
 
   return (
     <section>
@@ -2741,51 +2769,9 @@ function CompositionSection({ accent = "bg-primary", game, opponentName, rows, t
         {opponentName && <span className="font-label-small text-label-small uppercase tracking-wider text-on-surface-variant">{opponentName}</span>}
       </div>
       <div className={isCompactHeroShooter ? "grid grid-cols-1 gap-sm lg:grid-cols-2" : "grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-5"}>
-        {rows.map((row, index) => <CharacterTile game={game} index={index} key={`${row.player_name}-${index}`} row={row} />)}
+        {orderedRows.map((row, index) => <CharacterTile game={game} index={index} key={`${row.player_name}-${row.role || "unknown"}-${index}`} row={row} />)}
       </div>
     </section>
-  );
-}
-
-function LeagueComparisonPanel({ opponentName, opponentStats, teamName, teamStats }) {
-  const comparisons = [
-    {
-      label: "Damage",
-      left: teamStats.total_damage_to_champions,
-      right: opponentStats.total_damage_to_champions,
-      icon: "swords",
-      helper: "Pressure created in fights",
-    },
-    {
-      label: "Gold",
-      left: teamStats.total_gold,
-      right: opponentStats.total_gold,
-      icon: "paid",
-      helper: "Resource lead across the map",
-    },
-  ];
-
-  return (
-    <aside className="flex min-h-full flex-col rounded-3xl border border-outline-variant/20 bg-surface-container-lowest p-lg shadow-[0_18px_40px_rgba(0,0,0,0.06)]">
-      <div>
-        <p className="font-label-bold text-label-bold uppercase tracking-wider text-outline">Review Snapshot</p>
-        <h2 className="mt-xs font-headline-2 text-headline-2 text-on-surface">Team Comparison</h2>
-        <p className="mt-xs font-body-sub text-body-sub text-on-surface-variant">
-          Quick read on who controlled fights and economy.
-        </p>
-      </div>
-
-      <div className="mt-lg grid flex-1 content-start gap-md">
-        {comparisons.map((comparison) => (
-          <ComparisonMetricCard
-            key={comparison.label}
-            {...comparison}
-            leftLabel={teamName}
-            rightLabel={opponentName}
-          />
-        ))}
-      </div>
-    </aside>
   );
 }
 
@@ -2818,52 +2804,6 @@ function calcPercentGap(ours, theirs) {
   if (!Number.isFinite(ourValue) || !Number.isFinite(theirValue)) return null;
   if (theirValue === 0) return null;
   return Math.round(((ourValue - theirValue) / Math.abs(theirValue)) * 100);
-}
-
-function ComparisonMetricCard({ helper, icon, label, left, leftLabel, right, rightLabel }) {
-  const leftValue = Number(left) || 0;
-  const rightValue = Number(right) || 0;
-  const total = leftValue + rightValue;
-  const leftPercent = total ? (leftValue / total) * 100 : 50;
-  const leader = leftValue === rightValue ? "Even" : leftValue > rightValue ? "Your edge" : "Opponent edge";
-  const diff = Math.abs(leftValue - rightValue);
-
-  return (
-    <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-md">
-      <div className="flex items-start justify-between gap-md">
-        <div>
-          <div className="flex items-center gap-xs">
-            <MaterialSymbol className="text-[19px] text-primary">{icon}</MaterialSymbol>
-            <h3 className="font-headline-3 text-headline-3 text-on-surface">{label}</h3>
-          </div>
-          <p className="mt-xs font-label-small text-label-small text-on-surface-variant">{helper}</p>
-        </div>
-        <span className={`rounded-full px-sm py-1 font-label-small text-label-small ${leftValue >= rightValue ? "bg-primary-fixed text-on-primary-fixed" : "bg-error-container text-on-error-container"}`}>
-          {leader}
-        </span>
-      </div>
-
-      <div className="mt-md grid grid-cols-2 gap-sm">
-        <div className="rounded-xl bg-surface-container-lowest p-sm">
-          <p className="truncate font-label-small text-label-small text-on-surface-variant">{leftLabel}</p>
-          <p className="mt-xs font-headline-2 text-headline-2 text-primary">{formatLargeStat(left)}</p>
-        </div>
-        <div className="rounded-xl bg-surface-container-lowest p-sm text-right">
-          <p className="truncate font-label-small text-label-small text-on-surface-variant">{rightLabel}</p>
-          <p className="mt-xs font-headline-2 text-headline-2 text-[#d12b2b]">{formatLargeStat(right)}</p>
-        </div>
-      </div>
-
-      <div className="mt-md overflow-hidden rounded-full bg-error-container">
-        <div className="h-4 rounded-full bg-primary transition-all" style={{ width: `${Math.max(6, Math.min(94, leftPercent))}%` }} />
-      </div>
-      <div className="mt-xs flex justify-between font-label-small text-label-small text-on-surface-variant">
-        <span>{Math.round(leftPercent)}%</span>
-        <span>{diff ? `${formatLargeStat(diff)} difference` : "Even"}</span>
-        <span>{Math.round(100 - leftPercent)}%</span>
-      </div>
-    </div>
-  );
 }
 
 function PerformanceTable({ game = "Valorant", rows }) {

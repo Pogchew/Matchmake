@@ -6,6 +6,8 @@ import { completePostgameExtractionFields, getCounterStrikeExtractionPrompt, get
 import { LEAGUE_CHAMPION_OPTIONS, VALORANT_AGENT_OPTIONS } from "@/lib/game-assets/generated-character-options";
 import { getLeagueChampionReferenceText, normalizeLeagueChampionName } from "@/lib/game-assets/league-champions";
 import { getLeagueChampionRecognitionPrompt, mergeLeagueChampionRecognition } from "@/lib/league-champion-recognition";
+import { buildLeagueChampionPortraitGrid } from "@/lib/server/league-champion-portrait-grid";
+import { combineLeagueChampionRecognition, matchLeagueChampionPortraits } from "@/lib/server/league-champion-portrait-matcher";
 import { matchMarvelRivalsCostumeIcons } from "@/lib/server/marvel-rivals-costume-matcher";
 
 export const runtime = "nodejs";
@@ -1207,27 +1209,36 @@ function getExtractionRowCount(extraction = {}) {
     : 0;
 }
 
-async function optimizeImageForLeagueChampionRecognition(imageBuffer, originalMimeType) {
+async function optimizeImageForLeagueChampionRecognition(imageBuffer, originalMimeType, rowCount) {
   try {
-    const optimized = await sharp(imageBuffer, { failOn: "none" })
-      .rotate()
-      .resize({
-        width: LEAGUE_CHAMPION_MAX_IMAGE_SIDE,
-        height: LEAGUE_CHAMPION_MAX_IMAGE_SIDE,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .sharpen()
-      .jpeg({ quality: LEAGUE_CHAMPION_IMAGE_QUALITY, mozjpeg: true })
-      .toBuffer();
-
-    return { buffer: optimized, mimeType: "image/jpeg" };
+    const portraitGrid = await buildLeagueChampionPortraitGrid(imageBuffer, rowCount);
+    return {
+      buffer: portraitGrid.buffer,
+      mimeType: portraitGrid.mimeType,
+      mode: "enlarged_portrait_grid",
+      layout: portraitGrid.layout,
+    };
   } catch (error) {
-    console.warn("Could not optimize the League screenshot for champion recognition; using the original image.", {
+    console.warn("Could not build the League portrait grid; using the optimized original image.", {
       mimeType: originalMimeType,
       error: error.message,
     });
-    return { buffer: imageBuffer, mimeType: originalMimeType };
+    try {
+      const optimized = await sharp(imageBuffer, { failOn: "none" })
+        .rotate()
+        .resize({
+          width: LEAGUE_CHAMPION_MAX_IMAGE_SIDE,
+          height: LEAGUE_CHAMPION_MAX_IMAGE_SIDE,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .sharpen()
+        .jpeg({ quality: LEAGUE_CHAMPION_IMAGE_QUALITY, mozjpeg: true })
+        .toBuffer();
+      return { buffer: optimized, mimeType: "image/jpeg", mode: "full_scoreboard_fallback", layout: null };
+    } catch {
+      return { buffer: imageBuffer, mimeType: originalMimeType, mode: "original_image_fallback", layout: null };
+    }
   }
 }
 
@@ -1241,7 +1252,6 @@ async function runLeagueChampionRecognition({
   attempts,
 }) {
   const rowCount = getExtractionRowCount(extraction);
-  const remainingMs = SERVER_TIME_BUDGET_MS - (Date.now() - requestStartedAt);
   if (!rowCount) {
     return {
       data: extraction,
@@ -1254,20 +1264,52 @@ async function runLeagueChampionRecognition({
       },
     };
   }
-  if (remainingMs < LEAGUE_CHAMPION_MINIMUM_TIME_MS) {
+
+  const portraitMatchPromise = matchLeagueChampionPortraits(imageBuffer, rowCount).catch((error) => {
+    console.warn("League champion portrait matching failed; using the model-only recognition result.", {
+      error: error.message,
+    });
+    return { status: "failed", matches: [] };
+  });
+  const completeRecognition = async ({
+    modelRecognition = {},
+    modelStatus,
+    recognitionImage = null,
+    rawTextLength = 0,
+    responseStatus = null,
+    errorCode = null,
+  }) => {
+    const portraitMatchResult = await portraitMatchPromise;
+    const recognition = combineLeagueChampionRecognition(modelRecognition, portraitMatchResult);
+    const merged = mergeLeagueChampionRecognition(extraction, recognition);
     return {
-      data: extraction,
+      data: merged.data,
       meta: {
         leagueChampionRecognition: {
           mode: "separate_pass",
-          status: "skipped_time_budget",
-          attemptedRows: rowCount,
+          status: portraitMatchResult.status === "completed" ? "completed" : modelStatus,
+          modelStatus,
+          recognitionInput: recognitionImage?.mode || "local_portrait_match",
+          portraitRowsLocated: recognitionImage?.layout?.positions?.length
+            || portraitMatchResult.layout?.positions?.length
+            || 0,
+          portraitMatchStatus: portraitMatchResult.status,
+          portraitRowsMatched: portraitMatchResult.matches?.length || 0,
+          rawTextLength,
+          referencePartsSent: modelStatus === "skipped_time_budget" ? 0 : referenceParts.length,
+          responseStatus,
+          errorCode,
+          ...merged.summary,
         },
       },
     };
+  };
+  const remainingMs = SERVER_TIME_BUDGET_MS - (Date.now() - requestStartedAt);
+  if (remainingMs < LEAGUE_CHAMPION_MINIMUM_TIME_MS) {
+    return completeRecognition({ modelStatus: "skipped_time_budget" });
   }
 
-  const recognitionImage = await optimizeImageForLeagueChampionRecognition(imageBuffer, sourceMimeType);
+  const recognitionImage = await optimizeImageForLeagueChampionRecognition(imageBuffer, sourceMimeType, rowCount);
   const recognitionParts = buildPromptParts({
     prompt: getLeagueChampionRecognitionPrompt(rowCount),
     referenceParts,
@@ -1285,66 +1327,40 @@ async function runLeagueChampionRecognition({
   });
 
   if (!geminiResponse?.ok) {
-    return {
-      data: extraction,
-      meta: {
-        leagueChampionRecognition: {
-          mode: "separate_pass",
-          status: "request_failed",
-          attemptedRows: rowCount,
-          responseStatus: geminiResponse?.status || null,
-          errorCode: lastErrorText.includes("request_timeout") ? "request_timeout" : "request_failed",
-        },
-      },
-    };
+    return completeRecognition({
+      modelStatus: "request_failed",
+      recognitionImage,
+      responseStatus: geminiResponse?.status || null,
+      errorCode: lastErrorText.includes("request_timeout") ? "request_timeout" : "request_failed",
+    });
   }
 
   const rawText = await readGeminiText(geminiResponse);
   if (!rawText) {
-    return {
-      data: extraction,
-      meta: {
-        leagueChampionRecognition: {
-          mode: "separate_pass",
-          status: "empty_response",
-          attemptedRows: rowCount,
-        },
-      },
-    };
+    return completeRecognition({
+      modelStatus: "empty_response",
+      recognitionImage,
+    });
   }
 
+  let modelRecognition = {};
+  let modelStatus = "completed";
   try {
-    const recognition = parseGeminiJson(rawText);
-    const merged = mergeLeagueChampionRecognition(extraction, recognition);
-    return {
-      data: merged.data,
-      meta: {
-        leagueChampionRecognition: {
-          mode: "separate_pass",
-          status: "completed",
-          rawTextLength: rawText.length,
-          referencePartsSent: referenceParts.length,
-          ...merged.summary,
-        },
-      },
-    };
+    modelRecognition = parseGeminiJson(rawText);
   } catch (error) {
     console.error("League champion recognition returned unparseable JSON", {
       error: error.message,
       rawTextLength: rawText.length,
     });
-    return {
-      data: extraction,
-      meta: {
-        leagueChampionRecognition: {
-          mode: "separate_pass",
-          status: "parse_failed",
-          attemptedRows: rowCount,
-          rawTextLength: rawText.length,
-        },
-      },
-    };
+    modelStatus = "parse_failed";
   }
+
+  return completeRecognition({
+    modelRecognition,
+    modelStatus,
+    recognitionImage,
+    rawTextLength: rawText.length,
+  });
 }
 
 async function applyPostExtractionRecognition({

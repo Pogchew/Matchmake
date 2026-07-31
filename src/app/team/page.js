@@ -6,9 +6,12 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
+import ExportableReport from "@/components/dashboard/ExportableReport";
 import MaterialSymbol from "@/components/MaterialSymbol";
 import TopBar from "@/components/TopBar";
 import { aggregateCharacterAnalytics } from "@/lib/dashboard/character-analytics";
+import { orderCompositionRows } from "@/lib/dashboard/composition-order";
+import { getDashboardConfig } from "@/lib/dashboard/game-dashboard-configs";
 import { calculateReviewKpis } from "@/lib/dashboard/team-review-kpis";
 import { getCurrentUser } from "@/lib/auth-session";
 import { supabase } from "@/lib/supabase";
@@ -630,6 +633,7 @@ function TeamPageContent() {
               kpis={reviewKpis}
               reviews={selectedTeamReviews}
               teamId={selectedTeam.id}
+              teamName={selectedTeam.name}
             />
 
             <div className="grid grid-cols-1 gap-lg xl:grid-cols-2 xl:items-start">
@@ -707,7 +711,7 @@ function TeamPageShell({ children }) {
   );
 }
 
-function TeamReviewStats({ className = "mb-lg", gameTitle, kpis, reviews = [], teamId }) {
+function TeamReviewStats({ className = "mb-lg", gameTitle, kpis, reviews = [], teamId, teamName }) {
   return (
     <section className={`${className} rounded-xl border border-surface-variant bg-surface-container-lowest p-md shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]`}>
       <div className="mb-md flex flex-col gap-xs sm:flex-row sm:items-end sm:justify-between">
@@ -730,7 +734,7 @@ function TeamReviewStats({ className = "mb-lg", gameTitle, kpis, reviews = [], t
           )}
         </div>
       </div>
-      <GameStatsTabs fallbackKpis={kpis} gameTitle={gameTitle} reviews={reviews} />
+      <GameStatsTabs fallbackKpis={kpis} gameTitle={gameTitle} reviews={reviews} teamName={teamName} />
     </section>
   );
 }
@@ -1106,11 +1110,15 @@ function getReviewDurationMinutes(review) {
   return parseDurationMinutes(review?.team_stats?.game_length || review?.team_stats?.duration);
 }
 
-function averageByOutcome(reviews, outcome, getValue) {
-  return averageValues(reviews
+function summarizeByOutcome(reviews, outcome, getValue) {
+  const values = reviews
     .filter((review) => getReviewOutcome(review) === outcome)
     .map(getValue)
-    .filter((value) => value !== null));
+    .filter((value) => Number.isFinite(value));
+  return {
+    average: averageValues(values),
+    count: values.length,
+  };
 }
 
 function buildLeagueInsights(sortedReviews = []) {
@@ -1133,25 +1141,24 @@ function buildLeagueInsights(sortedReviews = []) {
 
     return { role, kda, gold, damage };
   });
+  const buildOutcomeRow = (label, getValue) => {
+    const wins = summarizeByOutcome(sortedReviews, "win", getValue);
+    const losses = summarizeByOutcome(sortedReviews, "loss", getValue);
+    return {
+      label,
+      wins: wins.average,
+      losses: losses.average,
+      winCount: wins.count,
+      lossCount: losses.count,
+    };
+  };
 
   return {
     roleStats,
     winLoss: [
-      {
-        label: "Gold Diff",
-        wins: averageByOutcome(sortedReviews, "win", (review) => getDiff(review, "total_gold", "gold")),
-        losses: averageByOutcome(sortedReviews, "loss", (review) => getDiff(review, "total_gold", "gold")),
-      },
-      {
-        label: "Damage Diff",
-        wins: averageByOutcome(sortedReviews, "win", (review) => getDiff(review, "total_damage_to_champions", "damage_to_champions")),
-        losses: averageByOutcome(sortedReviews, "loss", (review) => getDiff(review, "total_damage_to_champions", "damage_to_champions")),
-      },
-      {
-        label: "Deaths",
-        wins: averageByOutcome(sortedReviews, "win", (review) => getReviewStat(review, ["total_deaths", "team_deaths"], ["deaths", "d"])),
-        losses: averageByOutcome(sortedReviews, "loss", (review) => getReviewStat(review, ["total_deaths", "team_deaths"], ["deaths", "d"])),
-      },
+      buildOutcomeRow("Gold Diff", (review) => getDiff(review, "total_gold", "gold")),
+      buildOutcomeRow("Damage Diff", (review) => getDiff(review, "total_damage_to_champions", "damage_to_champions")),
+      buildOutcomeRow("Deaths", (review) => getReviewStat(review, ["total_deaths", "team_deaths"], ["deaths", "d"])),
     ],
     avgGameLength: averageValues(sortedReviews.map(getReviewDurationMinutes).filter((value) => value !== null)),
   };
@@ -1394,6 +1401,9 @@ function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
   const compResults = new Map();
   const mapCounts = new Map();
   const mapResults = new Map();
+  const roleOrder = gameTitle === "League of Legends"
+    ? getDashboardConfig(gameTitle).roles
+    : [];
   const getDiffsForStat = (stat) => sortedReviews
     .map((review) => {
       const ours = getReviewStatValue(review, stat);
@@ -1405,10 +1415,12 @@ function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
   for (const review of sortedReviews) {
     const outcome = getReviewOutcome(review);
     const map = review.map_or_mode;
-    const picks = getReviewRows(review)
+    const picks = orderCompositionRows(getReviewRows(review), roleOrder)
       .map((row) => row?.[config.pickField] || row?.agent || row?.champion || row?.hero || row?.character || row?.car || row?.role)
       .filter(Boolean);
-    const comp = picks.length ? [...picks].sort((a, b) => a.localeCompare(b)).join(" / ") : "";
+    const comp = picks.length
+      ? (roleOrder.length ? picks : [...picks].sort((a, b) => a.localeCompare(b))).join(" / ")
+      : "";
 
     if (map) {
       mapCounts.set(map, (mapCounts.get(map) || 0) + 1);
@@ -1532,7 +1544,7 @@ function buildGameAggregateStats(reviews = [], gameTitle = "Valorant") {
   return aggregateStats;
 }
 
-function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
+function GameStatsTabs({ fallbackKpis, gameTitle, reviews, teamName }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [timeline, setTimeline] = useState("last5");
   const timelineOption = STATS_TIMELINE_OPTIONS.find((option) => option.value === timeline) || STATS_TIMELINE_OPTIONS[0];
@@ -1611,29 +1623,33 @@ function GameStatsTabs({ fallbackKpis, gameTitle, reviews }) {
         )
       ) : activeTab === "overview" ? (
         <GameOverviewStats stats={stats} />
-      ) : gameTitle === "Valorant" ? (
-        <ValorantDeepStats stats={stats} />
-      ) : gameTitle === "League of Legends" ? (
-        <LeagueDeepStats stats={stats} />
-      ) : gameTitle === "Overwatch 2" ? (
-        <OverwatchDeepStats stats={stats} />
-      ) : gameTitle === "Marvel Rivals" ? (
-        <MarvelRivalsDeepStats stats={stats} />
-      ) : gameTitle === "Deadlock" ? (
-        <DeadlockDeepStats stats={stats} />
-      ) : gameTitle === "Counter-Strike 2" ? (
-        <CounterStrikeDeepStats stats={stats} />
-      ) : gameTitle === "Rocket League" ? (
-        <RocketLeagueDeepStats stats={stats} />
-      ) : gameTitle === "SSBU" ? (
-        <SsbuDeepStats stats={stats} />
-      ) : gameTitle === "Honor of Kings" ? (
-        <HonorOfKingsDeepStats stats={stats} />
       ) : (
-        <GameDeepStats fallbackKpis={fallbackKpis} stats={stats} />
+        <ExportableReport
+          buttonLabel={gameTitle === "League of Legends" ? "Export PNG report pack" : "Export Deep Stats PNG"}
+          exportMode={gameTitle === "League of Legends" ? "pack" : "single"}
+          filename={`${teamName || "team"}-${gameTitle}-deep-stats-${timelineOption.label}`}
+          reportClassName="rounded-2xl p-sm sm:p-lg"
+          reportSubtitle={`${timelineOption.label} · ${stats.totalReviews} saved ${stats.totalReviews === 1 ? "review" : "reviews"}`}
+          reportTitle={`${teamName || "Team"} · ${gameTitle} Deep Stats`}
+        >
+          <GameDeepStatsReport fallbackKpis={fallbackKpis} gameTitle={gameTitle} stats={stats} />
+        </ExportableReport>
       )}
     </div>
   );
+}
+
+function GameDeepStatsReport({ fallbackKpis, gameTitle, stats }) {
+  if (gameTitle === "Valorant") return <ValorantDeepStats stats={stats} />;
+  if (gameTitle === "League of Legends") return <LeagueDeepStats stats={stats} />;
+  if (gameTitle === "Overwatch 2") return <OverwatchDeepStats stats={stats} />;
+  if (gameTitle === "Marvel Rivals") return <MarvelRivalsDeepStats stats={stats} />;
+  if (gameTitle === "Deadlock") return <DeadlockDeepStats stats={stats} />;
+  if (gameTitle === "Counter-Strike 2") return <CounterStrikeDeepStats stats={stats} />;
+  if (gameTitle === "Rocket League") return <RocketLeagueDeepStats stats={stats} />;
+  if (gameTitle === "SSBU") return <SsbuDeepStats stats={stats} />;
+  if (gameTitle === "Honor of Kings") return <HonorOfKingsDeepStats stats={stats} />;
+  return <GameDeepStats fallbackKpis={fallbackKpis} stats={stats} />;
 }
 
 function StatsEmptyState({ body, title }) {
@@ -2175,7 +2191,11 @@ function CharacterComfortPanel({ analytics, gameTitle }) {
       </div>
 
       {!hasCharacterData ? (
-        <div className="rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-lg text-center">
+        <div
+          className="rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-lg text-center"
+          data-export-page="true"
+          data-export-page-title={`${analytics.label} comfort and usage`}
+        >
           <h4 className="font-headline-3 text-headline-3 text-on-surface">No character comfort data yet.</h4>
           <p className="mx-auto mt-xs max-w-md font-body-sub text-body-sub text-on-surface-variant">
             Upload and save post-game reviews to start tracking your {analytics.label.toLowerCase()} pool.
@@ -2183,24 +2203,28 @@ function CharacterComfortPanel({ analytics, gameTitle }) {
         </div>
       ) : (
         <div className="grid gap-sm">
-          <CharacterPerformancePanel analytics={analytics} gameTitle={gameTitle} />
-          <div className="grid grid-cols-1 gap-sm md:grid-cols-2 xl:grid-cols-3">
-            <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostUsedCharacter} label={`Most Used ${analytics.label}`} />
-            <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.bestPerformingCharacter} label={`Best Performing ${analytics.label}`} />
-            <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostCommonEnemyCharacter} label={`Most Common Enemy ${analytics.label}`} />
-            <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostUsedComp} label="Most Used Comp" type="comp" />
-            <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.bestPerformingComp} label="Best Performing Comp" type="comp" />
-            <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
-              <p className="font-label-small text-label-small text-on-surface-variant">Comfort Pick Rate</p>
-              <p className="mt-sm font-headline-2 text-headline-2 text-primary">{formatRatioPercent(analytics.comfortPickRate)}</p>
-              <p className="mt-xs font-label-small text-label-small text-on-surface-variant">
-                Share of appearances from your top 3 most-used {analytics.label.toLowerCase()}s.
-              </p>
-            </div>
+          <div data-export-page="true" data-export-page-title={`${analytics.label} statistics`}>
+            <CharacterPerformancePanel analytics={analytics} gameTitle={gameTitle} />
           </div>
-          <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
-            <CharacterTopList gameTitle={gameTitle} items={analytics.ourTopCharacters} label={analytics.label} title={`Top 5 Our ${pluralLabel}`} />
-            <CharacterTopList gameTitle={gameTitle} items={analytics.enemyTopCharacters} label={analytics.label} title={`Top 5 Enemy ${pluralLabel}`} />
+          <div className="grid gap-sm" data-export-page="true" data-export-page-title={`${analytics.label} comfort and usage`}>
+            <div className="grid grid-cols-1 gap-sm md:grid-cols-2 xl:grid-cols-3" data-export-columns="3">
+              <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostUsedCharacter} label={`Most Used ${analytics.label}`} />
+              <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.bestPerformingCharacter} label={`Best Performing ${analytics.label}`} />
+              <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostCommonEnemyCharacter} label={`Most Common Enemy ${analytics.label}`} />
+              <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.mostUsedComp} label="Most Used Comp" type="comp" />
+              <CharacterStatSummaryCard gameTitle={gameTitle} item={analytics.bestPerformingComp} label="Best Performing Comp" type="comp" />
+              <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
+                <p className="font-label-small text-label-small text-on-surface-variant">Comfort Pick Rate</p>
+                <p className="mt-sm font-headline-2 text-headline-2 text-primary">{formatRatioPercent(analytics.comfortPickRate)}</p>
+                <p className="mt-xs font-label-small text-label-small text-on-surface-variant">
+                  Share of appearances from your top 3 most-used {analytics.label.toLowerCase()}s.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-sm lg:grid-cols-2" data-export-columns="2">
+              <CharacterTopList gameTitle={gameTitle} items={analytics.ourTopCharacters} label={analytics.label} title={`Top 5 Our ${pluralLabel}`} />
+              <CharacterTopList gameTitle={gameTitle} items={analytics.enemyTopCharacters} label={analytics.label} title={`Top 5 Enemy ${pluralLabel}`} />
+            </div>
           </div>
         </div>
       )}
@@ -2346,58 +2370,6 @@ function WinLossCard({ row }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function LeagueCoachRead({ damageDiff, goldDiff, killDiff }) {
-  const reads = [
-    {
-      label: "Strength",
-      icon: "trending_up",
-      value: Number.isFinite(goldDiff?.diff) && goldDiff.diff > 0
-        ? `You are building resource leads (${formatSignedValue(goldDiff.diff, 0)} gold).`
-        : Number.isFinite(damageDiff?.diff) && damageDiff.diff > 0
-          ? `You are creating more champion pressure (${formatSignedValue(damageDiff.diff, 0)} damage).`
-          : "Save more reviews to identify a repeatable strength.",
-    },
-    {
-      label: "Watch",
-      icon: "visibility",
-      value: Number.isFinite(killDiff) && killDiff < 0
-        ? `Opponent is winning fights by ${Math.abs(killDiff).toFixed(1)} kills.`
-        : Number.isFinite(goldDiff?.diff) && goldDiff.diff < 0
-          ? `Resource control is behind (${formatSignedValue(goldDiff.diff, 0)} gold).`
-          : "No major warning from saved scoreboard data.",
-    },
-    {
-      label: "Focus",
-      icon: "flag",
-      value: Number.isFinite(goldDiff?.diff) && goldDiff.diff < 0
-        ? "Review how lanes and jungle convert farm into team gold."
-        : Number.isFinite(damageDiff?.diff) && damageDiff.diff < 0
-          ? "Work on coordinated fights and damage uptime."
-          : "Keep tracking scrims to confirm the pattern.",
-    },
-  ];
-
-  return (
-    <section className="rounded-3xl border border-primary/10 bg-primary-fixed/30 p-md">
-      <div className="mb-sm flex items-center gap-sm">
-        <MaterialSymbol className="text-[22px] text-primary">school</MaterialSymbol>
-        <h3 className="font-headline-3 text-headline-3 text-on-surface">Coach Read</h3>
-      </div>
-      <div className="grid gap-sm md:grid-cols-3">
-        {reads.map((item) => (
-          <div className="rounded-2xl bg-surface-container-lowest p-md" key={item.label}>
-            <div className="mb-xs flex items-center gap-xs font-label-bold text-label-bold text-primary">
-              <MaterialSymbol className="text-[18px]">{item.icon}</MaterialSymbol>
-              {item.label}
-            </div>
-            <p className="font-body-sub text-body-sub text-on-surface-variant">{item.value}</p>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -2556,76 +2528,95 @@ function RoleStatCard({ role, kdaMax, goldMax, damageMax }) {
   );
 }
 
-function WinLossDots({ row, lowerIsBetter = false }) {
-  const wins = Number(row.wins);
-  const losses = Number(row.losses);
-  const hasValues = Number.isFinite(wins) && Number.isFinite(losses);
-  // Build axis range with padding so dots don't sit at the very edges.
-  let winsX = 50;
-  let lossesX = 50;
-  let gapStart = 50;
-  let gapWidth = 0;
-  if (hasValues) {
-    const min = Math.min(wins, losses);
-    const max = Math.max(wins, losses);
-    const span = Math.max(max - min, Math.abs(max) * 0.4, Math.abs(min) * 0.4, 1);
-    const lo = min - span * 0.4;
-    const hi = max + span * 0.4;
-    const range = hi - lo;
-    winsX = ((wins - lo) / range) * 100;
-    lossesX = ((losses - lo) / range) * 100;
-    gapStart = Math.min(winsX, lossesX);
-    gapWidth = Math.abs(winsX - lossesX);
-  }
-  const winsBetter = hasValues && (lowerIsBetter ? wins < losses : wins > losses);
-  const verdict = !hasValues
-    ? "Needs more reviews"
-    : winsBetter
-      ? "Correlates with winning"
-      : Math.abs(wins - losses) < Math.abs(wins) * 0.05
-        ? "No clear pattern"
-        : "Correlates with losing";
+function OutcomeScaleBar({ maxAbs, tone, value }) {
+  const available = Number.isFinite(value);
+  const width = available ? Math.max(3, (Math.abs(value) / maxAbs) * 46) : 0;
+  const left = available && value < 0 ? 50 - width : 50;
 
   return (
-    <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-md">
-      <div className="mb-sm flex items-baseline justify-between">
-        <p className="font-label-bold text-label-bold text-on-surface">{row.label}</p>
-        <span className={`font-label-small text-label-small ${winsBetter ? "text-[#1B5E20]" : "text-on-surface-variant"}`}>{verdict}</span>
-      </div>
-      <div className="relative mt-md mb-sm h-6">
-        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-outline-variant/40" />
-        {hasValues && (
-          <div
-            className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-primary-fixed"
-            style={{ left: `${gapStart}%`, width: `${Math.max(2, gapWidth)}%` }}
-          />
-        )}
-        {hasValues && (
-          <>
-            <div
-              className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-error shadow"
-              style={{ left: `${lossesX}%` }}
-              title={`In losses: ${losses}`}
-            />
-            <div
-              className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#1B5E20] shadow"
-              style={{ left: `${winsX}%` }}
-              title={`In wins: ${wins}`}
-            />
-          </>
-        )}
-      </div>
-      <div className="flex items-center justify-between font-label-small text-label-small">
-        <span className="inline-flex items-center gap-1 text-error">
-          <span className="h-2 w-2 rounded-full bg-error" />
-          Losses {hasValues ? formatDeepStatValue(losses) : "—"}
-        </span>
-        <span className="inline-flex items-center gap-1 text-[#1B5E20]">
-          Wins {hasValues ? formatDeepStatValue(wins) : "—"}
-          <span className="h-2 w-2 rounded-full bg-[#1B5E20]" />
-        </span>
-      </div>
+    <div className="relative h-4 overflow-hidden rounded-full bg-surface-container-lowest" aria-hidden="true">
+      <div className="absolute inset-y-0 left-1/2 w-px bg-outline-variant/70" />
+      {available && (
+        <div
+          className={`absolute inset-y-1 rounded-full ${tone}`}
+          style={{ left: `${left}%`, width: `${width}%` }}
+        />
+      )}
     </div>
+  );
+}
+
+function OutcomePatternCard({ lossCount, lowerIsBetter = false, row, winCount }) {
+  const wins = Number.isFinite(row.wins) ? row.wins : null;
+  const losses = Number.isFinite(row.losses) ? row.losses : null;
+  const comparisonAvailable = Number.isFinite(wins) && Number.isFinite(losses);
+  const gap = comparisonAvailable ? wins - losses : null;
+  const maxAbs = Math.max(Math.abs(wins || 0), Math.abs(losses || 0), 1);
+  const availability = !Number.isFinite(wins) && !Number.isFinite(losses)
+    ? "No outcome samples"
+    : !Number.isFinite(wins)
+      ? "No win sample"
+      : !Number.isFinite(losses)
+        ? "No loss sample"
+        : `Win − loss ${formatSignedValue(gap, row.label === "Deaths" ? 1 : 0)}`;
+
+  return (
+    <article className="grid gap-md rounded-3xl border border-outline-variant/25 bg-surface-container-low p-md shadow-[0_10px_25px_rgba(0,0,0,0.035)]">
+      <header className="flex flex-col gap-sm sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h4 className="font-headline-3 text-headline-3 text-on-surface">{row.label}</h4>
+          <p className="mt-1 font-label-small text-label-small text-on-surface-variant">
+            {lowerIsBetter ? "Lower is better" : "Higher is better"}
+          </p>
+        </div>
+        <span className={`self-start rounded-full border px-sm py-1 font-label-bold text-label-small ${
+          comparisonAvailable
+            ? "border-primary/25 bg-primary-fixed text-primary"
+            : "border-outline-variant/30 bg-surface-container text-on-surface-variant"
+        }`}>
+          {availability}
+        </span>
+      </header>
+
+      <div className="grid grid-cols-2 gap-sm">
+        <div className="rounded-2xl border border-[#1B5E20]/20 bg-[#E3F9E5] p-sm dark:border-[#72F59A]/35 dark:bg-[#123A24]/80">
+          <div className="flex items-center justify-between gap-xs">
+            <span className="font-label-bold text-label-bold text-[#1B5E20] dark:text-[#A5FFBD]">Wins</span>
+            <span className="font-label-small text-label-small text-[#1B5E20]/80 dark:text-[#A5FFBD]/80">
+              {winCount} {winCount === 1 ? "game" : "games"}
+            </span>
+          </div>
+          <p className="mt-sm font-headline-2 text-headline-2 text-on-surface">{formatDeepStatValue(wins)}</p>
+          <p className="mt-1 font-label-small text-label-small text-on-surface-variant">Recorded average</p>
+        </div>
+        <div className="rounded-2xl border border-error/30 bg-error-container/55 p-sm">
+          <div className="flex items-center justify-between gap-xs">
+            <span className="font-label-bold text-label-bold text-error">Losses</span>
+            <span className="font-label-small text-label-small text-error/80">
+              {lossCount} {lossCount === 1 ? "game" : "games"}
+            </span>
+          </div>
+          <p className="mt-sm font-headline-2 text-headline-2 text-on-surface">{formatDeepStatValue(losses)}</p>
+          <p className="mt-1 font-label-small text-label-small text-on-surface-variant">Recorded average</p>
+        </div>
+      </div>
+
+      <div className="grid gap-sm rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-sm">
+        <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-sm">
+          <span className="font-label-bold text-label-small text-[#1B5E20] dark:text-[#A5FFBD]">WIN</span>
+          <OutcomeScaleBar maxAbs={maxAbs} tone="bg-[#1B5E20] dark:bg-[#72F59A]" value={wins} />
+        </div>
+        <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-sm">
+          <span className="font-label-bold text-label-small text-error">LOSS</span>
+          <OutcomeScaleBar maxAbs={maxAbs} tone="bg-error" value={losses} />
+        </div>
+        <div className="ml-[60px] flex justify-between font-label-small text-[10px] text-outline">
+          <span>Negative</span>
+          <span>0</span>
+          <span>Positive</span>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -2636,87 +2627,79 @@ function LeagueDeepStats({ stats }) {
   const goldStat = stats.teamOutput.find((stat) => stat.label === "Gold");
   const goldPerMinStat = stats.teamOutput.find((stat) => stat.label === "Gold / Min");
   const damageStat = stats.teamOutput.find((stat) => stat.label === "Damage to Champions");
-  const goldDiff = stats.differentials.find((stat) => stat.label === "Average Gold Differential");
-  const damageDiff = stats.differentials.find((stat) => stat.label === "Average Damage Differential");
 
   return (
     <div className="grid gap-lg">
-      <LeagueCoachRead damageDiff={damageDiff} goldDiff={goldDiff} killDiff={stats.averageRoundDiff} />
+      <div className="grid gap-lg" data-export-page="true" data-export-page-title="Team and map summary">
+        <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
+          <GameKdaRibbon assists={assistStat} deaths={deathStat} kills={killStat} title="Teamfight Shape" />
+          <EdgeProfileCard stats={[goldStat, damageStat, goldPerMinStat]} title="Resource Pressure Profile" />
+        </section>
 
-      <section className="grid grid-cols-1 gap-md xl:grid-cols-2">
-        <GameKdaRibbon assists={assistStat} deaths={deathStat} kills={killStat} title="Teamfight Shape" />
-        <EdgeProfileCard stats={[goldStat, damageStat, goldPerMinStat]} title="Resource Pressure Profile" />
-      </section>
+        <section>
+          <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Map Control Signals</h3>
+          <div className="grid grid-cols-1 gap-sm lg:grid-cols-3" data-export-columns="3">
+            <ComparisonBar label="Kills" ours={killStat?.ours} theirs={killStat?.theirs} />
+            <ComparisonBar label="Gold" ours={goldStat?.ours} theirs={goldStat?.theirs} />
+            <ComparisonBar label="Damage to Champions" ours={damageStat?.ours} theirs={damageStat?.theirs} />
+          </div>
+        </section>
+      </div>
 
-      <section>
-        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Map Control Signals</h3>
-        <div className="grid grid-cols-1 gap-sm lg:grid-cols-2">
-          <ComparisonBar label="Gold" ours={goldStat?.ours} theirs={goldStat?.theirs} />
-          <ComparisonBar label="Damage to Champions" ours={damageStat?.ours} theirs={damageStat?.theirs} />
-        </div>
-        <div className="mt-sm grid grid-cols-1 gap-sm md:grid-cols-3">
-          <StatKpiCard
-            label="Average Kill Differential"
-            value={Number.isFinite(stats.averageRoundDiff)
-              ? appendPercentGapText(formatSignedValue(stats.averageRoundDiff), calcDeepStatPercentGap(killStat?.ours, killStat?.theirs))
-              : "—"}
-          />
-          <StatKpiCard
-            label="Average Gold Differential"
-            value={Number.isFinite(goldDiff?.diff)
-              ? appendPercentGapText(formatSignedValue(goldDiff.diff, 0), calcDeepStatPercentGap(goldStat?.ours, goldStat?.theirs))
-              : "—"}
-          />
-          <StatKpiCard
-            label="Average Damage Differential"
-            value={Number.isFinite(damageDiff?.diff)
-              ? appendPercentGapText(formatSignedValue(damageDiff.diff, 0), calcDeepStatPercentGap(damageStat?.ours, damageStat?.theirs))
-              : "—"}
-          />
-        </div>
-      </section>
+      <div className="grid gap-lg" data-export-page="true" data-export-page-title="Pace and role review">
+        <section>
+          <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Pace</h3>
+          <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+            <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
+            <StatKpiCard label="Gold / Min" value={formatDeepStatValue(goldPerMinStat?.ours)} />
+          </div>
+        </section>
 
-      <section>
-        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Pace</h3>
-        <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
-          <StatKpiCard label="Average Game Length" value={Number.isFinite(stats.league?.avgGameLength) ? `${stats.league.avgGameLength.toFixed(1)} min` : "—"} />
-          <StatKpiCard label="Gold / Min" value={formatDeepStatValue(goldPerMinStat?.ours)} />
-        </div>
-      </section>
+        <section>
+          <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Role Review</h3>
+          {(() => {
+            const roleStats = stats.league?.roleStats || [];
+            const kdaMax = Math.max(0.01, ...roleStats.map((role) => Number(role.kda) || 0));
+            const goldMax = Math.max(0.01, ...roleStats.map((role) => Number(role.gold) || 0));
+            const damageMax = Math.max(0.01, ...roleStats.map((role) => Number(role.damage) || 0));
+            return (
+              <div className="grid grid-cols-2 gap-sm sm:grid-cols-3 lg:grid-cols-5" data-export-columns="5">
+                {roleStats.map((role) => (
+                  <RoleStatCard
+                    key={role.role}
+                    role={role}
+                    kdaMax={kdaMax}
+                    goldMax={goldMax}
+                    damageMax={damageMax}
+                  />
+                ))}
+              </div>
+            );
+          })()}
+        </section>
+      </div>
 
-      <section>
-        <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Role Review</h3>
-        {(() => {
-          const roleStats = stats.league?.roleStats || [];
-          const kdaMax = Math.max(0.01, ...roleStats.map((role) => Number(role.kda) || 0));
-          const goldMax = Math.max(0.01, ...roleStats.map((role) => Number(role.gold) || 0));
-          const damageMax = Math.max(0.01, ...roleStats.map((role) => Number(role.damage) || 0));
-          return (
-            <div className="grid grid-cols-2 gap-sm sm:grid-cols-3 lg:grid-cols-5">
-              {roleStats.map((role) => (
-                <RoleStatCard
-                  key={role.role}
-                  role={role}
-                  kdaMax={kdaMax}
-                  goldMax={goldMax}
-                  damageMax={damageMax}
-                />
-              ))}
-            </div>
-          );
-        })()}
-      </section>
-
-      <section>
+      <section data-export-page="true" data-export-page-title="Win and loss patterns">
         <h3 className="mb-sm font-headline-3 text-headline-3 text-on-surface">Win / Loss Patterns</h3>
-        <div className="grid grid-cols-1 gap-sm md:grid-cols-3">
+        <p className="mb-md font-body-sub text-body-sub text-on-surface-variant">
+          Recorded averages grouped by game result. Missing outcome groups stay unavailable instead of being treated as zero.
+        </p>
+        <div className="grid grid-cols-1 gap-sm md:grid-cols-3" data-export-columns="3">
           {stats.league?.winLoss.map((row) => (
-            <WinLossDots key={row.label} row={row} lowerIsBetter={row.label === "Deaths"} />
+            <OutcomePatternCard
+              key={row.label}
+              lossCount={row.lossCount}
+              lowerIsBetter={row.label === "Deaths"}
+              row={row}
+              winCount={row.winCount}
+            />
           ))}
         </div>
       </section>
 
-      <CharacterComfortPanel analytics={stats.characterComfort} gameTitle={stats.gameTitle} />
+      <div>
+        <CharacterComfortPanel analytics={stats.characterComfort} gameTitle={stats.gameTitle} />
+      </div>
     </div>
   );
 }

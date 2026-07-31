@@ -1,6 +1,6 @@
 import { normalizeLeagueChampionName } from "./game-assets/league-champions.js";
 
-export const LEAGUE_CHAMPION_AUTO_ACCEPT_CONFIDENCE = 0.8;
+export const LEAGUE_CHAMPION_AUTO_ACCEPT_CONFIDENCE = 0.9;
 
 function normalizeConfidence(value) {
   const number = Number(value);
@@ -23,13 +23,15 @@ You are performing champion portrait recognition only for a League of Legends po
 The scoreboard statistics have already been extracted in a separate pass.
 
 Rules:
-- Inspect only the champion portrait in each visible player row.
+- The final attached image is an enlarged portrait-only grid labeled Row 1, Row 2, and so on. Inspect that grid, not the small portraits in the original scoreboard.
+- Inspect only the champion portrait in each labeled row tile.
 - Do not extract or return player names, K/D/A, items, gold, damage, roles, team totals, or match metadata.
 - Use the attached labeled champion portrait reference and exact champion list as the only identity source.
 - Return champion names exactly as written in that reference.
 - Preserve global row order: all rows of the first displayed team from top to bottom, then all rows of the second displayed team from top to bottom.
 - Return exactly ${rowCount} row results when ${rowCount} player rows are visible.
-- Confidence must be a number from 0 to 1 based only on portrait similarity.
+- Confidence must be a number from 0 to 1 based only on a direct visual match between the enlarged row portrait and a reference portrait.
+- Use confidence 0.9 or higher only when facial features, silhouette, and major colors all agree with one reference. Similar color alone is not enough.
 - If a portrait is unclear or does not confidently match one reference, set champion to null and needs_manual_review to true. Never make a best guess.
 - Return compact valid JSON only. Do not include markdown or explanations.
 
@@ -57,6 +59,11 @@ export function mergeLeagueChampionRecognition(extraction = {}, recognition = {}
       champion,
       confidence,
       accepted: Boolean(champion && confidence >= LEAGUE_CHAMPION_AUTO_ACCEPT_CONFIDENCE && !row?.needs_manual_review),
+      method: row?.recognition_method || "model",
+      portraitRefinement: row?.portrait_refinement || null,
+      portraitDistance: Number.isFinite(Number(row?.portrait_distance)) ? Number(row.portrait_distance) : null,
+      portraitMargin: Number.isFinite(Number(row?.portrait_margin)) ? Number(row.portrait_margin) : null,
+      portraitCandidates: Array.isArray(row?.portrait_candidates) ? row.portrait_candidates : [],
     }];
   }));
   const manualReviewFields = Array.isArray(extraction.fields_needing_manual_review)
@@ -77,6 +84,11 @@ export function mergeLeagueChampionRecognition(extraction = {}, recognition = {}
         champion_guess: match.champion,
         champion_recognition_confidence: match.confidence,
         champion_recognition_status: "accepted",
+        champion_recognition_method: match.method,
+        champion_portrait_refinement: match.portraitRefinement,
+        champion_portrait_distance: match.portraitDistance,
+        champion_portrait_margin: match.portraitMargin,
+        champion_portrait_candidates: match.portraitCandidates,
         needs_manual_review: hasOtherRowReview,
       };
     }
@@ -88,6 +100,11 @@ export function mergeLeagueChampionRecognition(extraction = {}, recognition = {}
       champion_guess: match?.champion || null,
       champion_recognition_confidence: match?.confidence || 0,
       champion_recognition_status: "needs_review",
+      champion_recognition_method: match?.method || null,
+      champion_portrait_refinement: match?.portraitRefinement || null,
+      champion_portrait_distance: match?.portraitDistance ?? null,
+      champion_portrait_margin: match?.portraitMargin ?? null,
+      champion_portrait_candidates: match?.portraitCandidates || [],
       needs_manual_review: true,
     };
   };

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { AUTH_ACCESS_TOKEN_COOKIE, AUTH_REFRESH_TOKEN_COOKIE } from "@/lib/auth-session";
+import { getJwtExpirySeconds, isJwtExpiringSoon } from "@/lib/auth-token";
 
 const REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 
@@ -81,10 +82,10 @@ export async function getValidSessionFromCookies(cookieStore) {
   const refreshToken = cookieStore.get(AUTH_REFRESH_TOKEN_COOKIE)?.value || "";
   const validated = await validateAccessToken(accessToken);
 
-  if (validated.user) {
+  if (validated.user && !isJwtExpiringSoon(accessToken)) {
     return {
       accessToken,
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      expiresAt: getJwtExpirySeconds(accessToken) || Math.floor(Date.now() / 1000) + 60,
       refreshToken,
       session: null,
       user: validated.user,
