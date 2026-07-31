@@ -65,7 +65,7 @@ Matchmake extraction priority:
 
 function buildPrimaryPrompt(basePrompt, gameTitle) {
   const identityRule = gameTitle === "League of Legends"
-    ? "League statistics-pass override: do not identify champions. Use the required unidentified champion placeholders so the separate portrait-recognition pass can merge by row."
+    ? "League identity rule: transcribe a champion only when its name is printed as readable text directly in that player row. Do not infer champion identity from portrait art, role, player name, items, or stats. Use the unidentified champion placeholder when no readable champion label is present; the separate portrait-recognition pass handles only those missing labels."
     : "If character identity is uncertain, return the best visible guess; if no identity can be read, use the game's unidentified placeholder and add that field to fields_needing_manual_review.";
 
   return `${ROW_FIRST_EXTRACTION_RULES}\n${identityRule}\n\n${basePrompt}`;
@@ -87,7 +87,7 @@ function getFallbackExtractionPrompt(gameTitle) {
 
   const rowFields = rowFieldsByGame[gameTitle] || "player_name, character, kills, deaths, assists";
   const identityRule = gameTitle === "League of Legends"
-    ? "- This is the statistics pass only. Do not identify champions. Set champion to \"Unidentified champion <global row number>\" for every row and add each champion field path to fields_needing_manual_review."
+    ? "- For League, transcribe champion only from a readable champion-name label printed directly in that player row. Never infer it from the portrait. If the label is absent or unreadable, set champion to \"Unidentified champion <global row number>\" and add that champion field path to fields_needing_manual_review."
     : "- If character identity is uncertain, return the best visible guess; if no identity can be read, use \"Unidentified character <row number>\" and add the field path to fields_needing_manual_review.";
 
   return `
@@ -859,7 +859,14 @@ function normalizeLeagueExtraction(rawJson = {}) {
 
   const normalizeRow = (row = {}, rowIndex, pathPrefix) => {
     const canonicalChampion = normalizeLeagueChampionName(row.champion);
-    if (canonicalChampion) return { ...row, champion: canonicalChampion };
+    if (canonicalChampion) {
+      return {
+        ...row,
+        champion: canonicalChampion,
+        champion_text: canonicalChampion,
+        champion_identity_source: "visible_text",
+      };
+    }
 
     addManualReviewField(manualReviewFields, `${pathPrefix}.champion`);
     return {
@@ -1209,6 +1216,16 @@ function getExtractionRowCount(extraction = {}) {
     : 0;
 }
 
+function getLeagueVisibleTextChampionCount(extraction = {}) {
+  const rows = Array.isArray(extraction.rows) && extraction.rows.length
+    ? extraction.rows
+    : Array.isArray(extraction.teams)
+      ? extraction.teams.flatMap((team) => Array.isArray(team?.players) ? team.players : [])
+      : [];
+
+  return rows.filter((row) => normalizeLeagueChampionName(row?.champion_text || row?.champion)).length;
+}
+
 async function optimizeImageForLeagueChampionRecognition(imageBuffer, originalMimeType, rowCount) {
   try {
     const portraitGrid = await buildLeagueChampionPortraitGrid(imageBuffer, rowCount);
@@ -1252,6 +1269,7 @@ async function runLeagueChampionRecognition({
   attempts,
 }) {
   const rowCount = getExtractionRowCount(extraction);
+  const visibleTextRows = getLeagueVisibleTextChampionCount(extraction);
   if (!rowCount) {
     return {
       data: extraction,
@@ -1260,6 +1278,28 @@ async function runLeagueChampionRecognition({
           mode: "separate_pass",
           status: "skipped_no_rows",
           attemptedRows: 0,
+        },
+      },
+    };
+  }
+
+  if (visibleTextRows === rowCount) {
+    const merged = mergeLeagueChampionRecognition(extraction, { rows: [] });
+    return {
+      data: merged.data,
+      meta: {
+        leagueChampionRecognition: {
+          mode: "separate_pass",
+          status: "skipped_all_visible_text",
+          modelStatus: "not_needed",
+          recognitionInput: "visible_text",
+          visibleTextRows,
+          portraitRowsLocated: 0,
+          portraitMatchStatus: "not_needed",
+          portraitRowsMatched: 0,
+          rawTextLength: 0,
+          referencePartsSent: 0,
+          ...merged.summary,
         },
       },
     };
@@ -1290,6 +1330,7 @@ async function runLeagueChampionRecognition({
           status: portraitMatchResult.status === "completed" ? "completed" : modelStatus,
           modelStatus,
           recognitionInput: recognitionImage?.mode || "local_portrait_match",
+          visibleTextRows,
           portraitRowsLocated: recognitionImage?.layout?.positions?.length
             || portraitMatchResult.layout?.positions?.length
             || 0,

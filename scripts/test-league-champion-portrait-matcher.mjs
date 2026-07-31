@@ -78,6 +78,61 @@ assert.deepEqual(
   "direct portrait matching follows row order without champion-name text",
 );
 
+const namedWidth = 1488;
+const namedHeight = 824;
+const namedCenterX = 174;
+const namedCentersY = [132, 193, 255, 317, 378, 494, 555, 617, 679, 740];
+const namedAccentSvg = Buffer.from(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="${namedWidth}" height="${namedHeight}">
+    <rect x="35" y="101" width="7" height="124" fill="#00a6b8"/>
+    <rect x="35" y="287" width="7" height="122" fill="#00a6b8"/>
+    <rect x="35" y="463" width="7" height="308" fill="#b31738"/>
+  </svg>
+`);
+const namedComposites = [{ input: namedAccentSvg, left: 0, top: 0 }];
+for (const [index, champion] of champions.entries()) {
+  const mask = Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+      <circle cx="13" cy="13" r="13" fill="#ffffff"/>
+    </svg>
+  `);
+  const input = await sharp(path.join(
+    process.cwd(),
+    "public",
+    "lol",
+    "champions",
+    `${toChampionFileStem(champion)}.png`,
+  ))
+    .resize(26, 26)
+    .composite([{ input: mask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+  namedComposites.push({
+    input,
+    left: namedCenterX - 13,
+    top: namedCentersY[index] - 13,
+  });
+}
+const namedScoreboard = await sharp({
+  create: {
+    width: namedWidth,
+    height: namedHeight,
+    channels: 3,
+    background: "#061721",
+  },
+})
+  .composite(namedComposites)
+  .png()
+  .toBuffer();
+const namedMatchResult = await matchLeagueChampionPortraits(namedScoreboard, champions.length);
+assert.equal(namedMatchResult.status, "completed");
+assert.equal(namedMatchResult.layout.detectionMode, "team_accent_bars_detected");
+assert.deepEqual(
+  namedMatchResult.matches.map((match) => match.candidates[0].champion),
+  champions,
+  "team-accent scoreboard crops preserve global row order for portrait fallback",
+);
+
 const combined = combineLeagueChampionRecognition({
   rows: [{ row_index: 1, champion: "Karma" }],
 }, {

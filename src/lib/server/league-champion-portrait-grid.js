@@ -7,6 +7,19 @@ const PORTRAIT_LABEL_HEIGHT = 30;
 const PORTRAIT_TILE_GAP = 12;
 const PORTRAIT_GRID_PADDING = 16;
 
+function isLeagueCyanTeamAccentPixel(red, green, blue) {
+  return green >= 70
+    && blue >= 70
+    && green >= red * 1.3
+    && blue >= red * 1.3;
+}
+
+function isLeagueRedTeamAccentPixel(red, green, blue) {
+  return red >= 70
+    && red >= green * 1.5
+    && red >= blue * 1.25;
+}
+
 function isLeagueGoldBorderPixel(red, green, blue) {
   return red >= 95
     && green >= 58
@@ -55,6 +68,110 @@ function findTeamStart(image, {
   return best;
 }
 
+function collectVerticalSegments(values, maximumGap = 3) {
+  if (!values.length) return [];
+
+  const segments = [];
+  let start = values[0];
+  let previous = values[0];
+
+  for (const value of values.slice(1)) {
+    if (value - previous > maximumGap) {
+      segments.push({ start, end: previous });
+      start = value;
+    }
+    previous = value;
+  }
+  segments.push({ start, end: previous });
+  return segments;
+}
+
+function findTeamAccentRange(image, pixelMatcher) {
+  const minimumX = Math.max(0, Math.round(image.width * 0.015));
+  const maximumX = Math.min(image.width - 1, Math.round(image.width * 0.04));
+  const minimumMatchesPerRow = Math.max(3, Math.round((maximumX - minimumX + 1) * 0.08));
+  const matchingRows = [];
+
+  for (let y = 0; y < image.height; y += 1) {
+    let matches = 0;
+    for (let x = minimumX; x <= maximumX; x += 1) {
+      const index = (y * image.width + x) * 3;
+      if (pixelMatcher(image.data[index], image.data[index + 1], image.data[index + 2])) {
+        matches += 1;
+      }
+    }
+    if (matches >= minimumMatchesPerRow) matchingRows.push(y);
+  }
+
+  const minimumSegmentHeight = Math.max(18, Math.round(image.height * 0.045));
+  const majorSegments = collectVerticalSegments(matchingRows)
+    .filter((segment) => segment.end - segment.start + 1 >= minimumSegmentHeight);
+  if (!majorSegments.length) return null;
+
+  const maximumMergeGap = Math.round(image.height * 0.1);
+  const mergedSegments = [];
+  for (const segment of majorSegments) {
+    const previous = mergedSegments[mergedSegments.length - 1];
+    if (previous && segment.start - previous.end <= maximumMergeGap) {
+      previous.end = segment.end;
+    } else {
+      mergedSegments.push({ ...segment });
+    }
+  }
+
+  return mergedSegments
+    .sort((first, second) => (second.end - second.start) - (first.end - first.start))[0];
+}
+
+function accentBarLeaguePortraitLayout({ data, width, height, rowCount }) {
+  if (!data?.length || rowCount < 2) return null;
+
+  const firstTeamRows = Math.min(STANDARD_TEAM_SIZE, rowCount);
+  const secondTeamRows = Math.max(0, rowCount - firstTeamRows);
+  if (!secondTeamRows) return null;
+
+  const image = { data, width, height };
+  const firstTeam = findTeamAccentRange(image, isLeagueCyanTeamAccentPixel);
+  const secondTeam = findTeamAccentRange(image, isLeagueRedTeamAccentPixel);
+  if (!firstTeam || !secondTeam || firstTeam.end >= secondTeam.start) return null;
+
+  const firstSpacing = (firstTeam.end - firstTeam.start + 1) / firstTeamRows;
+  const secondSpacing = (secondTeam.end - secondTeam.start + 1) / secondTeamRows;
+  const minimumSpacing = height * 0.045;
+  const maximumSpacing = height * 0.1;
+  if (
+    firstSpacing < minimumSpacing
+    || firstSpacing > maximumSpacing
+    || secondSpacing < minimumSpacing
+    || secondSpacing > maximumSpacing
+  ) {
+    return null;
+  }
+
+  const rowSpacing = (firstSpacing + secondSpacing) / 2;
+  const centerX = Math.round(width * 0.117);
+  const buildPositions = (team, teamRows, startingRowIndex) => Array.from(
+    { length: teamRows },
+    (_, index) => ({
+      rowIndex: startingRowIndex + index,
+      centerX,
+      centerY: Math.round(team.start + (index + 0.5) * ((team.end - team.start + 1) / teamRows)),
+    }),
+  );
+
+  return {
+    centerX,
+    rowSpacing: Math.round(rowSpacing),
+    cropSize: Math.max(26, Math.round(rowSpacing * 0.88)),
+    detectionMode: "team_accent_bars_detected",
+    detectionScore: (firstTeam.end - firstTeam.start + 1) + (secondTeam.end - secondTeam.start + 1),
+    positions: [
+      ...buildPositions(firstTeam, firstTeamRows, 1),
+      ...buildPositions(secondTeam, secondTeamRows, firstTeamRows + 1),
+    ],
+  };
+}
+
 function normalizedLeaguePortraitLayout(width, height, rowCount) {
   const firstTeamRows = Math.min(STANDARD_TEAM_SIZE, rowCount);
   const secondTeamRows = Math.max(0, rowCount - firstTeamRows);
@@ -85,6 +202,9 @@ function normalizedLeaguePortraitLayout(width, height, rowCount) {
 }
 
 export function locateLeagueMatchHistoryPortraits({ data, width, height, rowCount = 10 }) {
+  const accentBarLayout = accentBarLeaguePortraitLayout({ data, width, height, rowCount });
+  if (accentBarLayout) return accentBarLayout;
+
   const normalized = normalizedLeaguePortraitLayout(width, height, rowCount);
   if (!data?.length || rowCount <= 0) return normalized;
 

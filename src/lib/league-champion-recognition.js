@@ -75,16 +75,52 @@ export function mergeLeagueChampionRecognition(extraction = {}, recognition = {}
     const match = recognitionByIndex.get(rowIndex);
     const championPath = `${path}.champion`;
     const hasOtherRowReview = manualReviewFields.some((field) => field.startsWith(`${path}.`) && field !== championPath);
+    const visibleTextChampion = normalizeLeagueChampionName(row.champion_text || row.champion);
+    const portraitConflict = Boolean(
+      visibleTextChampion
+      && match?.accepted
+      && match.champion !== visibleTextChampion
+    );
+
+    if (visibleTextChampion) {
+      acceptedPaths.add(championPath);
+
+      return {
+        ...row,
+        champion: visibleTextChampion,
+        champion_text: visibleTextChampion,
+        champion_guess: visibleTextChampion,
+        champion_identity_source: "visible_text",
+        champion_recognition_confidence: 1,
+        champion_recognition_status: "accepted_text",
+        champion_recognition_method: portraitConflict
+          ? "visible_text_portrait_conflict_ignored"
+          : match?.accepted && match.champion === visibleTextChampion
+            ? "visible_text_confirmed_by_portrait"
+            : "visible_text",
+        champion_portrait_guess: match?.champion || null,
+        champion_portrait_conflict: portraitConflict,
+        champion_portrait_refinement: match?.portraitRefinement || null,
+        champion_portrait_distance: match?.portraitDistance ?? null,
+        champion_portrait_margin: match?.portraitMargin ?? null,
+        champion_portrait_candidates: match?.portraitCandidates || [],
+        needs_manual_review: hasOtherRowReview,
+      };
+    }
 
     if (match?.accepted) {
       acceptedPaths.add(championPath);
       return {
         ...row,
         champion: match.champion,
+        champion_text: null,
         champion_guess: match.champion,
+        champion_identity_source: "portrait",
         champion_recognition_confidence: match.confidence,
         champion_recognition_status: "accepted",
         champion_recognition_method: match.method,
+        champion_portrait_guess: match.champion,
+        champion_portrait_conflict: false,
         champion_portrait_refinement: match.portraitRefinement,
         champion_portrait_distance: match.portraitDistance,
         champion_portrait_margin: match.portraitMargin,
@@ -97,10 +133,14 @@ export function mergeLeagueChampionRecognition(extraction = {}, recognition = {}
     return {
       ...row,
       champion: `Unidentified champion ${rowIndex}`,
+      champion_text: null,
       champion_guess: match?.champion || null,
+      champion_identity_source: null,
       champion_recognition_confidence: match?.confidence || 0,
       champion_recognition_status: "needs_review",
       champion_recognition_method: match?.method || null,
+      champion_portrait_guess: match?.champion || null,
+      champion_portrait_conflict: false,
       champion_portrait_refinement: match?.portraitRefinement || null,
       champion_portrait_distance: match?.portraitDistance ?? null,
       champion_portrait_margin: match?.portraitMargin ?? null,
@@ -125,10 +165,16 @@ export function mergeLeagueChampionRecognition(extraction = {}, recognition = {}
         : team?.players,
     }))
     : extraction.teams;
-  const attemptedRows = sourceRows?.length || flatIndex;
-  const acceptedRows = Array.from({ length: attemptedRows }, (_, index) => recognitionByIndex.get(index + 1))
-    .filter((match) => match?.accepted)
-    .length;
+  const summaryRows = sourceRows
+    ? rows
+    : Array.isArray(teams)
+      ? teams.flatMap((team) => Array.isArray(team?.players) ? team.players : [])
+      : [];
+  const attemptedRows = summaryRows.length || flatIndex;
+  const acceptedRows = summaryRows.filter((row) => (
+    row?.champion_recognition_status === "accepted"
+    || row?.champion_recognition_status === "accepted_text"
+  )).length;
   const reviewRows = Math.max(0, attemptedRows - acceptedRows);
 
   const remainingReviewFields = manualReviewFields.filter((field) => !acceptedPaths.has(field));

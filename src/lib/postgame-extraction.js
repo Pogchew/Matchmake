@@ -854,16 +854,17 @@ parser_confidence, manual_edit_required.
 export function getLeagueExtractionPrompt() {
   return `
 Analyze this League of Legends post-game scoreboard screenshot and extract only visible match, team, and player statistics into valid JSON.
-Champion portrait recognition runs in a separate second pass.
+Champion portrait recognition runs in a separate second pass only for rows without a readable champion-name label.
 
 Rules:
 - Return JSON only.
 - Do not explain.
 - Do not guess hidden stats.
-- Do not identify, infer, or guess champion names in this statistics pass.
-- Set every player row's champion to "Unidentified champion <global row number>" and add that champion field path to fields_needing_manual_review. The separate recognition pass will replace confident matches.
+- If a champion name is printed as readable text directly beneath or beside the player name, transcribe that exact visible label into champion.
+- Do not infer or guess champion identity from portrait art, role, player name, items, spells, stats, or row colors in this statistics pass.
+- When the champion-name label is absent or unreadable, set champion to "Unidentified champion <global row number>" and add that champion field path to fields_needing_manual_review. The separate portrait-recognition pass will handle only those missing labels.
 - Do not leave returned row fields empty. If a visible text/stat field is unreadable, use "Needs review" and add the field path to fields_needing_manual_review.
-- Every player row must include the unidentified champion placeholder above so row alignment is preserved for the recognition pass.
+- Every player row must include either the exact visible champion-name label or the unidentified champion placeholder so row alignment is preserved for the recognition pass.
 - Preserve both teams separately.
 - Extract all visible player rows.
 - Split K/D/A into kills, deaths, assists. For example "12 / 2 / 3" means kills=12, deaths=2, assists=3.

@@ -9,8 +9,9 @@ import {
 import { getLeagueExtractionPrompt } from "../src/lib/postgame-extraction.js";
 
 const statsPrompt = getLeagueExtractionPrompt();
-assert.match(statsPrompt, /Champion portrait recognition runs in a separate second pass/i);
-assert.match(statsPrompt, /Do not identify, infer, or guess champion names/i);
+assert.match(statsPrompt, /readable champion-name label/i);
+assert.match(statsPrompt, /Do not infer or guess champion identity from portrait art/i);
+assert.match(statsPrompt, /portrait recognition runs in a separate second pass only for rows without a readable/i);
 assert.doesNotMatch(statsPrompt, /attached labeled League champion portrait reference/i);
 
 const recognitionPrompt = getLeagueChampionRecognitionPrompt(2);
@@ -79,5 +80,39 @@ const fullyAccepted = mergeLeagueChampionRecognition({
 assert.equal(fullyAccepted.data.rows[0].champion, "Locke");
 assert.deepEqual(fullyAccepted.data.fields_needing_manual_review, []);
 assert.equal(fullyAccepted.data.manual_review_required, false, "champion-only review clears after every row is accepted");
+
+const visibleTextFirst = mergeLeagueChampionRecognition({
+  rows: [
+    { row_index: 1, champion: "Yone", kills: 14 },
+    { row_index: 2, champion: "Skarner", kills: 3 },
+    { row_index: 3, champion: "Orianna", kills: 12 },
+  ],
+  fields_needing_manual_review: [],
+  manual_review_required: false,
+}, {
+  rows: [
+    { row_index: 1, champion: "Yone", confidence: 0.95, needs_manual_review: false },
+    { row_index: 2, champion: "Samira", confidence: 0.95, needs_manual_review: false },
+  ],
+});
+assert.equal(visibleTextFirst.data.rows[0].champion, "Yone", "an exact visible label remains the primary identity");
+assert.equal(visibleTextFirst.data.rows[0].champion_recognition_status, "accepted_text");
+assert.equal(visibleTextFirst.data.rows[0].champion_recognition_method, "visible_text_confirmed_by_portrait");
+assert.equal(visibleTextFirst.data.rows[0].needs_manual_review, false);
+assert.equal(visibleTextFirst.data.rows[1].champion, "Skarner", "a portrait disagreement never overwrites readable text");
+assert.equal(visibleTextFirst.data.rows[1].champion_portrait_guess, "Samira");
+assert.equal(visibleTextFirst.data.rows[1].champion_portrait_conflict, true);
+assert.equal(visibleTextFirst.data.rows[1].champion_recognition_status, "accepted_text");
+assert.equal(visibleTextFirst.data.rows[1].champion_recognition_method, "visible_text_portrait_conflict_ignored");
+assert.equal(visibleTextFirst.data.rows[1].needs_manual_review, false, "weaker portrait guesses cannot force review on exact visible text");
+assert.equal(visibleTextFirst.data.rows[2].champion, "Orianna", "visible text is accepted when portrait recognition is unavailable");
+assert.equal(visibleTextFirst.data.rows[2].champion_recognition_method, "visible_text");
+assert.ok(!visibleTextFirst.data.fields_needing_manual_review.includes("rows[1].champion"));
+assert.deepEqual(visibleTextFirst.summary, {
+  attempted_rows: 3,
+  accepted_rows: 3,
+  review_rows: 0,
+  confidence_threshold: LEAGUE_CHAMPION_AUTO_ACCEPT_CONFIDENCE,
+});
 
 console.log("League champion recognition tests passed.");

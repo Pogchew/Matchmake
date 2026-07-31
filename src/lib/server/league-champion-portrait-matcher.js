@@ -15,6 +15,10 @@ const MODEL_TIE_BREAK_RANGE = 0.03;
 const REFERENCE_CACHE_KEY = "__matchmakeLeagueChampionPortraitReferences";
 const REFINEMENT_X_OFFSETS = [-2, 0, 2];
 const REFINEMENT_Y_OFFSETS = [-2, 0, 2, 4];
+const SUPPORTED_PORTRAIT_LAYOUT_MODES = new Set([
+  "gold_border_detected",
+  "team_accent_bars_detected",
+]);
 
 function portraitDescriptor(data, width, left, top) {
   const descriptor = [];
@@ -199,7 +203,7 @@ export async function matchLeagueChampionPortraits(imageBuffer, rowCount = 10) {
     rowCount,
   });
 
-  if (layout.detectionMode !== "gold_border_detected") {
+  if (!SUPPORTED_PORTRAIT_LAYOUT_MODES.has(layout.detectionMode)) {
     return { status: "skipped_nonstandard_layout", layout, matches: [] };
   }
 
